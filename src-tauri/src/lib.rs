@@ -8,6 +8,7 @@ use state::Session;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
     .manage(Session::new())
     .invoke_handler(tauri::generate_handler![
       doc::doc_snapshot,
