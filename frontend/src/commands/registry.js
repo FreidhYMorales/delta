@@ -74,7 +74,10 @@ export const actions = [
     when: hasStateSelected,
     run: async (ctx) => {
       const label = ctx.promptLabel ? await ctx.promptLabel(ctx.selection.id) : null;
-      if (label) await ctx.docStore.apply([{ op: "RenameState", id: ctx.selection.id, label }]);
+      // `ctx.renameState` (not a raw `docStore.apply`) so a name collision
+      // surfaces a visible notice instead of silently doing nothing — see
+      // `commands/renameState.js` / task 7.9.
+      if (label) await ctx.renameState(ctx.selection.id, label);
     },
   },
   {
@@ -174,6 +177,30 @@ export const actions = [
     keybinding: "ctrl+l",
     when: () => true,
     run: (ctx) => ctx.layout.circle(),
+  },
+
+  // --- Testing (L2, testing drawer — design D6) -----------------------------
+  // These actions only OPEN the drawer and focus the relevant input; running
+  // a trace/batch is still a deliberate click inside `TestingView`, same as
+  // every other data-mutating/IO action in this app. This is what satisfies
+  // spec `diagram-editor` > "Progressive Disclosure With Full Reachability"
+  // for the L2 drawer specifically: the drawer is collapsed by default, but
+  // both of its capabilities have a registry entry that reveals it.
+  {
+    id: "test.singleTrace",
+    title: "Test String…",
+    group: "test",
+    keybinding: null,
+    when: () => true,
+    run: (ctx) => ctx.testing.openSingle(),
+  },
+  {
+    id: "test.batch",
+    title: "Batch Test…",
+    group: "test",
+    keybinding: null,
+    when: () => true,
+    run: (ctx) => ctx.testing.openBatch(),
   },
 
   // --- Interop (L3, menu+palette only — design D6) -------------------------

@@ -67,6 +67,10 @@ body {
   stroke-dasharray: 4 2;
 }
 
+.state.active-sim {
+  fill: #ffd166;
+}
+
 .edge {
   stroke: #333;
   stroke-width: 1.5;
@@ -84,8 +88,64 @@ body {
 }
 
 .table-view,
-.formal-view {
+.formal-view,
+.testing-view {
   margin-bottom: 0.5rem;
+}
+
+.testing-view {
+  padding: 0.25rem 0.5rem;
+  border-top: 1px solid #8884;
+}
+
+.testing-single,
+.testing-batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+}
+
+.testing-batch {
+  align-items: flex-start;
+}
+
+.testing-batch-input {
+  width: 100%;
+  min-height: 4rem;
+  font-family: monospace;
+}
+
+.testing-batch-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.testing-batch-table td {
+  border: 1px solid #8884;
+  padding: 0.2rem 0.4rem;
+}
+
+.testing-verdict-accepted {
+  color: #2a7;
+  font-weight: bold;
+}
+
+.testing-verdict-rejected {
+  color: #c33;
+  font-weight: bold;
+}
+
+.testing-verdict-truncated {
+  color: #c90;
+  font-weight: bold;
+}
+
+.testing-active-states {
+  width: 100%;
+  font-size: 0.85rem;
+  opacity: 0.85;
 }
 
 .formal-view textarea {
@@ -168,4 +228,55 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.notice-stack {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 24rem;
+  z-index: 3000;
+}
+
+.notice {
+  position: relative;
+  padding: 0.5rem 1.5rem 0.5rem 0.75rem;
+  background: canvas;
+  color: canvastext;
+  border-left: 4px solid #369;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px #0005;
+}
+
+.notice-error {
+  border-left-color: #c33;
+}
+
+.notice-title {
+  display: block;
+}
+
+.notice-message {
+  margin: 0.25rem 0 0;
+}
+
+.notice-items {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.notice-close {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.35rem;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  color: inherit;
 }

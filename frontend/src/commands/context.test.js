@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ViewContext } from "./context.js";
+
+beforeEach(() => {
+  document.body.innerHTML = "";
+});
 
 describe("ViewContext", () => {
   it("defaults to the select tool and no selection", () => {
@@ -66,5 +70,64 @@ describe("ViewContext", () => {
     const ctx = new ViewContext({}, { promptLabel });
     expect(ctx.promptLabel(1)).toBe("q9");
     expect(promptLabel).toHaveBeenCalledWith(1);
+  });
+
+  it("exposes L2 testing/L3 highlighting hooks with safe no-op defaults", async () => {
+    const ctx = new ViewContext({});
+    expect(await ctx.simTrace(["a"])).toEqual({ outcome: "Rejected", steps: [] });
+    expect(await ctx.simBatch([["a"]])).toEqual([]);
+    expect(() => ctx.setActiveStates([1])).not.toThrow();
+    expect(() => ctx.testing.openSingle()).not.toThrow();
+    expect(() => ctx.testing.openBatch()).not.toThrow();
+  });
+});
+
+describe("ViewContext.renameState default (task 7.9: rename collisions are never silent)", () => {
+  function fakeDocStore(applyResult) {
+    return {
+      getState: vi.fn((id) => (id === 1 ? { id: 1, label: "A" } : undefined)),
+      apply: vi.fn().mockResolvedValue(applyResult),
+    };
+  }
+
+  it("returns true and shows no notice when the rename actually happened", async () => {
+    const docStore = fakeDocStore({
+      revision: 2,
+      patches: [{ patch: "StateRenamed", id: 1, label: "Z" }],
+      derived: {},
+    });
+    const ctx = new ViewContext(docStore);
+
+    const ok = await ctx.renameState(1, "Z");
+
+    expect(ok).toBe(true);
+    expect(docStore.apply).toHaveBeenCalledWith([{ op: "RenameState", id: 1, label: "Z" }]);
+    expect(document.querySelector(".notice")).toBeNull();
+  });
+
+  it("returns false and shows a visible notice when doc_apply blocks the rename (no StateRenamed patch)", async () => {
+    // Mirrors `Document::apply`'s real behavior on a name collision: it
+    // still returns Ok with a bumped revision, just zero patches for the
+    // blocked op (`crates/automata-core/src/doc/mod.rs`) — never an `Err`.
+    const docStore = fakeDocStore({ revision: 2, patches: [], derived: {} });
+    const ctx = new ViewContext(docStore);
+
+    const ok = await ctx.renameState(1, "B");
+
+    expect(ok).toBe(false);
+    const notice = document.querySelector(".notice");
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain("already used");
+  });
+
+  it("a caller-provided renameState hook overrides the default entirely", async () => {
+    const renameState = vi.fn().mockResolvedValue(true);
+    const docStore = fakeDocStore({ revision: 2, patches: [], derived: {} });
+    const ctx = new ViewContext(docStore, { renameState });
+
+    await ctx.renameState(1, "Z");
+
+    expect(renameState).toHaveBeenCalledWith(1, "Z");
+    expect(docStore.apply).not.toHaveBeenCalled();
   });
 });

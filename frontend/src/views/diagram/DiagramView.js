@@ -44,6 +44,10 @@ export class DiagramView {
     this._dragState = null;
     /** Currently open right-click context menu element, or `null` (bug 3). */
     this._contextMenu = null;
+    /** State ids to highlight as "active" during a testing-drawer trace
+     * step (task 7.6) — set via `setActiveStates`, empty when no trace is
+     * being stepped through or the drawer is collapsed. */
+    this._activeStates = new Set();
     /** Pan/zoom state backing the SVG `viewBox` (task 7.1's registry
      * view.zoomIn/zoomOut/zoomReset/fitToWindow actions). */
     this._view = { x: 0, y: 0, w: BASE_WIDTH, h: BASE_HEIGHT };
@@ -58,6 +62,13 @@ export class DiagramView {
     docStore.subscribe(() => this._render());
     ctx.subscribe(() => this._render());
     this._render();
+  }
+
+  /** @param {number[]} ids state ids active at the current trace step
+   * (task 7.6's testing drawer); pass `[]`/`undefined` to clear. */
+  setActiveStates(ids) {
+    this._activeStates = new Set(ids ?? []);
+    this._renderCanvas();
   }
 
   _setViewBox(x, y, w, h) {
@@ -390,6 +401,7 @@ export class DiagramView {
       if ((this.docStore.derived.unreachable ?? []).includes(state.id)) {
         circle.classList.add("unreachable");
       }
+      if (this._activeStates.has(state.id)) circle.classList.add("active-sim");
       if (this._isSelectedState(state.id)) circle.classList.add("selected");
       circle.addEventListener("dblclick", () => {
         this._lastEditPromise = this._renameState(state.id);
@@ -409,7 +421,9 @@ export class DiagramView {
    * comment for the `_lastEditPromise` convention. */
   async _renameState(id) {
     const label = await this.ctx.promptLabel(id);
-    if (label) await this.docStore.apply([{ op: "RenameState", id, label }]);
+    // `ctx.renameState`, not a raw `docStore.apply` — a name collision must
+    // surface a visible notice, not fail silently (task 7.9).
+    if (label) await this.ctx.renameState(id, label);
   }
 
   _isSelectedState(id) {

@@ -6,6 +6,9 @@
 // and formal-definition views (task 7.5: "kept in sync with the diagram via
 // DocStore") without those views needing to know about each other.
 
+import { wasRenamed } from "./renameState.js";
+import { showNotice } from "../ui/notice.js";
+
 /**
  * @typedef {{kind:'state', id:number}|{kind:'edge', from:number, to:number}|null} Selection
  */
@@ -21,6 +24,11 @@ export class ViewContext {
    *   promptSymbol?: () => Promise<string|null>,
    *   importJff?: (path: string) => Promise<void>,
    *   exportJff?: (path: string) => Promise<void>,
+   *   simTrace?: (word: string[], budget?: object) => Promise<object>,
+   *   simBatch?: (words: string[][], budget?: object) => Promise<object[]>,
+   *   setActiveStates?: (ids: number[]) => void,
+   *   testing?: {openSingle: Function, openBatch: Function},
+   *   renameState?: (id: number, label: string) => Promise<boolean>,
    * }} hooks
    */
   constructor(docStore, hooks = {}) {
@@ -37,6 +45,32 @@ export class ViewContext {
     this.promptSymbol = hooks.promptSymbol ?? (async () => null);
     this.importJff = hooks.importJff ?? (async () => {});
     this.exportJff = hooks.exportJff ?? (async () => {});
+    // L2 testing drawer (task 7.6) — trace/batch execution and diagram
+    // active-state highlighting are injectable, same rationale as the
+    // prompt/interop hooks above (testable without a real Tauri webview).
+    this.simTrace = hooks.simTrace ?? (async () => ({ outcome: "Rejected", steps: [] }));
+    this.simBatch = hooks.simBatch ?? (async () => []);
+    this.setActiveStates = hooks.setActiveStates ?? (() => {});
+    this.testing = hooks.testing ?? { openSingle() {}, openBatch() {} };
+    // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
+    // Are Never Silent"). Real by default (needs only `docStore` + a DOM
+    // notice, both available without a Tauri webview) — overridable in
+    // tests that want to assert on the raw `apply` call instead.
+    this.renameState =
+      hooks.renameState ??
+      (async (id, label) => {
+        const before = docStore.getState(id)?.label;
+        const result = await docStore.apply([{ op: "RenameState", id, label }]);
+        if (wasRenamed(result.patches, id)) return true;
+        showNotice({
+          kind: "error",
+          title: "Rename blocked",
+          message:
+            `"${label}" is already used by another state` +
+            (before ? ` — "${before}" was not renamed.` : "."),
+        });
+        return false;
+      });
   }
 
   /** @param {(ctx: ViewContext) => void} listener @returns {() => void} */

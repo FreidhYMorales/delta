@@ -13,6 +13,9 @@ function fakeCtx(overrides = {}) {
     promptPath: vi.fn().mockResolvedValue("/tmp/x.jff"),
     importJff: vi.fn(),
     exportJff: vi.fn(),
+    promptLabel: vi.fn().mockResolvedValue("q9"),
+    renameState: vi.fn().mockResolvedValue(true),
+    testing: { openSingle: vi.fn(), openBatch: vi.fn() },
     ...overrides,
   };
 }
@@ -53,6 +56,8 @@ describe("registry structural guarantees (task 7.2)", () => {
         "view.zoomReset",
         "view.fitToWindow",
         "view.circleLayout",
+        "test.singleTrace",
+        "test.batch",
         "jff.import",
         "jff.export",
       ]),
@@ -187,6 +192,33 @@ describe("action.run behavior", () => {
     const ctx = fakeCtx();
     findAction("view.circleLayout").run(ctx);
     expect(ctx.layout.circle).toHaveBeenCalled();
+  });
+
+  it("state.rename prompts for a label and delegates to ctx.renameState (task 7.9)", async () => {
+    const ctx = fakeCtx({ selection: { kind: "state", id: 3 } });
+    await findAction("state.rename").run(ctx);
+    expect(ctx.promptLabel).toHaveBeenCalledWith(3);
+    expect(ctx.renameState).toHaveBeenCalledWith(3, "q9");
+    // Must never bypass the notice-aware hook with a raw apply call.
+    expect(ctx.docStore.apply).not.toHaveBeenCalled();
+  });
+
+  it("state.rename does nothing when the prompt is cancelled", async () => {
+    const ctx = fakeCtx({ selection: { kind: "state", id: 3 }, promptLabel: vi.fn().mockResolvedValue(null) });
+    await findAction("state.rename").run(ctx);
+    expect(ctx.renameState).not.toHaveBeenCalled();
+  });
+
+  it("test.singleTrace opens the single-trace drawer", () => {
+    const ctx = fakeCtx();
+    findAction("test.singleTrace").run(ctx);
+    expect(ctx.testing.openSingle).toHaveBeenCalled();
+  });
+
+  it("test.batch opens the batch-test drawer", () => {
+    const ctx = fakeCtx();
+    findAction("test.batch").run(ctx);
+    expect(ctx.testing.openBatch).toHaveBeenCalled();
   });
 
   it("jff.import prompts for a path and imports it", async () => {

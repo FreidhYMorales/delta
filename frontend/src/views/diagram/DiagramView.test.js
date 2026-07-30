@@ -337,3 +337,99 @@ describe("DiagramView create-transition tool", () => {
     ]);
   });
 });
+
+describe("DiagramView unreachable states (task 7.8, spec cross-cutting)", () => {
+  it("still renders an unreachable state on the diagram — never hidden or dropped", async () => {
+    const { container } = await setup({
+      revision: 1,
+      states: [
+        { id: 1, label: "q0", x: 10, y: 10, initial: true, accepting: false },
+        { id: 2, label: "q1", x: 100, y: 10, initial: false, accepting: false },
+      ],
+      edges: [],
+      derived: { classification: "Dfa", alphabet: [], unreachable: [2] },
+    });
+    // Both states are still present as real circles — q1 has no path from
+    // q0 (no edges at all here) but is not filtered out of the diagram.
+    expect(container.querySelectorAll("circle[data-state-id]")).toHaveLength(2);
+  });
+
+  it("marks an unreachable state's circle with the .unreachable CSS class, and only that one", async () => {
+    const { container } = await setup({
+      revision: 1,
+      states: [
+        { id: 1, label: "q0", x: 10, y: 10, initial: true, accepting: false },
+        { id: 2, label: "q1", x: 100, y: 10, initial: false, accepting: false },
+      ],
+      edges: [],
+      derived: { classification: "Dfa", alphabet: [], unreachable: [2] },
+    });
+    expect(
+      container.querySelector('circle[data-state-id="1"]').classList.contains("unreachable"),
+    ).toBe(false);
+    expect(
+      container.querySelector('circle[data-state-id="2"]').classList.contains("unreachable"),
+    ).toBe(true);
+  });
+
+  it("the status bar count reflects derived.unreachable", async () => {
+    const { container } = await setup({
+      revision: 1,
+      states: [
+        { id: 1, label: "q0", x: 10, y: 10, initial: true, accepting: false },
+        { id: 2, label: "q1", x: 100, y: 10, initial: false, accepting: false },
+        { id: 3, label: "q2", x: 200, y: 10, initial: false, accepting: false },
+      ],
+      edges: [],
+      derived: { classification: "Dfa", alphabet: [], unreachable: [2, 3] },
+    });
+    expect(container.querySelector(".status-bar").textContent).toContain("2 unreachable");
+  });
+});
+
+describe("DiagramView active-sim highlighting (task 7.6, testing drawer)", () => {
+  it("setActiveStates adds .active-sim to exactly the given state ids", async () => {
+    const { container, view } = await setup();
+    view.setActiveStates([2]);
+    expect(
+      container.querySelector('circle[data-state-id="1"]').classList.contains("active-sim"),
+    ).toBe(false);
+    expect(
+      container.querySelector('circle[data-state-id="2"]').classList.contains("active-sim"),
+    ).toBe(true);
+  });
+
+  it("setActiveStates([]) clears all highlighting", async () => {
+    const { container, view } = await setup();
+    view.setActiveStates([1, 2]);
+    view.setActiveStates([]);
+    expect(container.querySelectorAll(".active-sim")).toHaveLength(0);
+  });
+});
+
+describe("DiagramView double-click rename (task 7.9: collisions are never silent)", () => {
+  it("renames via ctx.renameState, not a raw docStore.apply", async () => {
+    const promptLabel = vi.fn().mockResolvedValue("q1");
+    const renameState = vi.fn().mockResolvedValue(true);
+    const snapshot = twoStateSnapshot();
+    const client = {
+      docSnapshot: vi.fn().mockResolvedValue(snapshot),
+      docApply: vi.fn(),
+      docUndo: vi.fn(),
+      docRedo: vi.fn(),
+    };
+    const docStore = new DocStore(client);
+    await docStore.load();
+    const ctx = new ViewContext(docStore, { promptLabel, renameState });
+    const container = document.createElement("div");
+    const view = new DiagramView(container, docStore, ctx);
+
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await view._lastEditPromise;
+
+    expect(renameState).toHaveBeenCalledWith(1, "q1");
+    expect(client.docApply).not.toHaveBeenCalled();
+  });
+});
