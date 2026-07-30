@@ -1,60 +1,74 @@
-import './style.css'
-import javascriptLogo from './assets/javascript.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import { setupCounter } from './counter.js'
+// App shell: wires the Tauri IPC client, DocStore, shared ViewContext and
+// the three PR5 views (DiagramView/TableView/FormalView) together. Testing
+// drawer (L2) and the interop/advanced menu (L3) are PR6 (tasks 7.6/7.7).
 
-document.querySelector('#app').innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${javascriptLogo}" class="framework" alt="JavaScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.js</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+import "./style.css";
+import * as client from "./tauri/client.js";
+import { DocStore } from "./store/DocStore.js";
+import { ViewContext } from "./commands/context.js";
+import { DiagramView } from "./views/diagram/DiagramView.js";
+import { TableView } from "./views/table/TableView.js";
+import { FormalView } from "./views/formal/FormalView.js";
+import { circleLayout } from "./views/diagram/geometry.js";
 
-<div class="ticks"></div>
+function circleLayoutAction(docStore) {
+  const states = docStore.getStates();
+  if (!states.length) return;
+  const radius = Math.min(160, 60 + states.length * 8);
+  const positions = circleLayout(states, { centerX: 300, centerY: 200, radius });
+  docStore.apply(positions.map((p) => ({ op: "MoveState", id: p.id, x: p.x, y: p.y })));
+}
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript" target="_blank">
-          <img class="button-icon" src="${javascriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+async function main() {
+  const app = document.querySelector("#app");
+  app.innerHTML = "";
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+  const shell = document.createElement("div");
+  shell.className = "app-shell";
+  const diagramPane = document.createElement("div");
+  diagramPane.className = "diagram-pane";
+  const rightDock = document.createElement("div");
+  rightDock.className = "right-dock";
+  shell.append(diagramPane, rightDock);
+  app.appendChild(shell);
 
-setupCounter(document.querySelector('#counter'))
+  const docStore = new DocStore(client);
+
+  const ctx = new ViewContext(docStore, {
+    // TODO(PR6/L3): swap window.prompt for the Tauri dialog plugin once
+    // jff.import/export and other interop-menu wiring lands (task 7.7).
+    promptLabel: (id) => {
+      const state = docStore.getState(id);
+      return window.prompt("Rename state", state?.label ?? "");
+    },
+    promptSymbol: () => window.prompt("Transition symbol (blank = epsilon)") || null,
+    promptPath: async (kind) =>
+      window.prompt(kind === "open-jff" ? "Path to .jff file to import" : "Save .jff file as"),
+    importJff: async (path) => {
+      const result = await client.jffImport(path);
+      docStore.loadSnapshot(result.snapshot);
+      if (result.report.items.length) {
+        // eslint-disable-next-line no-console
+        console.warn("jff import report", result.report);
+      }
+    },
+    exportJff: async (path) => {
+      const report = await client.jffExport(path);
+      if (report.items.length) {
+        // eslint-disable-next-line no-console
+        console.warn("jff export report", report);
+      }
+    },
+    layout: { circle: () => circleLayoutAction(docStore) },
+  });
+
+  const diagramView = new DiagramView(diagramPane, docStore, ctx);
+  ctx.viewport = diagramView.viewport;
+
+  new TableView(rightDock, docStore);
+  new FormalView(rightDock, docStore);
+
+  await docStore.load();
+}
+
+main();
