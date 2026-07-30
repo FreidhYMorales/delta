@@ -7,4 +7,5 @@ pub mod doc;
 pub mod dto;
 pub mod engine;
 pub mod ids;
+pub mod interop;
 pub mod model;

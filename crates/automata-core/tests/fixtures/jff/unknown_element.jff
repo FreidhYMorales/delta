@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--Created with JFLAP 7.1.-->
+<structure>
+	<type>fa</type>
+	<automaton>
+		<!--The list of states.-->
+		<state id="0" name="q0">
+			<x>50.0</x>
+			<y>50.0</y>
+			<label>display label</label>
+			<initial/>
+			<final/>
+		</state>
+		<!--A note left by the JFLAP user; not part of the FA model.-->
+		<note>
+			<x>10.0</x>
+			<y>10.0</y>
+			<text>remember to check this</text>
+		</note>
+	</automaton>
+</structure>
