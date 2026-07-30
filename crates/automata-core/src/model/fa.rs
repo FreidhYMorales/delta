@@ -106,6 +106,12 @@ impl FaDoc {
         self.state_meta.get(&id)
     }
 
+    /// Number of state-id slots ever allocated (including freed/tombstoned
+    /// ones). Bounds the dense-index space used by compiled engines.
+    pub fn state_capacity(&self) -> usize {
+        self.states.capacity()
+    }
+
     pub fn rename_state(&mut self, id: StateId, label: &str) -> Result<(), ArenaError> {
         self.states.rename(id, label)
     }
@@ -151,6 +157,12 @@ impl FaDoc {
 
     pub fn symbol_label(&self, id: SymbolId) -> Option<&str> {
         self.symbols.label(id)
+    }
+
+    /// Look up an already-interned symbol's id by its label, without
+    /// interning a new one.
+    pub fn symbol_label_to_id(&self, label: &str) -> Option<SymbolId> {
+        self.symbols.id_for_label(label)
     }
 
     // -- edges ----------------------------------------------------------
