@@ -93,6 +93,32 @@ impl<Id: ArenaId> Arena<Id> {
         Ok(id)
     }
 
+    /// Allocate a *specific* id, bypassing the normal free-list order. Used
+    /// to reconstruct a previously-freed id exactly during undo (design D4);
+    /// correct only under strict LIFO undo/redo discipline, which guarantees
+    /// the id is free again by the time this is called. Fails if `id` is
+    /// currently alive, or if `label` is in use by a different live id.
+    pub fn alloc_at(&mut self, id: Id, label: impl Into<Box<str>>) -> Result<(), ArenaError> {
+        let label: Box<str> = label.into();
+        if self.is_alive(id) {
+            return Err(ArenaError::DuplicateLabel(label));
+        }
+        if let Some(existing) = self.label_index.get(&label) {
+            if *existing != id {
+                return Err(ArenaError::DuplicateLabel(label));
+            }
+        }
+        let idx = id.index() as usize;
+        if idx >= self.labels.len() {
+            self.labels.resize(idx + 1, None);
+        } else {
+            self.free.retain(|&f| f != id);
+        }
+        self.labels[idx] = Some(label.clone());
+        self.label_index.insert(label, id);
+        Ok(())
+    }
+
     /// Free a live id, tombstoning its slot for future reuse.
     pub fn free(&mut self, id: Id) {
         if let Some(slot) = self.labels.get_mut(id.index() as usize) {
@@ -208,6 +234,28 @@ mod tests {
         arena.free(q0);
         let alive: Vec<_> = arena.iter_alive().collect();
         assert_eq!(alive, vec![StateId(1)]);
+    }
+
+    #[test]
+    fn alloc_at_reconstructs_a_freed_id_exactly() {
+        let mut arena: Arena<StateId> = Arena::new();
+        let q0 = arena.alloc("q0").unwrap();
+        let _q1 = arena.alloc("q1").unwrap();
+        arena.free(q0);
+        arena.alloc_at(q0, "q0").unwrap();
+        assert!(arena.is_alive(q0));
+        assert_eq!(arena.label(q0), Some("q0"));
+        // slot is no longer in the free list, so a normal alloc won't recycle it again
+        let fresh = arena.alloc("q2").unwrap();
+        assert_ne!(fresh, q0);
+    }
+
+    #[test]
+    fn alloc_at_rejects_when_id_already_alive() {
+        let mut arena: Arena<StateId> = Arena::new();
+        let q0 = arena.alloc("q0").unwrap();
+        let err = arena.alloc_at(q0, "other").unwrap_err();
+        assert_eq!(err, ArenaError::DuplicateLabel("other".into()));
     }
 
     #[test]

@@ -80,6 +80,22 @@ impl FaDoc {
         Ok(id)
     }
 
+    /// Reconstruct a previously-removed state at its exact original id.
+    /// Used only by `doc::EditOp::RestoreState` during undo (design D4) —
+    /// see `Arena::alloc_at` for the LIFO discipline this depends on.
+    pub fn restore_state(
+        &mut self,
+        id: StateId,
+        label: &str,
+        x: f64,
+        y: f64,
+        accepting: bool,
+    ) -> Result<(), ArenaError> {
+        self.states.alloc_at(id, label)?;
+        self.state_meta.insert(id, StateMeta { x, y, accepting });
+        Ok(())
+    }
+
     /// Remove a state, cascading removal of every incident edge and clearing
     /// `initial` if this was the initial state. No-op if `id` is not alive.
     pub fn remove_state(&mut self, id: StateId) {
