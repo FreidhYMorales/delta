@@ -1,0 +1,10 @@
+# Local AI runtime state
+.atl/
+
+# Rust
+/target/
+**/target/
+
+# Node / frontend
+node_modules/
+dist/

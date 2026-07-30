@@ -1,0 +1,14 @@
+[package]
+name = "automata-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+quick-xml = "0.36"
+fixedbitset = "0.5"
+smallvec = "1"
+thiserror = "1"
+
+[dev-dependencies]
+proptest = "1"
