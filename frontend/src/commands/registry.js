@@ -72,9 +72,9 @@ export const actions = [
     group: "state",
     keybinding: "f2",
     when: hasStateSelected,
-    run: (ctx) => {
-      const label = ctx.promptLabel ? ctx.promptLabel(ctx.selection.id) : null;
-      if (label) ctx.docStore.apply([{ op: "RenameState", id: ctx.selection.id, label }]);
+    run: async (ctx) => {
+      const label = ctx.promptLabel ? await ctx.promptLabel(ctx.selection.id) : null;
+      if (label) await ctx.docStore.apply([{ op: "RenameState", id: ctx.selection.id, label }]);
     },
   },
   {

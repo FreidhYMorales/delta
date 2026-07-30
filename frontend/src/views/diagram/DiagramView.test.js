@@ -318,7 +318,7 @@ describe("DiagramView create-transition tool", () => {
     await docStore.load();
     const ctx = new ViewContext(docStore, { promptSymbol });
     const container = document.createElement("div");
-    new DiagramView(container, docStore, ctx);
+    const view = new DiagramView(container, docStore, ctx);
 
     ctx.setTool("create-transition");
     // No pre-existing edge from q1(2) -> q0(1) in the fixture (only 1->2
@@ -329,6 +329,7 @@ describe("DiagramView create-transition tool", () => {
     container
       .querySelector('circle[data-state-id="1"]')
       .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await view._lastEditPromise;
 
     expect(promptSymbol).toHaveBeenCalled();
     expect(client.docApply).toHaveBeenCalledWith([

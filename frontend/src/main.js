@@ -10,6 +10,7 @@ import { DiagramView } from "./views/diagram/DiagramView.js";
 import { TableView } from "./views/table/TableView.js";
 import { FormalView } from "./views/formal/FormalView.js";
 import { circleLayout } from "./views/diagram/geometry.js";
+import { promptModal } from "./ui/promptModal.js";
 
 function circleLayoutAction(docStore) {
   const states = docStore.getStates();
@@ -35,15 +36,19 @@ async function main() {
   const docStore = new DocStore(client);
 
   const ctx = new ViewContext(docStore, {
-    // TODO(PR6/L3): swap window.prompt for the Tauri dialog plugin once
-    // jff.import/export and other interop-menu wiring lands (task 7.7).
-    promptLabel: (id) => {
+    // Bug 2: `window.prompt()`/`alert()`/`confirm()` are not reliably
+    // supported by this project's Tauri webview (webkit2gtk on Linux) —
+    // they silently return `null`, so every rename/symbol/path prompt goes
+    // through the in-app `promptModal` instead (plain DOM, no new dep).
+    // TODO(PR6/L3): swap the path prompts for the Tauri dialog plugin once
+    // the interop menu wiring lands (task 7.7).
+    promptLabel: async (id) => {
       const state = docStore.getState(id);
-      return window.prompt("Rename state", state?.label ?? "");
+      return promptModal("Rename state", state?.label ?? "");
     },
-    promptSymbol: () => window.prompt("Transition symbol (blank = epsilon)") || null,
+    promptSymbol: async () => (await promptModal("Transition symbol (blank = epsilon)")) || null,
     promptPath: async (kind) =>
-      window.prompt(kind === "open-jff" ? "Path to .jff file to import" : "Save .jff file as"),
+      promptModal(kind === "open-jff" ? "Path to .jff file to import" : "Save .jff file as"),
     importJff: async (path) => {
       const result = await client.jffImport(path);
       docStore.loadSnapshot(result.snapshot);

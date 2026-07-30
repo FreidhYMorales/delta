@@ -177,7 +177,7 @@ export class DiagramView {
         }
         break;
       case "create-transition":
-        if (stateId != null) this._handleCreateTransitionClick(stateId);
+        if (stateId != null) this._lastEditPromise = this._handleCreateTransitionClick(stateId);
         break;
       default:
         break;
@@ -309,18 +309,23 @@ export class DiagramView {
     document.removeEventListener("keydown", this._onDocKeydown, true);
   }
 
-  _handleCreateTransitionClick(stateId) {
+  /** @returns {Promise<void>} — exposed via `this._lastEditPromise` (set by
+   * the caller) so tests can await the prompt + apply round trip
+   * deterministically instead of racing microtasks, same pattern as
+   * `TableView`/`FormalView`'s `_lastEditPromise` (bug 2: prompts are now
+   * async, backed by `promptModal` instead of `window.prompt`). */
+  async _handleCreateTransitionClick(stateId) {
     if (this._pendingFrom == null) {
       this._pendingFrom = stateId;
       return;
     }
     const from = this._pendingFrom;
     this._pendingFrom = null;
-    const symbol = this.ctx.promptSymbol();
+    const symbol = await this.ctx.promptSymbol();
     if (!symbol) return;
     const existing = this.docStore.getEdge(from, stateId);
     const symbols = existing ? [...new Set([...existing.symbols, symbol])] : [symbol];
-    this.docStore.apply([
+    await this.docStore.apply([
       { op: "SetEdge", from, to: stateId, epsilon: existing?.epsilon ?? false, symbols },
     ]);
   }
@@ -386,7 +391,9 @@ export class DiagramView {
         circle.classList.add("unreachable");
       }
       if (this._isSelectedState(state.id)) circle.classList.add("selected");
-      circle.addEventListener("dblclick", () => this._renameState(state.id));
+      circle.addEventListener("dblclick", () => {
+        this._lastEditPromise = this._renameState(state.id);
+      });
 
       const label = document.createElementNS(SVG_NS, "text");
       label.textContent = state.label;
@@ -398,9 +405,11 @@ export class DiagramView {
     }
   }
 
-  _renameState(id) {
-    const label = this.ctx.promptLabel(id);
-    if (label) this.docStore.apply([{ op: "RenameState", id, label }]);
+  /** @returns {Promise<void>} — see `_handleCreateTransitionClick`'s doc
+   * comment for the `_lastEditPromise` convention. */
+  async _renameState(id) {
+    const label = await this.ctx.promptLabel(id);
+    if (label) await this.docStore.apply([{ op: "RenameState", id, label }]);
   }
 
   _isSelectedState(id) {

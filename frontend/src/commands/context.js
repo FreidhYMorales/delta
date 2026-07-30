@@ -17,8 +17,8 @@ export class ViewContext {
    *   viewport?: {zoomIn: Function, zoomOut: Function, reset: Function, fitToWindow: Function},
    *   layout?: {circle: Function},
    *   promptPath?: (kind: 'open-jff'|'save-jff') => Promise<string|null>,
-   *   promptLabel?: (stateId: number) => string|null,
-   *   promptSymbol?: () => string|null,
+   *   promptLabel?: (stateId: number) => Promise<string|null>,
+   *   promptSymbol?: () => Promise<string|null>,
    *   importJff?: (path: string) => Promise<void>,
    *   exportJff?: (path: string) => Promise<void>,
    * }} hooks
@@ -33,8 +33,8 @@ export class ViewContext {
     this.viewport = hooks.viewport ?? noopViewport();
     this.layout = hooks.layout ?? { circle: () => {} };
     this.promptPath = hooks.promptPath ?? (async () => null);
-    this.promptLabel = hooks.promptLabel ?? (() => null);
-    this.promptSymbol = hooks.promptSymbol ?? (() => null);
+    this.promptLabel = hooks.promptLabel ?? (async () => null);
+    this.promptSymbol = hooks.promptSymbol ?? (async () => null);
     this.importJff = hooks.importJff ?? (async () => {});
     this.exportJff = hooks.exportJff ?? (async () => {});
   }

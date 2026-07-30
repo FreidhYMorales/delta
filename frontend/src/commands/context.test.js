@@ -53,7 +53,8 @@ describe("ViewContext", () => {
   it("exposes injectable hooks with safe no-op defaults", async () => {
     const ctx = new ViewContext({});
     expect(await ctx.promptPath("open-jff")).toBeNull();
-    expect(ctx.promptLabel(1)).toBeNull();
+    expect(await ctx.promptLabel(1)).toBeNull();
+    expect(await ctx.promptSymbol()).toBeNull();
     await expect(ctx.importJff("/x")).resolves.toBeUndefined();
     await expect(ctx.exportJff("/x")).resolves.toBeUndefined();
     expect(() => ctx.viewport.zoomIn()).not.toThrow();
