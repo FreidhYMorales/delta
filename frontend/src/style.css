@@ -99,3 +99,35 @@ body {
   font-size: 0.85rem;
   min-height: 1.2em;
 }
+
+.context-menu {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-width: 10rem;
+  padding: 0.25rem;
+  background: canvas;
+  color: canvastext;
+  border: 1px solid #8888;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px #0004;
+  z-index: 1000;
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus {
+  background: #8882;
+}

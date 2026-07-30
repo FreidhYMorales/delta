@@ -182,6 +182,77 @@ describe("DiagramView drag-to-move (select tool, bug 1)", () => {
   });
 });
 
+describe("DiagramView state context menu (bug 3)", () => {
+  it("right-clicking a state selects it, suppresses the native menu, and lists registry actions", async () => {
+    const { container, ctx } = await setup();
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 50,
+      clientY: 60,
+    });
+    const preventDefault = vi.spyOn(event, "preventDefault");
+    circle.dispatchEvent(event);
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(ctx.selection).toEqual({ kind: "state", id: 1 });
+
+    const menu = document.querySelector(".context-menu");
+    expect(menu).not.toBeNull();
+    const itemIds = [...menu.querySelectorAll("[data-action]")].map((el) => el.dataset.action);
+    expect(itemIds).toEqual(
+      expect.arrayContaining([
+        "state.rename",
+        "state.markInitial",
+        "state.toggleAccepting",
+        "edit.deleteSelection",
+      ]),
+    );
+  });
+
+  it("clicking a context menu item runs the matching registry action and closes the menu", async () => {
+    const { container, client } = await setup();
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    circle.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+    );
+
+    document
+      .querySelector('.context-menu [data-action="state.markInitial"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(client.docApply).toHaveBeenCalledWith([{ op: "SetInitial", id: 1 }]);
+    expect(document.querySelector(".context-menu")).toBeNull();
+  });
+
+  it("dismisses the context menu on Escape", async () => {
+    const { container } = await setup();
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    circle.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+    );
+    expect(document.querySelector(".context-menu")).not.toBeNull();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    expect(document.querySelector(".context-menu")).toBeNull();
+  });
+
+  it("dismisses the context menu when clicking elsewhere", async () => {
+    const { container } = await setup();
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    circle.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+    );
+    expect(document.querySelector(".context-menu")).not.toBeNull();
+
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
+    expect(document.querySelector(".context-menu")).toBeNull();
+  });
+});
+
 describe("DiagramView create-state tool", () => {
   it("clicking empty canvas creates a state at the click position with the next free label", async () => {
     const { container, ctx, client } = await setup();
