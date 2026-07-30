@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { actions, findAction, findByKeybinding, TOOL_IDS } from "./registry.js";
+import { actions, findAction, findByKeybinding, keybindingOf, TOOL_IDS } from "./registry.js";
 
 function fakeCtx(overrides = {}) {
   return {
@@ -85,6 +85,35 @@ describe("registry structural guarantees (task 7.2)", () => {
       "tool.createTransition",
       "tool.delete",
     ]);
+  });
+});
+
+describe("keybindingOf (bug 4: Ctrl+Shift+Z must not collide with Ctrl+Z)", () => {
+  it("produces a distinct binding for Ctrl+Shift+Z vs plain Ctrl+Z", () => {
+    const undo = keybindingOf({ key: "z", ctrlKey: true, shiftKey: false, metaKey: false });
+    const redo = keybindingOf({ key: "Z", ctrlKey: true, shiftKey: true, metaKey: false });
+    expect(redo).not.toBe(undo);
+  });
+
+  it("normalizes Ctrl+Shift+Z to exactly the registered edit.redo binding", () => {
+    expect(keybindingOf({ key: "Z", ctrlKey: true, shiftKey: true, metaKey: false })).toBe(
+      "ctrl+shift+z",
+    );
+  });
+
+  it("normalizes plain Ctrl+Z to exactly the registered edit.undo binding", () => {
+    expect(keybindingOf({ key: "z", ctrlKey: true, shiftKey: false, metaKey: false })).toBe(
+      "ctrl+z",
+    );
+  });
+
+  it("dispatches Ctrl+Shift+Z to edit.redo and Ctrl+Z to edit.undo, not the same action", () => {
+    expect(findByKeybinding(keybindingOf({ key: "Z", ctrlKey: true, shiftKey: true })).id).toBe(
+      "edit.redo",
+    );
+    expect(findByKeybinding(keybindingOf({ key: "z", ctrlKey: true, shiftKey: false })).id).toBe(
+      "edit.undo",
+    );
   });
 });
 

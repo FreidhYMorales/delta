@@ -227,10 +227,16 @@ export function findByKeybinding(key) {
  * @param {KeyboardEvent} event
  */
 export function keybindingOf(event) {
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase();
+  const key = event.key.toLowerCase();
   const parts = [];
   if (event.ctrlKey || event.metaKey) parts.push("ctrl");
-  if (event.shiftKey && key.length > 1) parts.push("shift");
+  // `event.shiftKey` alone (not `key.length`) decides whether "shift" is
+  // part of the binding: for single-character keys the browser already
+  // reports the shifted glyph in `event.key` (e.g. "Z" for Ctrl+Shift+Z),
+  // so lower-casing it loses the only signal that Shift was held. Bug 4:
+  // the previous `key.length > 1` guard skipped "shift" for exactly those
+  // single-character keys, making "ctrl+shift+z" collide with "ctrl+z".
+  if (event.shiftKey) parts.push("shift");
   parts.push(key);
   return parts.join("+");
 }
