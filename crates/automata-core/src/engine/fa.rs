@@ -224,7 +224,7 @@ mod tests {
 
         let engine = FaEngine::compile(&doc);
         let a = doc.symbol_label_to_id("a").unwrap();
-        let input: Vec<_> = std::iter::repeat(a).take(50).collect();
+        let input: Vec<_> = std::iter::repeat_n(a, 50).collect();
         let trace = run_bounded(&engine, &input, Budget { max_steps: 5, max_configs: 5_000 });
         assert_eq!(trace.outcome, Outcome::TruncatedSteps);
     }
@@ -244,7 +244,7 @@ mod tests {
 
         let engine = FaEngine::compile(&doc);
         let a = doc.symbol_label_to_id("a").unwrap();
-        let input: Vec<_> = std::iter::repeat(a).take(10_000).collect();
+        let input: Vec<_> = std::iter::repeat_n(a, 10_000).collect();
 
         let start = std::time::Instant::now();
         let trace = run_bounded(

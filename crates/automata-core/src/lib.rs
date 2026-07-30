@@ -4,6 +4,7 @@
 //! `cargo test -p automata-core` and reusable by a future CLI.
 
 pub mod doc;
+pub mod dto;
 pub mod engine;
 pub mod ids;
 pub mod model;
