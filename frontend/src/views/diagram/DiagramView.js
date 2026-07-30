@@ -36,6 +36,12 @@ export class DiagramView {
     this.ctx = ctx;
     /** Transient "from" state while drawing a transition (create-transition tool). */
     this._pendingFrom = null;
+    /** Transient drag state while the select tool moves a state (bug 1):
+     * `{ id, startClientX, startClientY, startX, startY, x, y }`, or `null`
+     * when no drag is in progress. Position deltas are computed from raw
+     * pointer coordinates, never `getBoundingClientRect`, so this works the
+     * same regardless of canvas scroll/zoom/test-environment layout. */
+    this._dragState = null;
     /** Pan/zoom state backing the SVG `viewBox` (task 7.1's registry
      * view.zoomIn/zoomOut/zoomReset/fitToWindow actions). */
     this._view = { x: 0, y: 0, w: BASE_WIDTH, h: BASE_HEIGHT };
@@ -110,6 +116,10 @@ export class DiagramView {
     this.svg.setAttribute("viewBox", `0 0 ${BASE_WIDTH} ${BASE_HEIGHT}`);
     this.svg.addEventListener("click", (e) => this._onCanvasClick(e));
     this.svg.addEventListener("keydown", (e) => this._dispatchKey(e));
+    this.svg.addEventListener("mousedown", (e) => this._onCanvasMouseDown(e));
+    this.svg.addEventListener("mousemove", (e) => this._onCanvasMouseMove(e));
+    this.svg.addEventListener("mouseup", (e) => this._onCanvasMouseUp(e));
+    this.svg.addEventListener("mouseleave", () => this._cancelDrag());
 
     this.inspector = document.createElement("div");
     this.inspector.className = "selection-inspector";
@@ -169,6 +179,67 @@ export class DiagramView {
       default:
         break;
     }
+  }
+
+  /** Start a drag when the select tool mouse-downs directly on a state
+   * circle (bug 1: select-and-drag is core L0 behavior, kflap-v0.1's
+   * "V Seleccionar y mover estados"). The `click` handler above still fires
+   * on release and re-selects the same state; that is harmless. */
+  _onCanvasMouseDown(event) {
+    if (this.ctx.activeTool !== "select") return;
+    const stateId = event.target?.dataset?.stateId ? Number(event.target.dataset.stateId) : null;
+    if (stateId == null) return;
+    const state = this.docStore.getState(stateId);
+    if (!state) return;
+    this._dragState = {
+      id: stateId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: state.x,
+      startY: state.y,
+      x: state.x,
+      y: state.y,
+    };
+  }
+
+  /** Local optimistic geometry update during the drag — mutates the
+   * `DocStore` mirror directly and re-renders, without round-tripping to
+   * the server on every mousemove (design D3: "drag preview is
+   * frontend-local"). The authoritative `MoveState` op is only sent once,
+   * on release (`_onCanvasMouseUp`). */
+  _onCanvasMouseMove(event) {
+    if (!this._dragState) return;
+    const drag = this._dragState;
+    const x = drag.startX + (event.clientX - drag.startClientX);
+    const y = drag.startY + (event.clientY - drag.startClientY);
+    drag.x = x;
+    drag.y = y;
+    const state = this.docStore.getState(drag.id);
+    if (state) {
+      state.x = x;
+      state.y = y;
+      this._render();
+    }
+  }
+
+  /** Commit the drag as a single undoable `MoveState` transaction (design
+   * D3: "one `MoveStates` op committed on pointerup — also the undo
+   * granularity"). A drag that never moved is a no-op: no history entry,
+   * no round trip. */
+  _onCanvasMouseUp() {
+    const drag = this._dragState;
+    this._dragState = null;
+    if (!drag) return;
+    if (drag.x === drag.startX && drag.y === drag.startY) return;
+    this.docStore.apply([{ op: "MoveState", id: drag.id, x: drag.x, y: drag.y }]);
+  }
+
+  /** Abort an in-progress drag without committing (e.g. the pointer leaves
+   * the canvas). The local optimistic geometry stays wherever it was last
+   * moved to — same as releasing outside the canvas would in most editors —
+   * but no server round trip happens for a cancelled drag. */
+  _cancelDrag() {
+    this._dragState = null;
   }
 
   _handleCreateTransitionClick(stateId) {

@@ -128,6 +128,60 @@ describe("DiagramView selection (select tool)", () => {
   });
 });
 
+describe("DiagramView drag-to-move (select tool, bug 1)", () => {
+  it("dragging a state circle updates its position live and commits a single MoveState on release", async () => {
+    const { container, client, docStore } = await setup();
+    const circle = container.querySelector('circle[data-state-id="1"]');
+
+    circle.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }),
+    );
+    container
+      .querySelector("svg")
+      .dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 60, clientY: 40 }));
+
+    // Live local update during the drag, before release.
+    expect(docStore.getState(1).x).toBe(60);
+    expect(docStore.getState(1).y).toBe(40);
+    expect(client.docApply).not.toHaveBeenCalled();
+
+    container
+      .querySelector("svg")
+      .dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 60, clientY: 40 }));
+
+    expect(client.docApply).toHaveBeenCalledWith([{ op: "MoveState", id: 1, x: 60, y: 40 }]);
+  });
+
+  it("does not commit a MoveState when the pointer never moves", async () => {
+    const { container, client } = await setup();
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    const svg = container.querySelector("svg");
+
+    circle.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }),
+    );
+    svg.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 10, clientY: 10 }));
+
+    expect(client.docApply).not.toHaveBeenCalled();
+  });
+
+  it("does not drag when a non-select tool is active", async () => {
+    const { container, ctx, client, docStore } = await setup();
+    ctx.setTool("delete");
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    const svg = container.querySelector("svg");
+
+    circle.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }),
+    );
+    svg.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 60, clientY: 40 }));
+    svg.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 60, clientY: 40 }));
+
+    expect(docStore.getState(1).x).toBe(10);
+    expect(client.docApply).not.toHaveBeenCalled();
+  });
+});
+
 describe("DiagramView create-state tool", () => {
   it("clicking empty canvas creates a state at the click position with the next free label", async () => {
     const { container, ctx, client } = await setup();
