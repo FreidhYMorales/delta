@@ -12,6 +12,7 @@ import { DiagramView } from "./views/diagram/DiagramView.js";
 import { TableView } from "./views/table/TableView.js";
 import { FormalView } from "./views/formal/FormalView.js";
 import { TestingView } from "./views/testing/TestingView.js";
+import { MenuBar } from "./views/menubar/MenuBar.js";
 import { circleLayout } from "./views/diagram/geometry.js";
 import { promptModal } from "./ui/promptModal.js";
 import { pickOpenPath, pickSavePath } from "./ui/nativeDialog.js";
@@ -32,11 +33,15 @@ async function main() {
 
   const shell = document.createElement("div");
   shell.className = "app-shell";
+  const menuBarHost = document.createElement("div");
+  const appBody = document.createElement("div");
+  appBody.className = "app-body";
   const diagramPane = document.createElement("div");
   diagramPane.className = "diagram-pane";
   const rightDock = document.createElement("div");
   rightDock.className = "right-dock";
-  shell.append(diagramPane, rightDock);
+  appBody.append(diagramPane, rightDock);
+  shell.append(menuBarHost, appBody);
   app.appendChild(shell);
 
   const docStore = new DocStore(client);
@@ -100,6 +105,10 @@ async function main() {
   new FormalView(rightDock, docStore);
   const testingView = new TestingView(diagramPane, docStore, ctx);
   ctx.testing = testingView.controls;
+
+  // Constructed last so its `when(ctx)` guards evaluate against the fully
+  // wired context (real viewport/testing hooks, not their startup no-ops).
+  new MenuBar(menuBarHost, ctx);
 
   await docStore.load();
 }

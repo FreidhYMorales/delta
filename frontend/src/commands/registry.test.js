@@ -1,5 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { actions, findAction, findByKeybinding, keybindingOf, TOOL_IDS } from "./registry.js";
+import { MENU_GROUP_TITLES } from "../views/menubar/MenuBar.js";
+
+// The diagram's right-click context menu (`DiagramView._onCanvasContextMenu`)
+// hardcodes this exact id list. Kept here too — not imported — because
+// `DiagramView.js` doesn't export it; this is the "hardcoded expected-
+// coverage list" the UI/UX audit task explicitly allows, so a future PR
+// can't silently reintroduce a 100%-unreachable action (no keybinding, not
+// in the menu bar, not the toolbar, not the context menu) the way
+// `jff.import`/`jff.export`/`test.singleTrace`/`test.batch` briefly were.
+const CONTEXT_MENU_IDS = new Set([
+  "state.rename",
+  "state.markInitial",
+  "state.toggleAccepting",
+  "edit.deleteSelection",
+]);
 
 function fakeCtx(overrides = {}) {
   return {
@@ -233,5 +248,54 @@ describe("action.run behavior", () => {
     await findAction("jff.export").run(ctx);
     expect(ctx.promptPath).toHaveBeenCalledWith("save-jff");
     expect(ctx.exportJff).toHaveBeenCalledWith("/tmp/x.jff");
+  });
+});
+
+describe("reachability audit (UI/UX audit pass — no action may end up 100% unreachable)", () => {
+  const toolIds = new Set(TOOL_IDS);
+
+  it("every action has a real, discoverable trigger: a keybinding, a menu-bar entry, a toolbar button, or a context-menu item", () => {
+    for (const action of actions) {
+      const reachable =
+        action.keybinding != null ||
+        Object.prototype.hasOwnProperty.call(MENU_GROUP_TITLES, action.group) ||
+        toolIds.has(action.id) ||
+        CONTEXT_MENU_IDS.has(action.id);
+      expect(
+        reachable,
+        `action "${action.id}" (group "${action.group}") has no keybinding and is not ` +
+          `covered by the menu bar, the toolbar, or the diagram context menu`,
+      ).toBe(true);
+    }
+  });
+
+  it("the previously 100%-unreachable actions are now menu-bar covered (jff.import/export, test.singleTrace/batch)", () => {
+    for (const id of ["jff.import", "jff.export", "test.singleTrace", "test.batch"]) {
+      const action = findAction(id);
+      expect(action.keybinding).toBeNull();
+      expect(MENU_GROUP_TITLES).toHaveProperty(action.group);
+    }
+  });
+
+  it("keyboard-only actions (undo/redo/zoom/fit/circle layout) are also menu-bar covered, not just key-bound", () => {
+    for (const id of [
+      "edit.undo",
+      "edit.redo",
+      "view.zoomIn",
+      "view.zoomOut",
+      "view.zoomReset",
+      "view.fitToWindow",
+      "view.circleLayout",
+    ]) {
+      const action = findAction(id);
+      expect(action.keybinding).not.toBeNull();
+      expect(MENU_GROUP_TITLES).toHaveProperty(action.group);
+    }
+  });
+
+  it("every `state` group action is covered by the hardcoded context-menu id list or has its own keybinding", () => {
+    for (const action of actions.filter((a) => a.group === "state")) {
+      expect(CONTEXT_MENU_IDS.has(action.id) || action.keybinding != null).toBe(true);
+    }
   });
 });
