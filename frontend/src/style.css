@@ -1,6 +1,36 @@
+/* Design tokens (UI/UX audit pass): a small, deliberately short scale so
+ * spacing/color/typography stay consistent across every view instead of
+ * mixing arbitrary literals. Colors keep the existing `canvas`/`canvastext`
+ * + translucent-black convention (already used by the context menu, prompt
+ * modal and notices below) so light/dark both work for free via
+ * `color-scheme: light dark` — no new dependency, no hardcoded hex pair. */
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  --border-color: #8884;
+  --border-color-strong: #8888;
+  --hover-bg: #8882;
+  --active-bg: #8883;
+
+  --accent: #369;
+  --accent-strong: #06c;
+  --danger: #c33;
+  --success: #2a7;
+  --warning: #c90;
+
+  --font-size-sm: 0.85rem;
+  --font-size-xs: 0.75rem;
+  --font-weight-medium: 600;
 }
 
 body {
@@ -9,7 +39,91 @@ body {
 
 .app-shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Top-level app menu bar (File/Edit/View/Test — MenuBar.js). Sits above the
+ * diagram pane's own local toolbar so the two never overlap or compete for
+ * the same row: this is app-level chrome, the toolbar below it is
+ * diagram-local (the same "L0 vs. app shell" split as the rest of the
+ * progressive-disclosure design). */
+.menu-bar {
+  display: flex;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-xs);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.menu-bar-menu {
+  position: relative;
+}
+
+.menu-bar-item {
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.menu-bar-item:hover {
+  background: var(--hover-bg);
+}
+
+.menu-bar-menu.open .menu-bar-item {
+  background: var(--active-bg);
+}
+
+/* Position-only override — shared box/surface styling (background, border,
+ * padding, shadow, min-width, ...) lives in the `.context-menu,
+ * .menu-dropdown` rule further down, since the two are the same widget (see
+ * comment there). */
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + var(--space-2xs));
+  left: 0;
+}
+
+.menu-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-xs) var(--space-xs);
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.menu-dropdown-item:hover:not(:disabled),
+.menu-dropdown-item:focus:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.menu-dropdown-item:disabled,
+.menu-dropdown-item.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.menu-dropdown-item-hint {
+  font-size: var(--font-size-xs);
+  opacity: 0.65;
+  white-space: nowrap;
 }
 
 .diagram-pane {
@@ -21,21 +135,36 @@ body {
 
 .right-dock {
   width: 320px;
-  border-left: 1px solid #8884;
+  border-left: 1px solid var(--border-color);
   overflow-y: auto;
-  padding: 0.5rem;
+  padding: var(--space-xs);
 }
 
 .toolbar {
   display: flex;
-  gap: 0.25rem;
-  padding: 0.5rem;
-  border-bottom: 1px solid #8884;
+  gap: var(--space-2xs);
+  padding: var(--space-xs);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tool-button {
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool-button:hover {
+  background: var(--hover-bg);
 }
 
 .tool-button.active {
-  font-weight: bold;
-  outline: 2px solid currentColor;
+  font-weight: var(--font-weight-medium);
+  background: var(--active-bg);
+  border-color: var(--accent);
 }
 
 .diagram-canvas {
@@ -63,7 +192,7 @@ body {
 }
 
 .state.unreachable {
-  stroke: #c33;
+  stroke: var(--danger);
   stroke-dasharray: 4 2;
 }
 
@@ -77,25 +206,25 @@ body {
 }
 
 .edge.selected {
-  stroke: #06c;
+  stroke: var(--accent-strong);
 }
 
 .selection-inspector,
 .status-bar {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.85rem;
-  border-top: 1px solid #8884;
+  padding: var(--space-2xs) var(--space-xs);
+  font-size: var(--font-size-sm);
+  border-top: 1px solid var(--border-color);
 }
 
 .table-view,
 .formal-view,
 .testing-view {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-xs);
 }
 
 .testing-view {
-  padding: 0.25rem 0.5rem;
-  border-top: 1px solid #8884;
+  padding: var(--space-2xs) var(--space-xs);
+  border-top: 1px solid var(--border-color);
 }
 
 .testing-single,
@@ -103,8 +232,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0;
+  gap: var(--space-xs);
+  padding: var(--space-xs) 0;
 }
 
 .testing-batch {
@@ -123,28 +252,28 @@ body {
 }
 
 .testing-batch-table td {
-  border: 1px solid #8884;
-  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border-color);
+  padding: var(--space-2xs) var(--space-xs);
 }
 
 .testing-verdict-accepted {
-  color: #2a7;
-  font-weight: bold;
+  color: var(--success);
+  font-weight: var(--font-weight-medium);
 }
 
 .testing-verdict-rejected {
-  color: #c33;
-  font-weight: bold;
+  color: var(--danger);
+  font-weight: var(--font-weight-medium);
 }
 
 .testing-verdict-truncated {
-  color: #c90;
-  font-weight: bold;
+  color: var(--warning);
+  font-weight: var(--font-weight-medium);
 }
 
 .testing-active-states {
   width: 100%;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   opacity: 0.85;
 }
 
@@ -155,33 +284,44 @@ body {
 }
 
 .formal-error {
-  color: #c33;
-  font-size: 0.85rem;
+  color: var(--danger);
+  font-size: var(--font-size-sm);
   min-height: 1.2em;
+}
+
+/* `.context-menu` (right-click, DiagramView.js) and `.menu-dropdown`
+ * (MenuBar.js) are the same widget — a floating list of registry actions —
+ * so they share every box/surface style. Only positioning differs: the
+ * context menu is placed at an arbitrary click point (`position: fixed`,
+ * set inline per-open), the menu-dropdown always anchors under its trigger
+ * button (`position: absolute` on `.menu-bar-menu`, set in the block
+ * above). */
+.context-menu,
+.menu-dropdown {
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  padding: var(--space-2xs);
+  background: canvas;
+  color: canvastext;
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px #0004;
+  z-index: 1000;
 }
 
 .context-menu {
   position: fixed;
-  display: flex;
-  flex-direction: column;
-  min-width: 10rem;
-  padding: 0.25rem;
-  background: canvas;
-  color: canvastext;
-  border: 1px solid #8888;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px #0004;
-  z-index: 1000;
 }
 
 .context-menu-item {
   display: block;
   width: 100%;
-  padding: 0.35rem 0.5rem;
+  padding: var(--space-xs) var(--space-xs);
   text-align: left;
   background: none;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
   color: inherit;
@@ -189,7 +329,7 @@ body {
 
 .context-menu-item:hover,
 .context-menu-item:focus {
-  background: #8882;
+  background: var(--hover-bg);
 }
 
 .prompt-modal-overlay {
@@ -205,74 +345,75 @@ body {
 .prompt-modal {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-xs);
   min-width: 18rem;
-  padding: 1rem;
+  padding: var(--space-md);
   background: canvas;
   color: canvastext;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 16px #0006;
 }
 
 .prompt-modal-message {
   margin: 0;
-  font-weight: bold;
+  font-weight: var(--font-weight-medium);
 }
 
 .prompt-modal-input {
-  padding: 0.35rem 0.5rem;
+  padding: var(--space-xs) var(--space-xs);
   font: inherit;
 }
 
 .prompt-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-xs);
 }
 
 .notice-stack {
   position: fixed;
-  top: 0.75rem;
-  right: 0.75rem;
+  top: var(--space-sm);
+  right: var(--space-sm);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-xs);
   max-width: 24rem;
   z-index: 3000;
 }
 
 .notice {
   position: relative;
-  padding: 0.5rem 1.5rem 0.5rem 0.75rem;
+  padding: var(--space-xs) var(--space-lg) var(--space-xs) var(--space-sm);
   background: canvas;
   color: canvastext;
-  border-left: 4px solid #369;
-  border-radius: 4px;
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
   box-shadow: 0 2px 10px #0005;
 }
 
 .notice-error {
-  border-left-color: #c33;
+  border-left-color: var(--danger);
 }
 
 .notice-title {
   display: block;
+  font-weight: var(--font-weight-medium);
 }
 
 .notice-message {
-  margin: 0.25rem 0 0;
+  margin: var(--space-2xs) 0 0;
 }
 
 .notice-items {
-  margin: 0.25rem 0 0;
+  margin: var(--space-2xs) 0 0;
   padding-left: 1.1rem;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
 }
 
 .notice-close {
   position: absolute;
-  top: 0.2rem;
-  right: 0.35rem;
+  top: var(--space-2xs);
+  right: var(--space-xs);
   background: none;
   border: none;
   font: inherit;
