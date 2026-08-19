@@ -24,7 +24,7 @@ import { Toolbar } from "./views/toolbar/Toolbar.js";
 import { EditorModeSelect } from "./views/toolbar/EditorModeSelect.js";
 import { circleLayout } from "./views/diagram/geometry.js";
 import { promptModal } from "./ui/promptModal.js";
-import { pickOpenPath, pickSavePath } from "./ui/nativeDialog.js";
+import { pickOpenJsonPath, pickOpenPath, pickSaveJsonPath, pickSavePath } from "./ui/nativeDialog.js";
 import { showNotice } from "./ui/notice.js";
 import { reportItemLines, reportTitle } from "./ui/interopReport.js";
 import { createTabs } from "./ui/tabs.js";
@@ -238,11 +238,34 @@ async function main() {
     // `mealyLogic.js`) — validated by the caller (`MealyDiagramView`), so
     // this hook only needs to surface the modal.
     promptTransition: async (existing = "") => promptModal("Transición (formato input/output, p.ej. a/x)", existing),
+    // Native JSON only (no `.jff` for Mealy, no loss report — see
+    // docs/decisions.md), so no try/catch-and-notice ceremony like FA's
+    // importJff/exportJff: a cancelled dialog is just `path == null`.
+    openFile: async () => {
+      const path = await pickOpenJsonPath();
+      if (!path) return;
+      try {
+        const snapshot = await client.mealyOpen(path);
+        mealyDocStore.loadSnapshot(snapshot);
+        mealyDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo abrir el archivo", message: String(error?.message ?? error) });
+      }
+    },
+    saveFile: async () => {
+      const path = await pickSaveJsonPath();
+      if (!path) return;
+      try {
+        await client.mealySave(path);
+        mealyDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo guardar el archivo", message: String(error?.message ?? error) });
+      }
+    },
   });
   const mealyDiagramView = new MealyDiagramView(mealyCanvasPane, mealyDocStore, mealyCtx);
   mealyCtx.viewport = mealyDiagramView.viewport;
   const mealyToolbar = new MealyToolbar(toolbarHost, mealyCtx);
-  mealyToolbar.markInitial = () => mealyDiagramView.markInitial();
   new MealySimView(mealyPanelUpper, (input) => client.mealySim(input));
 
   const modeSelect = new EditorModeSelect(toolbarHost, ctx, {

@@ -369,6 +369,30 @@ body {
   background: var(--surface);
 }
 
+/* Groups Mealy's Abrir/Guardar buttons with the status chip as one flex
+ * item, so `.canvas-toolbar`'s own `space-between` still puts the filename
+ * on the far left and this whole group on the far right (`MealyDiagramView.js`). */
+.canvas-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.canvas-file-btn {
+  font: inherit;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-2xs);
+  cursor: pointer;
+}
+
+.canvas-file-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .chip {
   border: 1px solid var(--border-color);
   border-radius: 999px;

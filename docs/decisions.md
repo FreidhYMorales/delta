@@ -10,6 +10,63 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Mealy: pulido final — registry propio, atajos/menú contextual, importar/exportar por UI
+
+**Dónde**: `frontend/src/commands/{mealyRegistry,mealyRegistry.test}.js` (nuevo),
+`.../commands/MealyContext.js` (hooks `openFile`/`saveFile`),
+`.../views/mealyDiagram/{MealyDiagramView,MealyToolbar}.js` y sus `.test.js`,
+`.../ui/nativeDialog.js` (`pickOpenJsonPath`/`pickSaveJsonPath`), `main.js`,
+`style.css`.
+
+**Qué cerraba esto**: la ronda anterior había dejado explícitamente afuera
+"menú contextual/atajos de teclado (sin registry propio para Mealy)" e
+"importación/exportación de archivo por UI". Ambos se resuelven acá.
+
+**`mealyRegistry.js` es un array separado de `commands/registry.js`, no una
+generalización**: mismo shape (`id`/`group`/`keybinding`/`when`/`run`), pero
+`run(ctx)` recibe un `MealyContext`, no un `ViewContext` — mantenerlos
+separados hace estructuralmente imposible mezclar el context equivocado.
+`keybindingOf` sí se reexporta tal cual desde el registry de AFD/AFN (es pura,
+normaliza un `KeyboardEvent`, nada específico de FA). El viejo método ad-hoc
+`MealyDiagramView.markInitial()` se eliminó: tanto el botón de la toolbar
+como el ítem del menú contextual ahora llaman a la misma acción del registry
+(`state.markInitial`), eliminando la duplicación de lógica que tenía antes.
+
+**Menú contextual sin `state.toggleAccepting`**: Mealy no tiene estados de
+aceptación (ver la entrada de backend de esta misma fecha, más abajo, sobre
+por qué `MealyDoc` no tiene flag `accepting`), así que el menú de clic derecho
+solo ofrece `state.rename` / `state.markInitial` / `edit.deleteSelection`.
+
+**Importar/exportar es JSON nativo únicamente, sin `.jff`** — decisión
+explícita de alcance acotado: Mealy no tiene una representación `.jff`
+razonable como transductor de un solo símbolo por transición, y no hay
+necesidad de interoperar con JFLAP real acá. Botones "Abrir"/"Guardar" nuevos
+en la barra de info del canvas (`.canvas-toolbar-right`, agregado para que
+`justify-content: space-between` siga funcionando con el nombre de archivo a
+la izquierda).
+
+**Cómo se verificó**: 361/361 tests de frontend (32 nuevos: `mealyRegistry`,
+`MealyContext` — primer archivo de tests dedicado para esa clase —, más los
+ajustes de `MealyDiagramView`/`MealyToolbar` tras el refactor a registry).
+`vite build` limpio. Verificado en vivo en un dev server temporal: cambio de
+modo, badges de atajos (V/S/T/D) y activación de herramienta por teclado
+confirmados visualmente. El menú contextual en sí se verificó por lectura de
+código + los dos tests dedicados (`_onCanvasContextMenu` corta antes de
+`preventDefault()` si el click no cae exactamente sobre
+`event.target.dataset.stateId`, igual que `DiagramView` de AFD/AFN —
+confirmado que es el mismo comportamiento ya probado, no una regresión; un
+`<circle>` inyectado a mano en el DOM del dev server resultó poco fiable para
+acertar el pixel exacto vía automatización de browser, así que no vale la
+pena forzar esa verificación en vivo cuando la lógica ya está cubierta por
+tests + lectura de código).
+
+**Pendiente todavía para Mealy** (no bloqueante, para una ronda futura):
+Tabla de estados y Definición formal equivalentes; `MenuBar.js` sigue siendo
+solo de AFD/AFN y queda visible sin cambios en modo Mealy (con menús tipo
+"Convertir" que no aplican) — no evaluado todavía si eso confunde.
+
+---
+
 ## 2026-08-19 — Frontend de Mealy: editor de canvas real, "Editor" pasa a ser un cambio de modo de verdad
 
 **Dónde**: `frontend/src/store/MealyDocStore.js`, `.../commands/MealyContext.js`,

@@ -30,3 +30,22 @@ export async function pickSavePath(defaultPath = "automaton.jff") {
   const result = await save({ defaultPath, filters: JFF_FILTER });
   return result ?? null;
 }
+
+// Native JSON only, for `MealyDoc` — no `.jff` support for Mealy machines
+// yet (out of scope, docs/decisions.md), so these are separate filters
+// rather than a shared FA/Mealy path picker.
+const JSON_FILTER = [{ name: "Native JSON", extensions: ["json"] }];
+
+/** @returns {Promise<string|null>} the chosen path, or `null` if cancelled */
+export async function pickOpenJsonPath() {
+  const { open } = await getDialog();
+  const result = await open({ multiple: false, directory: false, filters: JSON_FILTER });
+  return typeof result === "string" ? result : null;
+}
+
+/** @param {string} [defaultPath] @returns {Promise<string|null>} */
+export async function pickSaveJsonPath(defaultPath = "mealy.json") {
+  const { save } = await getDialog();
+  const result = await save({ defaultPath, filters: JSON_FILTER });
+  return result ?? null;
+}

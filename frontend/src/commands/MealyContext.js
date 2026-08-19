@@ -20,6 +20,8 @@ export class MealyContext {
    *   promptLabel?: (stateId: number) => Promise<string|null>,
    *   promptTransition?: (existing?: string) => Promise<string|null>,
    *   renameState?: (id: number, label: string) => Promise<boolean>,
+   *   openFile?: () => Promise<void>,
+   *   saveFile?: () => Promise<void>,
    * }} hooks
    */
   constructor(docStore, hooks = {}) {
@@ -50,6 +52,11 @@ export class MealyContext {
         });
         return false;
       });
+    // Native JSON only (no `.jff` for Mealy yet) — safe no-op defaults so
+    // this is testable without a real Tauri webview, same rationale as
+    // every other hook here.
+    this.openFile = hooks.openFile ?? (async () => {});
+    this.saveFile = hooks.saveFile ?? (async () => {});
   }
 
   /** @param {(ctx: MealyContext) => void} listener @returns {() => void} */

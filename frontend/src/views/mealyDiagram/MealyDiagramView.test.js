@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MealyDocStore } from "../../store/MealyDocStore.js";
 import { MealyContext } from "../../commands/MealyContext.js";
 import { MealyDiagramView } from "./MealyDiagramView.js";
@@ -180,18 +180,55 @@ describe("MealyDiagramView create-transition", () => {
   });
 });
 
-describe("MealyDiagramView.markInitial", () => {
-  it("applies SetInitial for the currently selected state", async () => {
-    const { client, ctx, view } = await setup();
-    ctx.setSelection({ kind: "state", id: 2 });
-    view.markInitial();
-    expect(client.mealyApply).toHaveBeenCalledWith([{ op: "SetInitial", id: 2 }]);
+describe("MealyDiagramView keyboard dispatch (mealyRegistry.js)", () => {
+  it("V/S/T/D switch tools, same as the toolbar buttons", async () => {
+    const { container, ctx } = await setup();
+    const svg = container.querySelector(".diagram-canvas");
+    svg.dispatchEvent(new KeyboardEvent("keydown", { key: "s", bubbles: true }));
+    expect(ctx.activeTool).toBe("create-state");
   });
 
-  it("does nothing when no state is selected", async () => {
-    const { client, view } = await setup();
-    view.markInitial();
-    expect(client.mealyApply).not.toHaveBeenCalled();
+  it("Delete removes the current selection", async () => {
+    const { container, client, ctx } = await setup();
+    ctx.setSelection({ kind: "state", id: 2 });
+    container.querySelector(".diagram-canvas").dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    expect(client.mealyApply).toHaveBeenCalledWith([{ op: "RemoveState", id: 2 }]);
+  });
+
+  it("Ctrl+Z undoes", async () => {
+    const { container, client } = await setup();
+    container
+      .querySelector(".diagram-canvas")
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect(client.mealyUndo).toHaveBeenCalled();
+  });
+});
+
+describe("MealyDiagramView context menu", () => {
+  afterEach(() => {
+    document.querySelector(".context-menu")?.remove();
+  });
+
+  it("right-click on a state selects it and shows rename/mark-initial/delete", async () => {
+    const { container, ctx } = await setup();
+    const circle = container.querySelector('circle[data-state-id="2"]');
+    circle.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+
+    expect(ctx.selection).toEqual({ kind: "state", id: 2 });
+    const items = [...document.querySelectorAll(".context-menu-item")].map((i) => i.dataset.action);
+    expect(items).toEqual(["state.rename", "state.markInitial", "edit.deleteSelection"]);
+  });
+
+  it("clicking a context-menu item runs the registry action and closes the menu", async () => {
+    const { container, client, ctx } = await setup();
+    ctx.setSelection({ kind: "state", id: 1 });
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    circle.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+
+    document.querySelector('.context-menu-item[data-action="state.markInitial"]').click();
+
+    expect(client.mealyApply).toHaveBeenCalledWith([{ op: "SetInitial", id: 1 }]);
+    expect(document.querySelector(".context-menu")).toBeNull();
   });
 });
 
@@ -220,5 +257,23 @@ describe("MealyDiagramView pan/zoom", () => {
     view.viewport.zoomIn();
     view.viewport.reset();
     expect(view.svg.getAttribute("viewBox")).toBe("0 0 600 400");
+  });
+});
+
+describe("MealyDiagramView Abrir/Guardar", () => {
+  it("clicking Abrir calls ctx.openFile", async () => {
+    const openFile = vi.fn().mockResolvedValue(undefined);
+    const { container, view } = await setup(twoStateSnapshot(), { openFile });
+    container.querySelector(".canvas-file-btn").click();
+    await view._lastFilePromise;
+    expect(openFile).toHaveBeenCalled();
+  });
+
+  it("clicking Guardar calls ctx.saveFile", async () => {
+    const saveFile = vi.fn().mockResolvedValue(undefined);
+    const { container, view } = await setup(twoStateSnapshot(), { saveFile });
+    container.querySelectorAll(".canvas-file-btn")[1].click();
+    await view._lastFilePromise;
+    expect(saveFile).toHaveBeenCalled();
   });
 });

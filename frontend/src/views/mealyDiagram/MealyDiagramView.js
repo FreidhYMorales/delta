@@ -1,22 +1,24 @@
 // Mealy machine canvas — same core interaction model as `DiagramView.js`
 // (task 7.4's 4-tool L0 pattern: select/create-state/create-transition/
-// delete, click-drag, pan/zoom), deliberately trimmed for v1: no registry-
-// driven right-click context menu (`MealyContext` has no command registry
-// of its own yet — see docs/decisions.md), no keyboard-shortcut dispatch.
-// Reuses `views/diagram/geometry.js`'s pure curve/layout math directly
-// (`circleLayout`/`edgeEndpoints`/`preferredLoopAngle`/`selfLoopPath`/
-// `curvedEdgePath`/`nextStateLabel` have nothing FA-specific in their
-// signatures) instead of re-deriving the same bidirectional/self-loop
-// curve handling a second time.
+// delete, click-drag, pan/zoom, keyboard dispatch, right-click context
+// menu — all driven by `mealyRegistry.js`, the same "nothing bypasses the
+// registry" rule as design D6). Reuses `views/diagram/geometry.js`'s pure
+// curve/layout math directly (`circleLayout`/`edgeEndpoints`/
+// `preferredLoopAngle`/`selfLoopPath`/`curvedEdgePath`/`nextStateLabel`
+// have nothing FA-specific in their signatures) instead of re-deriving the
+// same bidirectional/self-loop curve handling a second time.
 //
 // Differences from `DiagramView.js`, all traceable to `MealyDoc` itself:
-//  - No accepting-state double circle — Mealy has no accepting states.
+//  - No accepting-state double circle, no `state.toggleAccepting` context-
+//    menu item — Mealy has no accepting states.
 //  - Edge labels show `input/output` pairs (`formatTransitionEntries`),
 //    not a flat symbol list.
 //  - Creating a transition prompts once for "input/output" (`ctx.
 //    promptTransition`, `parseTransitionPrompt`), not a single symbol.
-//  - "Marcar como inicial" is a toolbar action here (`markInitial()`,
-//    wired by `MealyToolbar`), not a context-menu item.
+//  - "Abrir"/"Guardar" live right here, next to the status chip, instead
+//    of a menu bar's "Archivo" menu — Mealy has no menu bar of its own yet
+//    (see docs/decisions.md), and native-JSON-only file I/O (no `.jff`,
+//    no loss report) doesn't need one of the menu's full sub-items either.
 
 import {
   circleLayout,
@@ -26,6 +28,7 @@ import {
   preferredLoopAngle,
   selfLoopPath,
 } from "../diagram/geometry.js";
+import { findMealyAction, findMealyActionByKeybinding, keybindingOf } from "../../commands/mealyRegistry.js";
 import { formatTransitionEntries, mergeTransitionEntry, parseTransitionPrompt } from "./mealyLogic.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -109,9 +112,34 @@ export class MealyDiagramView {
     this.canvasInfoBar = document.createElement("div");
     this.canvasInfoBar.className = "canvas-toolbar";
     this.canvasFileLabel = document.createElement("span");
+
+    // No menu bar of Mealy's own yet (see docs/decisions.md) — Abrir/Guardar
+    // live here instead, next to the status chip, native-JSON only (no
+    // `.jff` for Mealy).
+    this.openFileButton = document.createElement("button");
+    this.openFileButton.type = "button";
+    this.openFileButton.className = "canvas-file-btn";
+    this.openFileButton.textContent = "Abrir";
+    this.openFileButton.addEventListener("click", () => {
+      this._lastFilePromise = this.ctx.openFile();
+    });
+
+    this.saveFileButton = document.createElement("button");
+    this.saveFileButton.type = "button";
+    this.saveFileButton.className = "canvas-file-btn";
+    this.saveFileButton.textContent = "Guardar";
+    this.saveFileButton.addEventListener("click", () => {
+      this._lastFilePromise = this.ctx.saveFile();
+    });
+
     this.canvasStatusChip = document.createElement("span");
     this.canvasStatusChip.className = "chip";
-    this.canvasInfoBar.append(this.canvasFileLabel, this.canvasStatusChip);
+
+    const canvasInfoBarRight = document.createElement("div");
+    canvasInfoBarRight.className = "canvas-toolbar-right";
+    canvasInfoBarRight.append(this.openFileButton, this.saveFileButton, this.canvasStatusChip);
+
+    this.canvasInfoBar.append(this.canvasFileLabel, canvasInfoBarRight);
 
     this.svg = document.createElementNS(SVG_NS, "svg");
     this.svg.setAttribute("class", "diagram-canvas");
@@ -120,10 +148,12 @@ export class MealyDiagramView {
     this.svg.setAttribute("height", "400");
     this.svg.setAttribute("viewBox", `0 0 ${BASE_WIDTH} ${BASE_HEIGHT}`);
     this.svg.addEventListener("click", (e) => this._onCanvasClick(e));
+    this.svg.addEventListener("keydown", (e) => this._dispatchKey(e));
     this.svg.addEventListener("mousedown", (e) => this._onCanvasMouseDown(e));
     this.svg.addEventListener("mousemove", (e) => this._onCanvasMouseMove(e));
     this.svg.addEventListener("mouseup", (e) => this._onCanvasMouseUp(e));
     this.svg.addEventListener("mouseleave", () => this._cancelDrag());
+    this.svg.addEventListener("contextmenu", (e) => this._onCanvasContextMenu(e));
     this.svg.addEventListener("wheel", (e) => this._onWheel(e), { passive: false });
 
     const defs = document.createElementNS(SVG_NS, "defs");
@@ -151,6 +181,12 @@ export class MealyDiagramView {
 
     this.root.append(this.canvasInfoBar, this.svg, this.inspector, this.statusBar);
     this.container.appendChild(this.root);
+  }
+
+  /** Single input-dispatch path — mirrors `DiagramView._dispatchKey`. */
+  _dispatchKey(event) {
+    const action = findMealyActionByKeybinding(keybindingOf(event));
+    if (action && action.when(this.ctx)) action.run(this.ctx);
   }
 
   _svgScale() {
@@ -271,12 +307,63 @@ export class MealyDiagramView {
     this.svg.classList.remove("panning");
   }
 
-  /** Marks the current selection's state as initial — the toolbar's
-   * equivalent of `DiagramView`'s context-menu-only `state.markInitial`
-   * (no registry/context-menu here yet, see this file's header comment). */
-  markInitial() {
-    if (this.ctx.selection?.kind !== "state") return;
-    this.docStore.apply([{ op: "SetInitial", id: this.ctx.selection.id }]);
+  /** Right-click on a state: select it, suppress the native browser menu,
+   * show the applicable registry actions — mirrors
+   * `DiagramView._onCanvasContextMenu` exactly, sourced from
+   * `mealyRegistry.js` instead of the FA registry. */
+  _onCanvasContextMenu(event) {
+    const stateId = event.target?.dataset?.stateId ? Number(event.target.dataset.stateId) : null;
+    if (stateId == null) return;
+    event.preventDefault();
+    this.ctx.setSelection({ kind: "state", id: stateId });
+    this._showContextMenu(event.clientX, event.clientY, [
+      "state.rename",
+      "state.markInitial",
+      "edit.deleteSelection",
+    ]);
+  }
+
+  _showContextMenu(x, y, actionIds) {
+    this._closeContextMenu();
+
+    const menu = document.createElement("div");
+    menu.className = "context-menu";
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+
+    for (const id of actionIds) {
+      const action = findMealyAction(id);
+      if (!action || !action.when(this.ctx)) continue;
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "context-menu-item";
+      item.dataset.action = id;
+      item.textContent = action.title;
+      item.addEventListener("click", () => {
+        action.run(this.ctx);
+        this._closeContextMenu();
+      });
+      menu.appendChild(item);
+    }
+
+    document.body.appendChild(menu);
+    this._contextMenu = menu;
+    this._onDocMousedown = (e) => {
+      if (!menu.contains(e.target)) this._closeContextMenu();
+    };
+    this._onDocKeydown = (e) => {
+      if (e.key === "Escape") this._closeContextMenu();
+    };
+    document.addEventListener("mousedown", this._onDocMousedown, true);
+    document.addEventListener("keydown", this._onDocKeydown, true);
+  }
+
+  _closeContextMenu() {
+    if (!this._contextMenu) return;
+    this._contextMenu.remove();
+    this._contextMenu = null;
+    document.removeEventListener("mousedown", this._onDocMousedown, true);
+    document.removeEventListener("keydown", this._onDocKeydown, true);
   }
 
   /** @returns {Promise<void>} — exposed via `this._lastEditPromise` so
