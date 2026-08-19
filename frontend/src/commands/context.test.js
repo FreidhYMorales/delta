@@ -89,6 +89,11 @@ describe("ViewContext", () => {
     const ctx = new ViewContext({});
     await expect(ctx.fromRegex("a*")).rejects.toThrow();
   });
+
+  it("exposes an openRegexTab hook defaulting to a safe no-op", () => {
+    const ctx = new ViewContext({});
+    expect(() => ctx.openRegexTab()).not.toThrow();
+  });
 });
 
 describe("ViewContext.renameState default (task 7.9: rename collisions are never silent)", () => {

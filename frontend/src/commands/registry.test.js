@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { actions, findAction, findByKeybinding, keybindingOf, TOOL_IDS } from "./registry.js";
+import { actions, EDITOR_MODE_IDS, findAction, findByKeybinding, keybindingOf, TOOL_IDS } from "./registry.js";
 import { MENU_GROUP_TITLES } from "../views/menubar/MenuBar.js";
 
 // The diagram's right-click context menu (`DiagramView._onCanvasContextMenu`)
@@ -31,6 +31,7 @@ function fakeCtx(overrides = {}) {
     promptLabel: vi.fn().mockResolvedValue("q9"),
     renameState: vi.fn().mockResolvedValue(true),
     testing: { openSingle: vi.fn(), openBatch: vi.fn() },
+    openRegexTab: vi.fn(),
     ...overrides,
   };
 }
@@ -236,6 +237,12 @@ describe("action.run behavior", () => {
     expect(ctx.testing.openBatch).toHaveBeenCalled();
   });
 
+  it("editor.openRegex jumps to the Expresión regular tab", () => {
+    const ctx = fakeCtx();
+    findAction("editor.openRegex").run(ctx);
+    expect(ctx.openRegexTab).toHaveBeenCalled();
+  });
+
   it("jff.import prompts for a path and imports it", async () => {
     const ctx = fakeCtx();
     await findAction("jff.import").run(ctx);
@@ -253,18 +260,20 @@ describe("action.run behavior", () => {
 
 describe("reachability audit (UI/UX audit pass — no action may end up 100% unreachable)", () => {
   const toolIds = new Set(TOOL_IDS);
+  const editorModeIds = new Set(EDITOR_MODE_IDS);
 
-  it("every action has a real, discoverable trigger: a keybinding, a menu-bar entry, a toolbar button, or a context-menu item", () => {
+  it("every action has a real, discoverable trigger: a keybinding, a menu-bar entry, a toolbar button, a context-menu item, or the editor-mode dropdown", () => {
     for (const action of actions) {
       const reachable =
         action.keybinding != null ||
         Object.prototype.hasOwnProperty.call(MENU_GROUP_TITLES, action.group) ||
         toolIds.has(action.id) ||
-        CONTEXT_MENU_IDS.has(action.id);
+        CONTEXT_MENU_IDS.has(action.id) ||
+        editorModeIds.has(action.id);
       expect(
         reachable,
         `action "${action.id}" (group "${action.group}") has no keybinding and is not ` +
-          `covered by the menu bar, the toolbar, or the diagram context menu`,
+          `covered by the menu bar, the toolbar, the diagram context menu, or the editor-mode dropdown`,
       ).toBe(true);
     }
   });
@@ -296,6 +305,12 @@ describe("reachability audit (UI/UX audit pass — no action may end up 100% unr
   it("every `state` group action is covered by the hardcoded context-menu id list or has its own keybinding", () => {
     for (const action of actions.filter((a) => a.group === "state")) {
       expect(CONTEXT_MENU_IDS.has(action.id) || action.keybinding != null).toBe(true);
+    }
+  });
+
+  it("every `editor` group action is covered by EDITOR_MODE_IDS (the toolbar's Editor dropdown)", () => {
+    for (const action of actions.filter((a) => a.group === "editor")) {
+      expect(editorModeIds.has(action.id)).toBe(true);
     }
   });
 });

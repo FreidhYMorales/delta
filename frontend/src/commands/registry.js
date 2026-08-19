@@ -203,6 +203,20 @@ export const actions = [
     run: (ctx) => ctx.testing.openBatch(),
   },
 
+  // --- Editor mode (top-bar "Editor" dropdown, Toolbar.js) -----------------
+  // Not a real second document type/editor yet — see docs/decisions.md.
+  // Selecting "Expresión Regular" from the dropdown is a menu-style jump to
+  // the "Expresión regular" tab already in the right column, same
+  // reachable-through-the-registry rule as everything else (design D6).
+  {
+    id: "editor.openRegex",
+    title: "Expresión Regular",
+    group: "editor",
+    keybinding: null,
+    when: () => true,
+    run: (ctx) => ctx.openRegexTab(),
+  },
+
   // --- Interop (L3, menu+palette only — design D6) -------------------------
   {
     id: "jff.import",
@@ -230,6 +244,11 @@ export const actions = [
 
 /** The 4 core L0 diagram tools, in registry order (design D6/task 7.4). */
 export const TOOL_IDS = actions.filter((a) => a.group === "tools").map((a) => a.id);
+
+/** Real (non-"— próximamente") entries for the toolbar's "Editor" mode
+ * dropdown (Toolbar.js) — same "derive the list from the registry instead
+ * of hand-duplicating it" rationale as `TOOL_IDS`. */
+export const EDITOR_MODE_IDS = actions.filter((a) => a.group === "editor").map((a) => a.id);
 
 const byId = new Map(actions.map((a) => [a.id, a]));
 

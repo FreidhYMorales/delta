@@ -130,6 +130,7 @@ async function main() {
     simTrace: (word, budget) => client.simTrace(word, budget),
     simBatch: (words, budget) => client.simBatch(words, budget),
     toRegex: () => client.convToRegex(),
+    openRegexTab: () => upperTabs.select("regex"),
     fromRegex: async (pattern) => {
       const snapshot = await client.convFromRegex(pattern);
       docStore.loadSnapshot(snapshot);

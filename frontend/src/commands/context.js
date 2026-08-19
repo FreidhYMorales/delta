@@ -29,6 +29,7 @@ export class ViewContext {
    *   toRegex?: () => Promise<string>,
    *   fromRegex?: (pattern: string) => Promise<import('../store/DocStore.js').DocSnapshot>,
    *   testing?: {openSingle: Function, openBatch: Function},
+   *   openRegexTab?: () => void,
    *   renameState?: (id: number, label: string) => Promise<boolean>,
    * }} hooks
    */
@@ -67,6 +68,11 @@ export class ViewContext {
     this.fromRegex =
       hooks.fromRegex ?? (async () => { throw new Error("No hay conversión regex→autómata disponible."); });
     this.testing = hooks.testing ?? { openSingle() {}, openBatch() {} };
+    // "Editor" dropdown -> "Expresión Regular" (Toolbar.js/editor.openRegex):
+    // a menu-style jump to the tab, wired by the app shell (main.js is the
+    // only place with the upper tab group's `select` in scope) — safe no-op
+    // default so this is testable without a real app shell.
+    this.openRegexTab = hooks.openRegexTab ?? (() => {});
     // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
     // Are Never Silent"). Real by default (needs only `docStore` + a DOM
     // notice, both available without a Tauri webview) — overridable in

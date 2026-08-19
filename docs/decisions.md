@@ -10,6 +10,75 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — El dropdown "Editor" como menú de acceso, no como selector de tipo de documento
+
+**Dónde**: `frontend/src/commands/registry.js` (nueva acción `editor.openRegex`
++ `EDITOR_MODE_IDS`), `frontend/src/commands/context.js` (hook `openRegexTab`),
+`frontend/src/main.js`, `frontend/src/views/toolbar/Toolbar.js`,
+`frontend/src/commands/registry.test.js`.
+
+**La pregunta del usuario**: el dropdown "Editor" en la barra superior ya
+tenía opciones deshabilitadas ("Autómata de Pila — próximamente", "Máquina
+de Turing — próximamente", "Expresión Regular — próximamente") — ¿no
+convendría usarlo para seleccionar Expresión Regular, en vez de una pestaña
+al costado, ya que aparentemente fue construido justo para eso (como el menú
+de tipos de editor del JFLAP original)?
+
+**Por qué NO uso el dropdown como selector de tipo de documento (todavía)**:
+Regex no es una máquina de estados — es un árbol de expresión, sin estados
+ni transiciones que editar (`AddState`/`SetEdge` no tienen sentido para un
+regex). Por eso ya está modelado como una vista derivada + una acción de
+generación sobre el `FaDoc` existente, no como un segundo tipo de documento.
+PDA y Máquina de Turing sí son máquinas de estados de verdad (mismos
+estados+transiciones que un AFD, con datos extra por transición — pila,
+cinta+dirección) — ahí sí, cuando se implementen, vale la pena generalizar
+`Document`/`DocStore` a un tipo real distinto con su propio `EditOp`, tabla y
+dibujo. Construir esa arquitectura de "Editor intercambiable" ahora, para un
+caso (regex) que nunca la necesitó, sería la abstracción prematura que las
+reglas de este proyecto piden evitar.
+
+**Qué se hizo en cambio**: el dropdown "Editor" ahora es un **menú de
+acceso** (estilo "Jump to..."), no un selector de modo persistente:
+- Nueva acción de registro `editor.openRegex` (grupo `"editor"`, sin
+  keybinding) — mismo patrón D6 "nada bypasea el registry" que ya usan el
+  toolbar, el menú y el menú contextual: seleccionar la opción llama
+  `findAction(select.value).run(ctx)`, nunca lógica propia en `Toolbar.js`.
+- `ctx.openRegexTab()` — hook inyectable (default no-op para tests),
+  cableado en `main.js` a `upperTabs.select("regex")`. Ningún componente
+  "posee" el grupo de pestañas superior (Tabla/Definición formal/Expresión
+  regular se arman en `main.js`, no dentro de una vista), así que el hook
+  vive ahí, igual que `ctx.testing.openSingle/openBatch` vive en
+  `TestingView` porque esa vista sí es dueña de sus propias pestañas.
+  Traducción del riesgo/beneficio: si un futuro modo empieza como una
+  simple pestaña con `openXxxTab()`, funciona igual; si de verdad necesita
+  su propio `Document`/`DocStore`, se generaliza este mismo hook, no antes.
+- El `<select>` **se resetea a "Autómata Finito" apenas dispara la acción**
+  — no queda "seleccionado" en Expresión Regular, porque no hay ningún modo
+  real detrás para quedarse mostrando.
+- Las opciones reales del dropdown (hoy solo una) se generan iterando
+  `EDITOR_MODE_IDS` (`actions.filter(a => a.group === "editor")`, exportado
+  de `registry.js` — mismo patrón que `TOOL_IDS`) en vez de estar escritas a
+  mano en `Toolbar.js`, así que agregar un futuro modo real es una entrada
+  más en el registry, no un segundo lugar para editar. Los placeholders de
+  PDA/Turing siguen escritos a mano (deshabilitados, sin acción detrás
+  todavía).
+- El audit de alcanzabilidad de `registry.test.js` (que exige que toda
+  acción tenga keybinding, o esté cubierta por el menú, el toolbar o el
+  menú contextual) ahora también reconoce `EDITOR_MODE_IDS` como una
+  cobertura válida — sin este cambio, `editor.openRegex` fallaba esa
+  auditoría por no estar en ninguno de los otros tres grupos reconocidos.
+
+**Cómo se verificó**: 261/261 tests de frontend (5 nuevos: default del hook,
+la acción del registry, el reset del `<select>`, las opciones renderizadas,
+el audit de alcanzabilidad extendido). `vite build` limpio. Verificado en
+vivo en un dev server temporal: seleccionar "Expresión Regular" salta a esa
+pestaña y el `<select>` vuelve solo a "Autómata Finito", confirmado vía
+`javascript_tool` (un `<select>` nativo no es clickeable de forma confiable
+con automatización de mouse, así que se disparó el evento `change`
+directamente sobre el elemento).
+
+---
+
 ## 2026-08-19 — Segundo paso hacia "Expresión Regular": parser de texto + regex→autómata
 
 **Dónde**: `crates/automata-core/src/regex/parser.rs` (nuevo),

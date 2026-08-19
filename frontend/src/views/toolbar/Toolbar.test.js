@@ -44,13 +44,30 @@ describe("Toolbar (moved out of DiagramView for wireframe parity: it spans the f
     expect(container.querySelector(".toolbar-sep")).not.toBeNull();
   });
 
-  it("renders a real <select> for the editor mode, with only 'Autómata Finito' enabled", () => {
+  it("renders a real <select> for the editor mode: Finito and Expresión Regular enabled, PDA/Turing not", () => {
     const { container } = setup();
     const select = container.querySelector(".mode-select select");
     const options = [...select.querySelectorAll("option")];
-    expect(options[0].textContent).toBe("Autómata Finito");
-    expect(options[0].disabled).toBe(false);
-    expect(options.slice(1).every((o) => o.disabled)).toBe(true);
+    expect(options.map((o) => o.textContent)).toEqual([
+      "Autómata Finito",
+      "Autómata de Pila — próximamente",
+      "Máquina de Turing — próximamente",
+      "Expresión Regular",
+    ]);
+    expect(options.map((o) => o.disabled)).toEqual([false, true, true, false]);
+  });
+
+  it("selecting 'Expresión Regular' jumps there via the registry action, then resets to Autómata Finito", () => {
+    const { container, ctx } = setup();
+    const openRegexTab = vi.fn();
+    ctx.openRegexTab = openRegexTab;
+    const select = container.querySelector(".mode-select select");
+
+    select.value = "editor.openRegex";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(openRegexTab).toHaveBeenCalled();
+    expect(select.value).toBe("finite");
   });
 
   it("clicking a toolbar button dispatches the matching registry action and highlights it", () => {
