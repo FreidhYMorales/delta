@@ -26,6 +26,7 @@ export class ViewContext {
    *   exportJff?: (path: string) => Promise<void>,
    *   simTrace?: (word: string[], budget?: object) => Promise<object>,
    *   simBatch?: (words: string[][], budget?: object) => Promise<object[]>,
+   *   toRegex?: () => Promise<string>,
    *   testing?: {openSingle: Function, openBatch: Function},
    *   renameState?: (id: number, label: string) => Promise<boolean>,
    * }} hooks
@@ -49,6 +50,13 @@ export class ViewContext {
     // prompt/interop hooks above (testable without a real Tauri webview).
     this.simTrace = hooks.simTrace ?? (async () => ({ outcome: "Rejected", steps: [] }));
     this.simBatch = hooks.simBatch ?? (async () => []);
+    // First step towards the "Expresión Regular" editor mode (still
+    // disabled in the Toolbar's mode select): a read-only derivation of the
+    // regex equivalent to the current automaton, backed by
+    // `automata_core::convert::fa_to_regex` — no real hook wired here means
+    // no Tauri webview, so default to the same "∅" an empty document itself
+    // derives to.
+    this.toRegex = hooks.toRegex ?? (async () => "∅");
     this.testing = hooks.testing ?? { openSingle() {}, openBatch() {} };
     // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
     // Are Never Silent"). Real by default (needs only `docStore` + a DOM

@@ -84,3 +84,9 @@ export function jffImport(path) {
 export function jffExport(path) {
   return call("jff_export", { path });
 }
+
+/** @returns {Promise<string>} the regular expression equivalent to the
+ * session's current automaton (`∅`/`ε` included, unicode). */
+export function convToRegex() {
+  return call("conv_to_regex");
+}

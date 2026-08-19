@@ -15,6 +15,7 @@ import { ViewContext } from "./commands/context.js";
 import { DiagramView } from "./views/diagram/DiagramView.js";
 import { TableView } from "./views/table/TableView.js";
 import { FormalView } from "./views/formal/FormalView.js";
+import { RegexView } from "./views/regex/RegexView.js";
 import { TestingView } from "./views/testing/TestingView.js";
 import { MenuBar } from "./views/menubar/MenuBar.js";
 import { Toolbar } from "./views/toolbar/Toolbar.js";
@@ -67,6 +68,7 @@ async function main() {
   const upperTabs = createTabs(panelUpper, [
     { id: "tabla", label: "Tabla de estados" },
     { id: "formal", label: "Definición formal" },
+    { id: "regex", label: "Expresión regular" },
   ]);
 
   const docStore = new DocStore(client);
@@ -121,6 +123,7 @@ async function main() {
     },
     simTrace: (word, budget) => client.simTrace(word, budget),
     simBatch: (words, budget) => client.simBatch(words, budget),
+    toRegex: () => client.convToRegex(),
     layout: { circle: () => circleLayoutAction(docStore) },
   });
 
@@ -130,6 +133,7 @@ async function main() {
 
   new TableView(upperTabs.panels.get("tabla"), docStore, ctx);
   new FormalView(upperTabs.panels.get("formal"), docStore);
+  new RegexView(upperTabs.panels.get("regex"), docStore, ctx);
   const testingView = new TestingView(panelLower, docStore, ctx);
   ctx.testing = testingView.controls;
 

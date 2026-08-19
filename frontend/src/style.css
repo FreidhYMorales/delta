@@ -794,6 +794,40 @@ body {
   overflow-wrap: break-word;
 }
 
+/* First step towards the "Expresión Regular" editor mode (still a disabled
+ * option in the Toolbar's mode select): a read-only derived value, so it
+ * reuses `.formal-view`'s flex-fill/textarea shape but with no apply
+ * button/error row underneath — there's nothing to submit here. */
+.regex-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: var(--space-xs);
+}
+
+.regex-view-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.regex-output {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: var(--space-xs);
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.9;
+  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
 .formal-error {
   color: var(--danger);
   font-size: var(--font-size-sm);

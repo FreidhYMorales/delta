@@ -4,6 +4,7 @@
 //! so integration tests exercise the exact same logic the real IPC transport
 //! runs, over a real `Session`, without needing a mocked Tauri app harness.
 
+pub mod convert;
 pub mod doc;
 pub mod jff;
 pub mod sim;

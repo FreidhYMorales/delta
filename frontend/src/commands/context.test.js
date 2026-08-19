@@ -79,6 +79,11 @@ describe("ViewContext", () => {
     expect(() => ctx.testing.openSingle()).not.toThrow();
     expect(() => ctx.testing.openBatch()).not.toThrow();
   });
+
+  it("exposes a toRegex hook defaulting to the empty language", async () => {
+    const ctx = new ViewContext({});
+    expect(await ctx.toRegex()).toBe("∅");
+  });
 });
 
 describe("ViewContext.renameState default (task 7.9: rename collisions are never silent)", () => {

@@ -10,6 +10,68 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Primer paso hacia "Expresión Regular": conversión autómata→regex
+
+**Dónde**: `src-tauri/src/commands/convert.rs` (nuevo), `src-tauri/src/commands/mod.rs`,
+`src-tauri/src/lib.rs`, `frontend/src/tauri/client.js`, `frontend/src/commands/context.js`,
+`frontend/src/views/regex/RegexView.js` (nuevo), `frontend/src/main.js`,
+`frontend/src/style.css`.
+
+**Qué se pidió**: "andá implementando todo lo necesario para llegar a
+expresiones regulares". El backend ya tenía ambas conversiones completas
+desde una sesión anterior (`convert::fa_to_regex`, `convert::regex_to_nfa`,
+verificadas contra JFLAP y con roundtrip por proptest), pero nada en Tauri ni
+el frontend las exponía — el dropdown "Editor" del Toolbar ya reserva la
+opción "Expresión Regular — próximamente", deshabilitada.
+
+**Qué se decidió**: antes de meterse con esa opción del dropdown (que
+implicaría un segundo tipo de documento editable, su propio DocStore/IPC de
+mutación, y una arquitectura de "Editor intercambiable" que hoy no existe),
+se le preguntó al usuario por dónde arrancar. Eligió el camino más corto:
+mostrar la expresión regular equivalente al autómata ya dibujado, sin tocar
+la arquitectura de documentos. Concretamente:
+
+- `commands::convert::to_regex` — función plana testeable (mismo patrón que
+  `commands::doc`/`commands::sim`: toma `&Session`, hace lock, llama
+  `fa_to_regex(&doc.model).to_string()`) + wrapper `#[tauri::command]
+  conv_to_regex`. Es de solo lectura: nunca muta el documento, así que a
+  diferencia de `doc_apply` no hay `EditResult`/revisión que devolver, solo
+  el string derivado. `fa_to_regex` ya garantiza no fallar nunca (un
+  documento vacío o sin estado inicial reduce a `∅`), así que no hizo falta
+  manejo de error especial.
+- `RegexView` — una pestaña más en el grupo superior ("Tabla de estados" /
+  "Definición formal" / **"Expresión regular"**), de solo lectura (sin botón
+  "Aplicar": no hay nada que enviar de vuelta). Se re-suscribe a
+  `docStore.subscribe` igual que las otras vistas, pero como el valor viene
+  de una llamada IPC asíncrona (no es un derivado sincrónico local como
+  `docStore.derived`), cada re-render dispara un nuevo fetch — con un token
+  incremental para que un fetch viejo que resuelve tarde (dos ediciones
+  seguidas) nunca pise el resultado de uno más nuevo.
+- `ctx.toRegex` — nuevo hook en `ViewContext`, mismo patrón que
+  `simTrace`/`simBatch` (inyectable, con default no-op para tests sin
+  webview real).
+
+**Qué queda pendiente, a propósito, para más adelante**: la dirección
+regex→autómata (tipear una expresión regular y materializar un documento FA
+nuevo) es un paso más grande — necesita decidir si el regex es un documento
+editable propio o solo un input transitorio, y ahí sí probablemente haga
+falta la infraestructura de "Editor intercambiable" que se dejó afuera en
+esta ronda a propósito.
+
+**Cómo se verificó**: `cargo check -p app -p automata-core` limpio,
+`cargo test -p automata-core` (20/20, sin regresión — no se tocó lógica de
+`automata-core`, solo un wrapper fino en Tauri). 252/252 tests de frontend
+(4 nuevos en `RegexView.test.js`: render, fetch en construcción, re-fetch en
+cada cambio del documento, y que un fetch viejo fuera de orden no pise uno
+más nuevo). `vite build` limpio. Verificado visualmente en un dev server
+temporal (puerto 5191): la pestaña nueva aparece y se ve consistente con
+"Definición formal"; el cuadro queda vacío en ese entorno porque no hay
+backend Tauri real (mismo `TypeError: Cannot read properties of undefined
+(reading 'invoke')` que ya afecta a `DocStore.load()` ahí — limitación
+conocida del entorno, no un bug nuevo).
+
+---
+
 ## 2026-08-19 — Indicadores visuales para el flujo de creación de transiciones
 
 **Dónde**: `frontend/src/views/diagram/DiagramView.js`, `frontend/src/style.css`,

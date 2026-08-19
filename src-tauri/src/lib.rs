@@ -2,7 +2,7 @@ pub mod commands;
 pub mod ipc;
 pub mod state;
 
-use commands::{doc, jff, sim};
+use commands::{convert, doc, jff, sim};
 use state::Session;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,6 +21,7 @@ pub fn run() {
       sim::sim_batch,
       jff::jff_import,
       jff::jff_export,
+      convert::conv_to_regex,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
