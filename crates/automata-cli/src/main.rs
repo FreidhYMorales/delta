@@ -6,6 +6,7 @@
 //! summary), `stress` (synthetic worst-case topologies with timing), and
 //! `mealy-sim`/`mealy-inspect` (same idea, for Mealy machines — there's no
 //! GUI for those at all yet, so this is the only way to exercise them).
+//! `moore-sim`/`moore-inspect` are the same idea again, for Moore machines.
 
 use std::fs;
 use std::process::ExitCode;
@@ -15,11 +16,13 @@ use automata_core::convert::{fa_to_regex, fa_to_regular_grammar, minimize_dfa, n
 use automata_core::dto;
 use automata_core::engine::fa::FaEngine;
 use automata_core::engine::mealy::{run_mealy, MealyOutcome};
+use automata_core::engine::moore::{run_moore, MooreOutcome};
 use automata_core::engine::{run_bounded, Budget};
 use automata_core::ids::SymbolId;
 use automata_core::interop::jff::reader;
 use automata_core::model::fa::{Classification, FaDoc};
 use automata_core::model::mealy::MealyDoc;
+use automata_core::model::moore::MooreDoc;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -90,6 +93,25 @@ enum Command {
     /// Load a Mealy machine and run one or many inputs through it, printing
     /// the output string each one produces (or exactly where it got stuck).
     MealySim {
+        #[arg(long)]
+        file: String,
+        /// Space-separated input symbols, e.g. "0 1 1 0". Omit for the empty input.
+        #[arg(long)]
+        input: Option<String>,
+        /// File with one input per line (space-separated symbols), run as a batch.
+        #[arg(long)]
+        inputs_file: Option<String>,
+    },
+    /// Load a Moore machine (native JSON only) and print its structure.
+    MooreInspect {
+        #[arg(long)]
+        file: String,
+    },
+    /// Load a Moore machine and run one or many inputs through it, printing
+    /// the output sequence each one produces (length input.len()+1, since
+    /// the initial state's own output is emitted before any input is
+    /// consumed) — or exactly where it got stuck.
+    MooreSim {
         #[arg(long)]
         file: String,
         /// Space-separated input symbols, e.g. "0 1 1 0". Omit for the empty input.
@@ -293,6 +315,46 @@ fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
+        Command::MooreInspect { file } => {
+            let doc = load_moore_doc(&file)?;
+            let state_count = doc.states().count();
+            let transition_count: usize = doc.edges().map(|(_, inputs)| inputs.len()).sum();
+            let outputs_set = doc.states().filter(|&s| doc.output(s).is_some()).count();
+            println!("states:            {state_count}");
+            println!("transitions:       {transition_count}");
+            println!("input alphabet:    {}", doc.input_alphabet().len());
+            println!("output alphabet:   {}", doc.output_alphabet().len());
+            println!("states with output set: {outputs_set}");
+            println!("initial state set: {}", doc.initial_state().is_some());
+            println!("deterministic:     {}", doc.is_deterministic());
+            Ok(())
+        }
+
+        Command::MooreSim { file, input, inputs_file } => {
+            let doc = load_moore_doc(&file)?;
+            let inputs = collect_words(input, inputs_file)?;
+            for w in inputs {
+                let symbols: Vec<&str> = w.iter().map(String::as_str).collect();
+                let outcome = run_moore(&doc, &symbols);
+                match outcome {
+                    MooreOutcome::Completed(outputs) => {
+                        println!("input={:?}  output={:?}", w, outputs.join(" "));
+                    }
+                    MooreOutcome::NoInitialState => println!("input={w:?}  sin estado inicial"),
+                    MooreOutcome::NoTransition { at } => {
+                        println!("input={w:?}  sin transición en la posición {at} (símbolo {:?})", w[at]);
+                    }
+                    MooreOutcome::Ambiguous { at } => {
+                        println!(
+                            "input={w:?}  ambiguo (no determinista) en la posición {at} (símbolo {:?})",
+                            w[at]
+                        );
+                    }
+                }
+            }
+            Ok(())
+        }
+
         Command::Stress { topology, states, input_len, max_steps, max_configs } => {
             if states < 2 {
                 return Err("stress requires at least 2 states".to_string());
@@ -374,6 +436,13 @@ fn load_doc(path: &str) -> Result<FaDoc, String> {
 fn load_mealy_doc(path: &str) -> Result<MealyDoc, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))?;
     dto::mealy_load_from_str(&text).map_err(|e| e.to_string())
+}
+
+/// Native JSON only — no `.jff` for Moore machines yet, same scope cut as
+/// Mealy (see docs/decisions.md).
+fn load_moore_doc(path: &str) -> Result<MooreDoc, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))?;
+    dto::moore_load_from_str(&text).map_err(|e| e.to_string())
 }
 
 fn collect_words(word: Option<String>, words_file: Option<String>) -> Result<Vec<Vec<String>>, String> {

@@ -10,6 +10,49 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Máquina de Moore: backend aislado (`MooreDoc`), salida en el estado no en la arista
+
+**Dónde**: `crates/automata-core/src/model/moore.rs`, `moore_doc.rs`,
+`engine/moore.rs` (nuevos); `dto.rs` (variante `Moore`), `automata-cli`
+(`moore-inspect`/`moore-sim`).
+
+**Verificado contra JFLAP real antes de diseñar nada**: se decompiló
+`automata/mealy/{MooreMachine,MooreTransition,MooreStepByStateSimulator}.class`
+con `cfr` (misma técnica que para Mealy). Confirmado: `MooreMachine` guarda
+la salida en un `Map<State, String>` — la salida es del ESTADO, no de la
+transición. `MooreTransition extends MealyTransition` pero sobrescribe
+`getOutput()`/`setOutput()` para delegar al estado destino; una transición
+de Moore en sí no lleva salida propia, solo un símbolo de entrada.
+`MooreStepByStateSimulator` emite la salida del estado inicial ANTES de
+consumir ningún símbolo — para una entrada de n símbolos, la secuencia de
+salida tiene longitud n+1 (Mealy tiene longitud n).
+
+**Por qué `MooreDoc` es un modelo aislado, no una generalización de
+`MealyDoc`**: mismo principio que la decisión "opción B" de Mealy (ver esa
+entrada más abajo) — acá la forma de los datos es genuinamente distinta
+(salida en el estado vs. salida por-símbolo-por-arista), así que
+generalizar habría significado que ambos modelos carguen con un campo que
+al otro no le sirve. `MooreStateMeta.output: Option<SymbolId>` (estado),
+aristas `HashMap<(StateId,StateId), BTreeSet<SymbolId>>` de solo símbolos
+de entrada (sin salida por símbolo, a diferencia de Mealy). Sin estados de
+aceptación (misma razón que Mealy) y sin transiciones-ε (mismo criterio
+simplificador ya aplicado a Mealy, para mantener el modelo mental uniforme
+entre los dos tipos de transductor del proyecto).
+
+**Cómo se verificó**: `cargo test --workspace` 100% verde (153 tests de
+`automata-core` incluyendo los nuevos de Moore, más 256 casos de proptest
+de round-trip undo/redo). Autómata de paridad de 'a' construido a mano
+(q0="even", q1="odd", 'a' alterna, 'b' hace self-loop) y corroborado con
+`automata-cli moore-sim` sobre un fixture JSON escrito a mano — reproducido
+de forma independiente, no solo confiado del resultado reportado:
+`moore-inspect` → 2 estados, 4 transiciones, determinista=true;
+`moore-sim --input ""` → `"even"`; `moore-sim --input "a b a a"` →
+`"even odd odd even odd"`; `moore-sim --input "b b b"` →
+`"even even even even"` — los tres coinciden con el cálculo a mano.
+
+**Pendiente**: capa de IPC de Tauri y frontend (siguiente ronda), mismo
+orden que se siguió para Mealy.
+
 ## 2026-08-19 — Mealy: Tabla de estados y Definición formal, MenuBar oculto fuera de modo AFD/AFN
 
 **Dónde**: `frontend/src/views/mealyTable/{MealyTableView,mealyTableLogic}.js`

@@ -149,3 +149,4 @@ pub fn run_bounded<M: Machine>(m: &M, input: &[SymbolId], budget: Budget) -> Tra
 
 pub mod fa;
 pub mod mealy;
+pub mod moore;

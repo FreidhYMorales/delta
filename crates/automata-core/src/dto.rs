@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::ids::StateId;
 use crate::model::fa::FaDoc;
 use crate::model::mealy::MealyDoc;
+use crate::model::moore::MooreDoc;
 
 pub const CURRENT_VERSION: u32 = 1;
 
@@ -26,12 +27,15 @@ pub const CURRENT_VERSION: u32 = 1;
 /// of the Mealy decision, docs/decisions.md: isolate, don't touch the
 /// already-tested FA persistence path) — `mealy_load_from_str`/
 /// `mealy_save_to_string` below are Mealy's own equivalents, sharing this
-/// same envelope shape rather than inventing a second wire format.
+/// same envelope shape rather than inventing a second wire format. `Moore`
+/// follows the exact same pattern (`moore_save_to_string`/
+/// `moore_load_from_str`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 pub enum MachineDoc {
     Fa(FaDto),
     Mealy(MealyDto),
+    Moore(MooreDto),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -80,6 +84,32 @@ pub struct MealyEdgeDto {
     /// symbol set (see `model::mealy`'s doc comment on why `SymbolSet`
     /// doesn't fit here).
     pub transitions: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MooreDto {
+    pub states: Vec<MooreStateDto>,
+    pub edges: Vec<MooreEdgeDto>,
+    pub initial: Option<usize>,
+}
+
+/// No `accepting` field, same reasoning as `MealyStateDto`. `output` lives
+/// here (on the state), not on `MooreEdgeDto` — see `model::moore`'s doc
+/// comment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MooreStateDto {
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MooreEdgeDto {
+    pub from: usize,
+    pub to: usize,
+    /// Input symbols only — no per-symbol output (unlike `MealyEdgeDto`).
+    pub inputs: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -191,6 +221,7 @@ pub fn load_from_str(s: &str) -> Result<FaDoc, DtoError> {
     match envelope.document {
         MachineDoc::Fa(dto) => fa_from_dto(&dto),
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Mealy" }),
+        MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Moore" }),
     }
 }
 
@@ -267,6 +298,82 @@ pub fn mealy_load_from_str(s: &str) -> Result<MealyDoc, DtoError> {
     match envelope.document {
         MachineDoc::Mealy(dto) => mealy_from_dto(&dto),
         MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Fa" }),
+        MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Moore" }),
+    }
+}
+
+/// Project a `MooreDoc` into its serializable DTO — same "positional index,
+/// sorted for reproducibility" rules as `fa_to_dto`/`mealy_to_dto`.
+pub fn moore_to_dto(doc: &MooreDoc) -> MooreDto {
+    let alive: Vec<StateId> = doc.states().collect();
+    let index_of: HashMap<StateId, usize> = alive.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+
+    let states = alive
+        .iter()
+        .map(|&id| {
+            let meta = doc.state_meta(id).expect("alive state has meta");
+            let output = meta.output.map(|o| doc.output_symbol_label(o).expect("interned output has a label").to_string());
+            MooreStateDto { label: doc.state_label(id).expect("alive state has label").to_string(), x: meta.x, y: meta.y, output }
+        })
+        .collect();
+
+    let mut edges: Vec<MooreEdgeDto> = doc
+        .edges()
+        .map(|((from, to), inputs)| {
+            let mut labels: Vec<String> =
+                inputs.iter().map(|input| doc.input_symbol_label(*input).expect("interned input has a label").to_string()).collect();
+            labels.sort();
+            MooreEdgeDto { from: index_of[from], to: index_of[to], inputs: labels }
+        })
+        .collect();
+    edges.sort_by_key(|e| (e.from, e.to));
+
+    let initial = doc.initial_state().map(|id| index_of[&id]);
+
+    MooreDto { states, edges, initial }
+}
+
+/// Reconstruct a `MooreDoc` from its DTO, allocating fresh `StateId`s in
+/// `states` array order.
+pub fn moore_from_dto(dto: &MooreDto) -> Result<MooreDoc, DtoError> {
+    let mut doc = MooreDoc::new();
+    let mut ids = Vec::with_capacity(dto.states.len());
+    for s in &dto.states {
+        let id = doc.add_state(&s.label, s.x, s.y).map_err(|_| DtoError::InvalidStateIndex(ids.len()))?;
+        if let Some(output) = &s.output {
+            let output_id = doc.intern_output_symbol(output);
+            doc.set_output(id, Some(output_id));
+        }
+        ids.push(id);
+    }
+    for e in &dto.edges {
+        let from = *ids.get(e.from).ok_or(DtoError::InvalidStateIndex(e.from))?;
+        let to = *ids.get(e.to).ok_or(DtoError::InvalidStateIndex(e.to))?;
+        for input in &e.inputs {
+            doc.add_transition(from, to, input);
+        }
+    }
+    if let Some(idx) = dto.initial {
+        let id = *ids.get(idx).ok_or(DtoError::InvalidStateIndex(idx))?;
+        doc.set_initial(Some(id));
+    }
+    Ok(doc)
+}
+
+pub fn moore_save_to_string(doc: &MooreDoc) -> Result<String, DtoError> {
+    let envelope = Envelope { version: CURRENT_VERSION, document: MachineDoc::Moore(moore_to_dto(doc)) };
+    Ok(serde_json::to_string_pretty(&envelope)?)
+}
+
+pub fn moore_load_from_str(s: &str) -> Result<MooreDoc, DtoError> {
+    let envelope: Envelope = serde_json::from_str(s)?;
+    if envelope.version != CURRENT_VERSION {
+        return Err(DtoError::UnsupportedVersion(envelope.version));
+    }
+    match envelope.document {
+        MachineDoc::Moore(dto) => moore_from_dto(&dto),
+        MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Fa" }),
+        MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Mealy" }),
     }
 }
 
@@ -419,6 +526,109 @@ mod tests {
                 let json = mealy_save_to_string(&doc).unwrap();
                 let reloaded = mealy_load_from_str(&json).unwrap();
                 prop_assert_eq!(mealy_to_dto(&doc), mealy_to_dto(&reloaded));
+            }
+        }
+    }
+
+    mod moore {
+        use super::*;
+        use crate::model::moore::MooreDoc;
+
+        fn build_moore_doc(
+            num_states: usize,
+            state_outputs: Vec<Option<String>>,
+            edge_specs: Vec<(usize, usize, Vec<String>)>,
+            initial: Option<usize>,
+        ) -> MooreDoc {
+            let mut doc = MooreDoc::new();
+            let mut ids = Vec::with_capacity(num_states);
+            for i in 0..num_states {
+                let id = doc.add_state(&format!("s{i}"), i as f64, (i * 2) as f64).unwrap();
+                if let Some(Some(output)) = state_outputs.get(i) {
+                    let output_id = doc.intern_output_symbol(output);
+                    doc.set_output(id, Some(output_id));
+                }
+                ids.push(id);
+            }
+            if num_states > 0 {
+                for (from_idx, to_idx, inputs) in edge_specs {
+                    let from = ids[from_idx % num_states];
+                    let to = ids[to_idx % num_states];
+                    for input in inputs {
+                        doc.add_transition(from, to, &input);
+                    }
+                }
+                if let Some(idx) = initial {
+                    doc.set_initial(Some(ids[idx % num_states]));
+                }
+            }
+            doc
+        }
+
+        #[test]
+        fn envelope_carries_the_moore_kind_tag() {
+            let doc = build_moore_doc(1, vec![], vec![], None);
+            let json = moore_save_to_string(&doc).unwrap();
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(value["version"].as_u64(), Some(1));
+            assert_eq!(value["document"]["kind"].as_str(), Some("Moore"));
+        }
+
+        #[test]
+        fn loading_a_fa_document_as_moore_fails_with_a_clear_error() {
+            let fa_json = save_to_string(&build_doc(1, vec![], None)).unwrap();
+            let err = moore_load_from_str(&fa_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Moore", found: "Fa" }));
+        }
+
+        #[test]
+        fn loading_a_mealy_document_as_moore_fails_with_a_clear_error() {
+            let mut mealy_doc = crate::model::mealy::MealyDoc::new();
+            mealy_doc.add_state("s0", 0.0, 0.0).unwrap();
+            let mealy_json = mealy_save_to_string(&mealy_doc).unwrap();
+            let err = moore_load_from_str(&mealy_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Moore", found: "Mealy" }));
+        }
+
+        #[test]
+        fn loading_a_moore_document_as_fa_fails_with_a_clear_error() {
+            let moore_json = moore_save_to_string(&build_moore_doc(1, vec![], vec![], None)).unwrap();
+            let err = load_from_str(&moore_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Fa", found: "Moore" }));
+        }
+
+        #[test]
+        fn state_output_round_trips_through_save_and_load() {
+            let doc = build_moore_doc(2, vec![Some("even".into()), Some("odd".into())], vec![], None);
+            let json = moore_save_to_string(&doc).unwrap();
+            let reloaded = moore_load_from_str(&json).unwrap();
+            assert_eq!(moore_to_dto(&doc), moore_to_dto(&reloaded));
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            /// Same "save-then-load is an identity" invariant as FA's/Mealy's
+            /// own round-trip proptests, one level over for the Moore
+            /// DTO/envelope pair.
+            #[test]
+            fn save_load_round_trip_is_identity(
+                num_states in 0usize..12,
+                state_outputs in prop::collection::vec(prop::option::of("[x-y]"), 0..12),
+                edge_specs in prop::collection::vec(
+                    (
+                        0usize..12,
+                        0usize..12,
+                        prop::collection::vec("[a-b]", 0..3),
+                    ),
+                    0..10,
+                ),
+                initial in prop::option::of(0usize..12),
+            ) {
+                let doc = build_moore_doc(num_states, state_outputs, edge_specs, initial);
+                let json = moore_save_to_string(&doc).unwrap();
+                let reloaded = moore_load_from_str(&json).unwrap();
+                prop_assert_eq!(moore_to_dto(&doc), moore_to_dto(&reloaded));
             }
         }
     }
