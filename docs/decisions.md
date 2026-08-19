@@ -10,6 +10,59 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Capa IPC de Mealy: `MealySession` propia, espejo completo de `ipc.rs`, sin tocar la de AFD/AFN
+
+**Dónde**: `src-tauri/src/state.rs` (`MealySession`), `.../mealy_ipc.rs`
+(nuevo, ~330 líneas), `.../commands/mealy.rs` (nuevo), `.../lib.rs`,
+`src-tauri/tests/mealy_ipc.rs` (nuevo), `.../mealy_resync_invariant.rs`
+(nuevo).
+
+**El alcance real, dicho antes de tocar código**: se le mostró al usuario
+que "conectar Mealy" no es agregar comandos — `ipc.rs` (la capa de diffing
+FA↔frontend) tiene 443 líneas, y del lado frontend hace falta un
+`DocStore`/`DiagramView` en paralelo. El usuario, ya sabiendo eso, eligió
+paridad completa con AFD/AFN en vez de una versión simplificada. Esta
+entrada cubre solo la mitad backend (Tauri); el frontend queda para la
+siguiente ronda.
+
+**`MealySession` separada, no una variante de `Session`**: mismo criterio
+"aislar, no generalizar" que ya se usó para `MealyDoc` vs `FaDoc`. Tauri
+gestiona (`.manage(...)`) ambas sesiones siempre, indistintamente de qué
+modo esté mostrando el frontend en un momento dado — solo importa cuál
+conjunto de comandos IPC se está llamando.
+
+**`mealy_ipc.rs` espeja `ipc.rs` pieza por pieza**, con las mismas
+diferencias ya documentadas para `MealyDoc` propagadas hacia el DTO: sin
+`accepting` en `StateView`; `EdgeView.transitions: Vec<(String,String)>` en
+vez de `epsilon`+`symbols`; `Derived` con `input_alphabet`/
+`output_alphabet` separados y `deterministic: bool` en vez de
+`classification: "Dfa"|"Nfa"`; `DocPatch::StateInitialSet` en vez de
+`StateFlagsSet` (un solo flag por estado, no dos).
+
+**Hallazgo real durante esta ronda**: se había asumido que `src-tauri` no
+tenía tests en absoluto (`rg "cfg(test)" src-tauri/src/` no encuentra
+nada) — pero `src-tauri/tests/` sí los tiene, como archivos de integración
+separados (`doc_apply.rs`, `jff_interop.rs`, `resync_invariant.rs`,
+`sim_trace.rs`), incluyendo un `DocMirror` que prueba estructuralmente el
+invariante de resync (reproducir los patches sobre un espejo local debe
+dar exactamente el mismo resultado que un `doc_snapshot` fresco). Los
+tests para Mealy se habían escrito primero como un `#[cfg(test)] mod
+tests` inline dentro de `commands/mealy.rs` — se movieron a
+`src-tauri/tests/mealy_ipc.rs` (mismo patrón que `doc_apply.rs`) y se
+agregó `MealyDocMirror` + `tests/mealy_resync_invariant.rs` espejando
+`resync_invariant.rs`, para no dejar esta capa nueva con menos cobertura
+que la que ya existía para AFD/AFN.
+
+**Cómo se verificó**: 8 tests nuevos de integración contra una
+`MealySession` real (`mealy_ipc.rs`: apply/snapshot/undo/redo/save-open/sim;
+`mealy_resync_invariant.rs`: replay de patches idéntico a un snapshot
+fresco, cubriendo cada variante de `MealyDocPatch`) — los 8 pasan, y los 15
+tests preexistentes de la capa AFD/AFN siguen pasando sin cambios.
+`cargo clippy -p app --all-targets -- -D warnings` limpio. `cargo test
+--workspace` completo (todas las cajas) sin errores.
+
+---
+
 ## 2026-08-19 — Máquina de Mealy: backend completo, aislado de `FaDoc` (opción B)
 
 **Dónde**: `crates/automata-core/src/model/mealy.rs` (nuevo), `.../mealy_doc.rs`
