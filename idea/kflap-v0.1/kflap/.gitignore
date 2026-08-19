@@ -1,0 +1,18 @@
+# Entorno virtual: NO se comparte. Pesa más de 1 GB y sólo sirve en la
+# máquina donde se creó. Cada persona crea el suyo (ver README).
+.venv/
+venv/
+env/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# Autómatas de prueba
+*.kflap
+*.png
+!docs/*.png

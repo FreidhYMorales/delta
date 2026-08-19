@@ -1,0 +1,4 @@
+# Única dependencia. Arrastra shiboken6 y los módulos de PySide6 sola.
+# Hay ruedas oficiales para macOS, Windows y Linux, así que kflap corre en los tres.
+# Requiere Python 3.9 o superior.
+PySide6>=6.6
