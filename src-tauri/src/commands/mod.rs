@@ -8,4 +8,5 @@ pub mod convert;
 pub mod doc;
 pub mod jff;
 pub mod mealy;
+pub mod moore;
 pub mod sim;

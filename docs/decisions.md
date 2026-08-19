@@ -10,6 +10,28 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Capa IPC de Moore: `MooreSession` propia, espejo de `mealy_ipc.rs` con `StateOutputSet`
+
+**Dónde**: `src-tauri/src/moore_ipc.rs`, `commands/moore.rs` (nuevos),
+`state.rs` (`MooreSession`), `lib.rs`/`commands/mod.rs` (registro).
+
+**Espejo casi exacto de `mealy_ipc.rs`**, con una diferencia estructural
+real: `MooreEdgeView`/`MooreDocPatch` no tienen nada parecido a los pares
+`(input, output)` de Mealy — una arista de Moore solo lleva símbolos de
+entrada (`inputs: Vec<String>`), porque la salida vive en el estado. Eso
+agrega una variante nueva sin equivalente en Mealy: `MooreDocPatch::
+StateOutputSet { id, output: Option<String> }`, espejo IPC de
+`MooreEditOp::SetOutput` — se emite tanto en un `SetOutput` directo como
+junto a `StateAdded` cuando un estado recién creado ya trae salida seteada
+(mismo patrón que ya usa `StateInitialSet` al agregar un estado inicial).
+
+**Cómo se verificó**: `cargo test --workspace` 100% verde — reproducido de
+forma independiente, no solo confiado del reporte — incluyendo los 6 tests
+nuevos de `moore_ipc.rs` y los 2 de `moore_resync_invariant.rs` (prueba de
+que `MooreDocMirror` reproduce el snapshot real vía replay de patches).
+
+**Pendiente**: frontend de Moore (siguiente ronda) — mismo orden que Mealy.
+
 ## 2026-08-19 — Máquina de Moore: backend aislado (`MooreDoc`), salida en el estado no en la arista
 
 **Dónde**: `crates/automata-core/src/model/moore.rs`, `moore_doc.rs`,
