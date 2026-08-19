@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "qEven",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "qOdd",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 0,
+        "epsilon": false,
+        "symbols": [
+          "0",
+          "1"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "q0",
+        "x": 350.0,
+        "y": 200.0,
+        "accepting": false
+      },
+      {
+        "label": "q1",
+        "x": 125.00000000000003,
+        "y": 329.9038105676658,
+        "accepting": true
+      },
+      {
+        "label": "trampa",
+        "x": 124.99999999999993,
+        "y": 70.09618943233426,
+        "accepting": false
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 0,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "b"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "a",
+          "b"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "{aStart,bA,q0}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "{aAcc,bA}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{aDead,bB}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{aAcc,bB}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{aDead,bA}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 0,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "b"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 3,
+        "epsilon": false,
+        "symbols": [
+          "b"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "b"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 4,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 3,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 3,
+        "to": 3,
+        "epsilon": false,
+        "symbols": [
+          "b"
+        ]
+      },
+      {
+        "from": 4,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "b"
+        ]
+      },
+      {
+        "from": 4,
+        "to": 4,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

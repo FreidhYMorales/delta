@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "{q0,q1,q4}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{q2,q5}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "{q3,q4}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{q1,q5}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{q2,q4}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{q3,q5}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "{q1,q4}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 3,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 3,
+        "to": 4,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 4,
+        "to": 5,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 5,
+        "to": 6,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 6,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "R0",
+        "x": 350.0,
+        "y": 200.0,
+        "accepting": true
+      },
+      {
+        "label": "R1",
+        "x": 275.0,
+        "y": 329.9038105676658,
+        "accepting": false
+      },
+      {
+        "label": "R2",
+        "x": 125.00000000000003,
+        "y": 329.9038105676658,
+        "accepting": false
+      },
+      {
+        "label": "R3",
+        "x": 50.0,
+        "y": 200.00000000000003,
+        "accepting": true
+      },
+      {
+        "label": "R4",
+        "x": 124.99999999999993,
+        "y": 70.09618943233426,
+        "accepting": false
+      },
+      {
+        "label": "R5",
+        "x": 275.0,
+        "y": 70.0961894323342,
+        "accepting": false
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 3,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 3,
+        "to": 4,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 4,
+        "to": 5,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 5,
+        "to": 0,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

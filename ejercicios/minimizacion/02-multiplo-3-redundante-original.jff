@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<structure>
+	<type>fa</type>
+	<automaton>
+		<state id="0" name="R0">
+			<x>350</x>
+			<y>200</y>
+			<initial/>
+			<final/>
+		</state>
+		<state id="1" name="R1">
+			<x>275</x>
+			<y>329.9038105676658</y>
+		</state>
+		<state id="2" name="R2">
+			<x>125.00000000000003</x>
+			<y>329.9038105676658</y>
+		</state>
+		<state id="3" name="R3">
+			<x>50</x>
+			<y>200.00000000000003</y>
+			<final/>
+		</state>
+		<state id="4" name="R4">
+			<x>124.99999999999993</x>
+			<y>70.09618943233426</y>
+		</state>
+		<state id="5" name="R5">
+			<x>275</x>
+			<y>70.0961894323342</y>
+		</state>
+		<transition>
+			<from>0</from>
+			<to>1</to>
+			<read>a</read>
+		</transition>
+		<transition>
+			<from>1</from>
+			<to>2</to>
+			<read>a</read>
+		</transition>
+		<transition>
+			<from>2</from>
+			<to>3</to>
+			<read>a</read>
+		</transition>
+		<transition>
+			<from>3</from>
+			<to>4</to>
+			<read>a</read>
+		</transition>
+		<transition>
+			<from>4</from>
+			<to>5</to>
+			<read>a</read>
+		</transition>
+		<transition>
+			<from>5</from>
+			<to>0</to>
+			<read>a</read>
+		</transition>
+	</automaton>
+</structure>

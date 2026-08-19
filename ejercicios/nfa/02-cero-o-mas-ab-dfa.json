@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "{sA_in,sAccept,sStart}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{sA_out,sB_in}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "{sA_in,sAccept,sB_out}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "b"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

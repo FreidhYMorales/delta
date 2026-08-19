@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "qA",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "qB",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "qC",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 0,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 0,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 0,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

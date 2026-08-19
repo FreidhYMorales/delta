@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "start",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "dead",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "s0",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "s1",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "s2",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "f0",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      },
+      {
+        "label": "f1",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      },
+      {
+        "from": 0,
+        "to": 3,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      },
+      {
+        "from": 2,
+        "to": 3,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 3,
+        "to": 3,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 3,
+        "to": 4,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      },
+      {
+        "from": 4,
+        "to": 2,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      },
+      {
+        "from": 4,
+        "to": 5,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 5,
+        "to": 5,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 5,
+        "to": 6,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      },
+      {
+        "from": 6,
+        "to": 5,
+        "epsilon": false,
+        "symbols": [
+          "0"
+        ]
+      },
+      {
+        "from": 6,
+        "to": 6,
+        "epsilon": false,
+        "symbols": [
+          "1"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "document": {
+    "kind": "Fa",
+    "states": [
+      {
+        "label": "{A,C}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": true
+      },
+      {
+        "label": "{B,D}",
+        "x": 0.0,
+        "y": 0.0,
+        "accepting": false
+      }
+    ],
+    "edges": [
+      {
+        "from": 0,
+        "to": 1,
+        "epsilon": false,
+        "symbols": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "from": 1,
+        "to": 0,
+        "epsilon": false,
+        "symbols": [
+          "a",
+          "b"
+        ]
+      }
+    ],
+    "initial": 0
+  }
+}
