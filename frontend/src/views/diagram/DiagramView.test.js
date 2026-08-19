@@ -41,27 +41,38 @@ beforeEach(() => {
 });
 
 describe("DiagramView rendering (task 7.4)", () => {
-  it("renders exactly the 4 core tools, sourced from the command registry", async () => {
-    const { container } = await setup();
-    const buttons = container.querySelectorAll(".toolbar [data-action]");
-    expect([...buttons].map((b) => b.dataset.action)).toEqual([
-      "tool.select",
-      "tool.createState",
-      "tool.createTransition",
-      "tool.delete",
-    ]);
-  });
-
   it("renders one SVG circle per state and one line per edge", async () => {
     const { container } = await setup();
     expect(container.querySelectorAll("circle[data-state-id]")).toHaveLength(2);
-    expect(container.querySelectorAll("[data-edge]")).toHaveLength(1);
+    expect(container.querySelectorAll(".edge[data-edge]")).toHaveLength(1);
+  });
+
+  it("offsets a straight edge's label off the line instead of sitting on top of it (bug: label sat exactly on the stroke)", async () => {
+    const { container } = await setup();
+    // Both states sit at y=10 (a horizontal line), so a label perpendicular
+    // to it must move away in y — sitting "on the line" would keep y at 10.
+    const label = container.querySelector(".edge-label");
+    expect(Number(label.getAttribute("y"))).not.toBeCloseTo(10, 1);
+  });
+
+  it("renders a double-circle ring for an accepting state and an arrow stub for the initial state", async () => {
+    const { container } = await setup();
+    // Fixture: state 1 (q0) is initial, state 2 (q1) is accepting.
+    expect(container.querySelectorAll(".state-accepting-ring")).toHaveLength(1);
+    expect(container.querySelectorAll(".initial-arrow")).toHaveLength(1);
+  });
+
+  it("renders a wider invisible hit-path alongside each visible edge, for easier hover/click", async () => {
+    const { container } = await setup();
+    const hits = [...container.querySelectorAll(".edge-hit")];
+    expect(hits).toHaveLength(1);
+    expect(hits[0].dataset.edge).toBe("1:2");
   });
 
   it("renders a status summary with classification and counts", async () => {
     const { container } = await setup();
     const status = container.querySelector(".status-bar");
-    expect(status.textContent).toContain("DFA");
+    expect(status.textContent).toContain("AFD");
     expect(status.textContent).toContain("2"); // state count
   });
 
@@ -78,18 +89,6 @@ describe("DiagramView rendering (task 7.4)", () => {
 });
 
 describe("DiagramView tool switching", () => {
-  it("clicking a toolbar button dispatches the matching registry action and highlights it", async () => {
-    const { container, ctx } = await setup();
-    const createStateBtn = container.querySelector('[data-action="tool.createState"]');
-    createStateBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    expect(ctx.activeTool).toBe("create-state");
-    expect(createStateBtn.classList.contains("active")).toBe(true);
-    expect(
-      container.querySelector('[data-action="tool.select"]').classList.contains("active"),
-    ).toBe(false);
-  });
-
   it("keyboard shortcuts V/S/T/D dispatch through the registry, not a parallel key map", async () => {
     const { container, ctx } = await setup();
     const svg = container.querySelector("svg");
@@ -150,6 +149,32 @@ describe("DiagramView drag-to-move (select tool, bug 1)", () => {
       .dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 60, clientY: 40 }));
 
     expect(client.docApply).toHaveBeenCalledWith([{ op: "MoveState", id: 1, x: 60, y: 40 }]);
+  });
+
+  it("scales the drag delta by the viewBox/rendered-size ratio, so the state keeps tracking the cursor on a stretched canvas", async () => {
+    const { container, docStore } = await setup();
+    const circle = container.querySelector('circle[data-state-id="1"]');
+    const svg = container.querySelector("svg");
+    // Same 2x stretch as the create-state coordinate test: 100 screen
+    // pixels of drag should move the state by 50 SVG units, not 100.
+    svg.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 1200,
+      height: 800,
+      right: 1200,
+      bottom: 800,
+      x: 0,
+      y: 0,
+    });
+
+    circle.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }),
+    );
+    svg.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 110, clientY: 60 }));
+
+    expect(docStore.getState(1).x).toBe(60);
+    expect(docStore.getState(1).y).toBe(35);
   });
 
   it("does not commit a MoveState when the pointer never moves", async () => {
@@ -264,6 +289,30 @@ describe("DiagramView create-state tool", () => {
       { op: "AddState", label: "q2", x: 42, y: 24 },
     ]);
   });
+
+  it("scales the click position by the viewBox/rendered-size ratio when the canvas is stretched (bug: stretched .diagram-canvas ignored the ratio)", async () => {
+    const { container, ctx, client } = await setup();
+    ctx.setTool("create-state");
+    const svg = container.querySelector("svg");
+    // viewBox stays 600x400 (BASE_WIDTH/HEIGHT) but the element renders at
+    // 1200x800 (e.g. `.diagram-canvas { width: 100% }` stretching it) -> a
+    // screen pixel is worth 0.5 SVG units on each axis.
+    svg.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 1200,
+      height: 800,
+      right: 1200,
+      bottom: 800,
+      x: 0,
+      y: 0,
+    });
+    svg.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 400, clientY: 200 }));
+
+    expect(client.docApply).toHaveBeenCalledWith([
+      { op: "AddState", label: "q2", x: 200, y: 100 },
+    ]);
+  });
 });
 
 describe("DiagramView delete tool", () => {
@@ -297,6 +346,71 @@ describe("DiagramView viewport (view.zoomIn/zoomOut/reset/fitToWindow)", () => {
     const spy = vi.spyOn(view.viewport, "fitToWindow");
     findAction("view.fitToWindow").run(ctx);
     expect(spy).toHaveBeenCalled();
+  });
+
+  it("mouse-wheel zoom keeps the point under the cursor in place, and zooms out on a positive deltaY", async () => {
+    const { container } = await setup();
+    const svg = container.querySelector("svg");
+    const before = svg.getAttribute("viewBox");
+
+    svg.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 300, clientY: 200, deltaY: 100 }),
+    );
+
+    const [, , w, h] = svg.getAttribute("viewBox").split(" ").map(Number);
+    const [, , bw, bh] = before.split(" ").map(Number);
+    expect(w).toBeGreaterThan(bw);
+    expect(h).toBeGreaterThan(bh);
+  });
+
+  it("dragging empty canvas pans the viewport (free navigation) without touching any state", async () => {
+    const { container, docStore, client } = await setup();
+    const svg = container.querySelector("svg");
+    const before = svg.getAttribute("viewBox");
+
+    svg.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 100, clientY: 100 }));
+    svg.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150, clientY: 130 }));
+
+    expect(svg.getAttribute("viewBox")).not.toBe(before);
+    expect(docStore.getState(1).x).toBe(10); // unchanged — this was a pan, not a state drag
+
+    svg.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 150, clientY: 130 }));
+    expect(client.docApply).not.toHaveBeenCalled(); // panning never touches the document
+  });
+
+  it("does not pan while the create-state tool is active, so empty-canvas drags don't fight click-to-place", async () => {
+    const { container, ctx } = await setup();
+    ctx.setTool("create-state");
+    const svg = container.querySelector("svg");
+    const before = svg.getAttribute("viewBox");
+
+    svg.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 100, clientY: 100 }));
+    svg.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150, clientY: 130 }));
+
+    expect(svg.getAttribute("viewBox")).toBe(before);
+  });
+
+  it("toggles a .panning cursor class on the svg for the duration of a pan drag", async () => {
+    const { container } = await setup();
+    const svg = container.querySelector("svg");
+
+    svg.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 100, clientY: 100 }));
+    expect(svg.classList.contains("panning")).toBe(true);
+
+    svg.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 100, clientY: 100 }));
+    expect(svg.classList.contains("panning")).toBe(false);
+  });
+
+  it("toggles a .tool-create-state cursor class on the svg when that tool is active", async () => {
+    const { container, ctx } = await setup();
+    const svg = container.querySelector("svg");
+    expect(svg.classList.contains("tool-create-state")).toBe(false);
+
+    ctx.setTool("create-state");
+    expect(svg.classList.contains("tool-create-state")).toBe(true);
+
+    ctx.setTool("select");
+    expect(svg.classList.contains("tool-create-state")).toBe(false);
   });
 });
 
@@ -335,6 +449,67 @@ describe("DiagramView create-transition tool", () => {
     expect(client.docApply).toHaveBeenCalledWith([
       { op: "SetEdge", from: 2, to: 1, epsilon: false, symbols: ["z"] },
     ]);
+  });
+
+  it("marks the clicked source state with .pending-edge-source until a target is picked", async () => {
+    const { container, ctx } = await setup();
+    ctx.setTool("create-transition");
+
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(
+      container.querySelector('circle[data-state-id="1"]').classList.contains("pending-edge-source"),
+    ).toBe(true);
+    expect(
+      container.querySelector('circle[data-state-id="2"]').classList.contains("pending-edge-source"),
+    ).toBe(false);
+  });
+
+  it("adds .awaiting-edge-target to the canvas once a source is picked, and clears it after the target click", async () => {
+    const client = {
+      docSnapshot: vi.fn().mockResolvedValue(twoStateSnapshot()),
+      docApply: vi.fn().mockResolvedValue({ revision: 2, patches: [], derived: twoStateSnapshot().derived }),
+      docUndo: vi.fn(),
+      docRedo: vi.fn(),
+    };
+    const docStore = new DocStore(client);
+    await docStore.load();
+    const ctx = new ViewContext(docStore, { promptSymbol: vi.fn().mockReturnValue("z") });
+    const container = document.createElement("div");
+    const view = new DiagramView(container, docStore, ctx);
+    ctx.setTool("create-transition");
+
+    const svg = container.querySelector(".diagram-canvas");
+    expect(svg.classList.contains("awaiting-edge-target")).toBe(false);
+
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(svg.classList.contains("awaiting-edge-target")).toBe(true);
+
+    container
+      .querySelector('circle[data-state-id="2"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await view._lastEditPromise;
+    expect(svg.classList.contains("awaiting-edge-target")).toBe(false);
+  });
+
+  it("clears the pending source and .awaiting-edge-target if the tool is switched away mid-pick", async () => {
+    const { container, ctx } = await setup();
+    ctx.setTool("create-transition");
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    ctx.setTool("select");
+
+    const svg = container.querySelector(".diagram-canvas");
+    expect(svg.classList.contains("awaiting-edge-target")).toBe(false);
+    expect(
+      container.querySelector('circle[data-state-id="1"]').classList.contains("pending-edge-source"),
+    ).toBe(false);
   });
 });
 
@@ -383,27 +558,7 @@ describe("DiagramView unreachable states (task 7.8, spec cross-cutting)", () => 
       edges: [],
       derived: { classification: "Dfa", alphabet: [], unreachable: [2, 3] },
     });
-    expect(container.querySelector(".status-bar").textContent).toContain("2 unreachable");
-  });
-});
-
-describe("DiagramView active-sim highlighting (task 7.6, testing drawer)", () => {
-  it("setActiveStates adds .active-sim to exactly the given state ids", async () => {
-    const { container, view } = await setup();
-    view.setActiveStates([2]);
-    expect(
-      container.querySelector('circle[data-state-id="1"]').classList.contains("active-sim"),
-    ).toBe(false);
-    expect(
-      container.querySelector('circle[data-state-id="2"]').classList.contains("active-sim"),
-    ).toBe(true);
-  });
-
-  it("setActiveStates([]) clears all highlighting", async () => {
-    const { container, view } = await setup();
-    view.setActiveStates([1, 2]);
-    view.setActiveStates([]);
-    expect(container.querySelectorAll(".active-sim")).toHaveLength(0);
+    expect(container.querySelector(".status-bar").textContent).toContain("2 inalcanzable(s)");
   });
 });
 

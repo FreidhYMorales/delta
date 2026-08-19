@@ -1,11 +1,10 @@
 /* Design tokens (UI/UX audit pass): a small, deliberately short scale so
- * spacing/color/typography stay consistent across every view instead of
- * mixing arbitrary literals. Colors keep the existing `canvas`/`canvastext`
- * + translucent-black convention (already used by the context menu, prompt
- * modal and notices below) so light/dark both work for free via
- * `color-scheme: light dark` — no new dependency, no hardcoded hex pair. */
+ * spacing/typography stay consistent across every view instead of mixing
+ * arbitrary literals. Every color lives in theme.css instead — see that
+ * file's header for why it's split out. */
+@import "./theme.css";
+
 :root {
-  color-scheme: light dark;
   font-family: system-ui, sans-serif;
 
   --space-2xs: 0.25rem;
@@ -15,26 +14,32 @@
   --space-lg: 1.5rem;
 
   --radius-sm: 4px;
-  --radius-md: 6px;
-
-  --border-color: #8884;
-  --border-color-strong: #8888;
-  --hover-bg: #8882;
-  --active-bg: #8883;
-
-  --accent: #369;
-  --accent-strong: #06c;
-  --danger: #c33;
-  --success: #2a7;
-  --warning: #c90;
+  --radius-md: 8px;
 
   --font-size-sm: 0.85rem;
   --font-size-xs: 0.75rem;
   --font-weight-medium: 600;
+  --font-mono: "SF Mono", "Cascadia Code", ui-monospace, monospace;
+}
+
+/* Missing from the wireframe-parity rewrite (docs/decisions.md) despite
+ * being in the artifact's own reset — without it, `width: 100%` plus any
+ * padding/border (very common: `.string-input`, `.formal-view textarea`,
+ * `.tool-btn`, `.chip`, every button, ...) makes the element `2*padding +
+ * 2*border` WIDER than its container's content box, since content-box
+ * sizing adds padding/border on top of the 100%-resolved width instead of
+ * counting them inside it. Found via `getComputedStyle` in a real browser:
+ * the "Definición formal" textarea rendered 561px wide inside a 543px
+ * container, forcing the whole right column to scroll horizontally. */
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13.5px;
 }
 
 .app-shell {
@@ -50,14 +55,14 @@ body {
 }
 
 /* Top-level app menu bar (File/Edit/View/Test — MenuBar.js). Sits above the
- * diagram pane's own local toolbar so the two never overlap or compete for
- * the same row: this is app-level chrome, the toolbar below it is
- * diagram-local (the same "L0 vs. app shell" split as the rest of the
- * progressive-disclosure design). */
+ * full-width tool `.toolbar` (Toolbar.js), which in turn sits above the
+ * canvas/right-col split — same stacking as the wireframe artifact. */
 .menu-bar {
   display: flex;
-  gap: var(--space-2xs);
-  padding: var(--space-2xs) var(--space-xs);
+  gap: var(--space-md);
+  padding: var(--space-2xs) var(--space-md);
+  font-size: 12.5px;
+  background: var(--surface);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -66,13 +71,17 @@ body {
 }
 
 .menu-bar-item {
-  padding: var(--space-2xs) var(--space-xs);
+  padding: var(--space-2xs) var(--space-2xs);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: none;
-  color: inherit;
+  color: var(--text-muted);
   font: inherit;
   cursor: pointer;
+}
+
+.menu-bar-item:hover {
+  color: var(--text);
 }
 
 .menu-bar-item:hover {
@@ -126,69 +135,276 @@ body {
   white-space: nowrap;
 }
 
-.diagram-pane {
-  flex: 1;
-  min-width: 0;
+/* Canvas / right-column split (layout plan, this session): 60% canvas by
+ * default, resizable between 35-70% via `.resizer` (ui/resizer.js) — a
+ * large state table needs somewhere to grow into, so it's not a fixed
+ * width like the old single right-dock was. */
+.canvas-pane {
+  flex: 0 1 60%;
+  min-width: 240px;
   display: flex;
   flex-direction: column;
+  background:
+    radial-gradient(circle, var(--border-color) 1px, transparent 1px) 0 0 / 22px 22px,
+    var(--bg);
 }
 
-.right-dock {
-  width: 320px;
-  border-left: 1px solid var(--border-color);
-  overflow-y: auto;
-  padding: var(--space-xs);
+.resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
 }
 
-.toolbar {
+.resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: var(--border-color);
+}
+
+.resizer:hover::after,
+.resizer.dragging::after {
+  background: var(--accent-strong);
+}
+
+.right-col {
+  flex: 1;
+  min-width: 260px;
   display: flex;
-  gap: var(--space-2xs);
-  padding: var(--space-xs);
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border-color);
+}
+
+.panel-upper {
+  flex: 0 0 56%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-bottom: 1px solid var(--border-color);
 }
 
-.tool-button {
-  padding: var(--space-2xs) var(--space-sm);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: inherit;
-  font: inherit;
+.panel-lower {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Generic tab strip (ui/tabs.js) — reused by panel-upper (Tabla de
+ * estados/Definición formal) and panel-lower (TestingView's own
+ * Cadena/Lote/Resultados). */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.tab {
+  border: none;
+  background: transparent;
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
   cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: 12.5px;
 }
 
-.tool-button:hover {
-  background: var(--hover-bg);
+.tab:hover {
+  color: var(--text);
 }
 
-.tool-button.active {
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
   font-weight: var(--font-weight-medium);
-  background: var(--active-bg);
-  border-color: var(--accent);
+}
+
+.tab-panels {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: var(--space-xs);
+  min-height: 0;
+}
+
+.tab-panel {
+  display: none;
+}
+
+/* A flex column filling the available height (not just `display: block`,
+ * sized to content) — lets a panel's own content stretch to fill it, e.g.
+ * `.formal-view`'s textarea growing down to meet its button instead of
+ * sitting at a fixed height with empty space below. */
+.tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Full-width app toolbar (Toolbar.js) — a sibling of the canvas/right-col
+ * split, not scoped to either side of it (wireframe parity: the artifact's
+ * `.toolbar` sits directly under `.menubar`, spanning the whole app). */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Pill-shaped button groups (tools, then view/layout) — each group is one
+ * bordered rounded container so related actions read as a single control. */
+.tool-group {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.tool-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2xs) var(--space-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.tool-btn:hover {
+  color: var(--text);
+  background: var(--border-color);
+}
+
+.tool-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.tool-btn kbd {
+  font-size: 10px;
+  opacity: 0.75;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-color);
+}
+
+.mode-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  margin-left: auto;
+}
+
+.mode-select label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mode-select select {
+  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2xs) var(--space-xs);
+}
+
+/* Diagram-local info strip (DiagramView.js's `.canvas-toolbar` — an
+ * unfortunate name clash with the app-level `.toolbar` above, kept as-is
+ * since it's the wireframe's literal class name): filename on the left
+ * (blank until a .jff is imported/exported), classification/state-count
+ * chip on the right. */
+.canvas-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface);
+}
+
+.chip {
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--surface-2);
+}
+
+.diagram-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .diagram-canvas {
   flex: 1;
   width: 100%;
+  min-height: 0;
   outline: none;
 }
 
+/* Filled call-to-action buttons (Calcular / Calcular lote / Aplicar
+ * definición) — one shared class instead of repeating the same declarations
+ * per view. */
+.btn-primary {
+  padding: var(--space-xs) var(--space-md);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
 .state {
-  fill: #fff;
-  stroke: #333;
+  fill: var(--state-fill);
+  stroke: var(--state-stroke);
   stroke-width: 2;
+  cursor: pointer;
+  transition: fill 0.12s ease;
+}
+
+.state:hover {
+  fill: var(--accent-soft);
 }
 
 .state.initial {
   stroke-width: 3;
 }
 
-.state.accepting {
-  stroke-width: 4;
-}
-
+/* Accepting/final now gets a real double-circle (`.state-accepting-ring`,
+ * a second concentric <circle> — see DiagramView.js) instead of just a
+ * thicker stroke on this one, which read as too close to "selected" to
+ * tell apart at a glance. */
 .state.selected {
-  fill: #cde;
+  fill: var(--state-selected-fill);
 }
 
 .state.unreachable {
@@ -196,17 +412,96 @@ body {
   stroke-dasharray: 4 2;
 }
 
-.state.active-sim {
-  fill: #ffd166;
+/* create-transition tool, step 1: the state already picked as the source —
+ * stays highlighted while the user looks for the target so it's never
+ * ambiguous which click started the transition. */
+.state.pending-edge-source {
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+  fill: var(--accent-soft);
+}
+
+/* create-transition tool, step 2: once a source is picked, every hovered
+ * state (including the source itself, for a self-loop) reads as the
+ * candidate target — a deeper fill than the plain `.state:hover` and a
+ * crosshair cursor over the whole canvas signal "click here to finish the
+ * transition" before the symbol prompt appears. */
+.diagram-canvas.awaiting-edge-target {
+  cursor: crosshair;
+}
+
+.diagram-canvas.awaiting-edge-target .state:hover {
+  fill: var(--accent);
+}
+
+/* The inner ring of an accepting state's double-circle — decorative only,
+ * `pointer-events: none` so hover/click still resolve to the real state
+ * circle underneath it, not this ring. */
+.state-accepting-ring {
+  fill: none;
+  stroke: var(--state-stroke);
+  stroke-width: 1.6;
+  pointer-events: none;
+}
+
+.initial-arrow {
+  stroke: var(--state-stroke);
+  stroke-width: 1.6;
+  fill: none;
+  pointer-events: none;
 }
 
 .edge {
-  stroke: #333;
+  stroke: var(--edge-stroke);
   stroke-width: 1.5;
 }
 
 .edge.selected {
   stroke: var(--accent-strong);
+}
+
+.edge.edge-hover {
+  stroke: var(--accent);
+}
+
+/* Invisible, much wider duplicate of each edge's line/path (see
+ * DiagramView.js) — a 1.5px stroke is too thin to reliably hover or click,
+ * so this is the actual hit target; hovering it toggles `.edge-hover` on
+ * the real (visible) edge right behind it. */
+.edge-hit {
+  stroke: transparent;
+  stroke-width: 14;
+  fill: none;
+  cursor: pointer;
+}
+
+.arrowhead {
+  fill: var(--edge-stroke);
+}
+
+.state-label,
+.edge-label {
+  fill: var(--text);
+  font-size: 12px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+/* Free canvas navigation (drag-to-pan on empty canvas, mouse-wheel zoom) —
+ * `.panning` is toggled on the svg root while a pan drag is in progress
+ * (DiagramView.js), `.tool-create-state` while that tool is active (panning
+ * is disabled there, so a grab cursor would be misleading). */
+.diagram-canvas {
+  cursor: grab;
+}
+
+.diagram-canvas.panning {
+  cursor: grabbing;
+}
+
+.diagram-canvas.tool-create-state {
+  cursor: crosshair;
 }
 
 .selection-inspector,
@@ -216,34 +511,47 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
-.table-view,
-.formal-view,
 .testing-view {
-  margin-bottom: var(--space-xs);
-}
-
-.testing-view {
-  padding: var(--space-2xs) var(--space-xs);
-  border-top: 1px solid var(--border-color);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .testing-single,
 .testing-batch {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
+  flex-direction: column;
   padding: var(--space-xs) 0;
 }
 
-.testing-batch {
-  align-items: flex-start;
+.field-label {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2xs);
+}
+
+.string-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-xs);
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
 }
 
 .testing-batch-input {
-  width: 100%;
-  min-height: 4rem;
-  font-family: monospace;
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.calc-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
 }
 
 .testing-batch-table {
@@ -271,16 +579,219 @@ body {
   font-weight: var(--font-weight-medium);
 }
 
-.testing-active-states {
+/* `TestingView._renderResults()` toggles the native `hidden` attribute to
+ * show exactly one of empty-hint/verdict+trace-row/batch-table at a time.
+ * Any of these with their own `display` rule needs an explicit `[hidden]`
+ * override — an author `display` declaration always wins over the browser's
+ * default `[hidden] { display: none }` UA rule regardless of source order
+ * or specificity, so without this the element stayed visible no matter what
+ * `.hidden` was set to (same bug class as `.menu-dropdown[hidden]` above). */
+.verdict[hidden],
+.trace-row[hidden],
+.testing-batch-table[hidden] {
+  display: none;
+}
+
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: var(--font-weight-medium);
+  font-size: 12px;
+}
+
+.verdict.accepted {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+
+.verdict.rejected {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.verdict.truncated {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: var(--space-md) 0;
+  text-align: center;
+}
+
+.trace-row {
+  display: flex;
+  gap: var(--space-2xs);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.trace-step {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  background: var(--surface-2);
+}
+
+.trace-step.hit {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.trace-arrow {
+  color: var(--text-muted);
+}
+
+.table-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Sticky above the table (not below it) so it's reachable with one glance
+ * regardless of scroll position once there are many states — relies on
+ * `.tab-panels` (this element's nearest ancestor with `overflow: auto`) as
+ * the sticky positioning context. */
+.table-actions {
+  position: sticky;
+  top: calc(-1 * var(--space-xs));
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0;
+  padding: var(--space-xs) var(--space-xs) var(--space-sm);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.table-alphabet-field .string-input {
+  font-family: inherit;
+}
+
+.table-buttons-row {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.btn-secondary {
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: var(--border-color);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.table-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.table-view table {
   width: 100%;
-  font-size: var(--font-size-sm);
-  opacity: 0.85;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.table-view th,
+.table-view td {
+  border: 1px solid var(--border-color);
+  padding: var(--space-2xs) var(--space-sm);
+  text-align: center;
+}
+
+.table-view thead th {
+  background: var(--surface-2);
+  font-weight: var(--font-weight-medium);
+}
+
+.table-view tbody th {
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+}
+
+.table-col-narrow {
+  width: 1%;
+  padding-left: var(--space-2xs);
+  padding-right: var(--space-2xs);
+  white-space: nowrap;
+}
+
+.table-col-narrow input {
+  cursor: pointer;
+}
+
+.table-name-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+}
+
+.table-name-input:focus {
+  outline: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+/* Editable, unlike the wireframe's read-only `.formal-def` display — this
+ * view round-trips M=(Q,Σ,δ,q0,F) back into document edits (spec
+ * `formal-definition-view`), which a plain-text `<textarea>` can do and a
+ * colored-keyword HTML block cannot. Kept as a textarea; only the
+ * typography (mono font, generous line-height) is copied from the
+ * wireframe's `.formal-def`, since color-per-keyword isn't representable
+ * inside native textarea content. */
+.formal-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: var(--space-xs);
 }
 
 .formal-view textarea {
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 8rem;
-  font-family: monospace;
+  padding: var(--space-xs);
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.9;
+  /* Grows to fill the panel down to the button below it (flex: 1 above) —
+   * a manual resize handle would fight that and (with `content-box`-era
+   * sizing bugs already found once this session) is how a textarea ends up
+   * wider than its container in the first place. */
+  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .formal-error {
@@ -302,12 +813,22 @@ body {
   flex-direction: column;
   min-width: 12rem;
   padding: var(--space-2xs);
-  background: canvas;
-  color: canvastext;
+  background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--border-color-strong);
   border-radius: var(--radius-sm);
-  box-shadow: 0 2px 8px #0004;
+  box-shadow: 0 2px 8px var(--shadow-color);
   z-index: 1000;
+}
+
+/* `display: flex` above has the same specificity as the browser's default
+ * `[hidden] { display: none }` rule and loses to it only by *not* existing
+ * in the UA stylesheet's cascade position — an author rule with equal
+ * specificity always wins over a UA default, so `hidden` alone did nothing
+ * here and every closed menu rendered fully open. Found by actually running
+ * the app in a browser (this session) — first time anyone had. */
+.menu-dropdown[hidden] {
+  display: none;
 }
 
 .context-menu {
@@ -338,7 +859,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0006;
+  background: var(--overlay-bg);
   z-index: 2000;
 }
 
@@ -348,10 +869,10 @@ body {
   gap: var(--space-xs);
   min-width: 18rem;
   padding: var(--space-md);
-  background: canvas;
-  color: canvastext;
+  background: var(--surface);
+  color: var(--text);
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px #0006;
+  box-shadow: 0 4px 16px var(--shadow-color);
 }
 
 .prompt-modal-message {
@@ -384,11 +905,11 @@ body {
 .notice {
   position: relative;
   padding: var(--space-xs) var(--space-lg) var(--space-xs) var(--space-sm);
-  background: canvas;
-  color: canvastext;
+  background: var(--surface);
+  color: var(--text);
   border-left: 4px solid var(--accent);
   border-radius: var(--radius-sm);
-  box-shadow: 0 2px 10px #0005;
+  box-shadow: 0 2px 10px var(--shadow-color);
 }
 
 .notice-error {

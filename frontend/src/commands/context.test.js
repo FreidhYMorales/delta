@@ -72,11 +72,10 @@ describe("ViewContext", () => {
     expect(promptLabel).toHaveBeenCalledWith(1);
   });
 
-  it("exposes L2 testing/L3 highlighting hooks with safe no-op defaults", async () => {
+  it("exposes L2 testing hooks with safe no-op defaults", async () => {
     const ctx = new ViewContext({});
     expect(await ctx.simTrace(["a"])).toEqual({ outcome: "Rejected", steps: [] });
     expect(await ctx.simBatch([["a"]])).toEqual([]);
-    expect(() => ctx.setActiveStates([1])).not.toThrow();
     expect(() => ctx.testing.openSingle()).not.toThrow();
     expect(() => ctx.testing.openBatch()).not.toThrow();
   });

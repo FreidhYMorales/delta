@@ -23,9 +23,9 @@ import { actions } from "../../commands/registry.js";
  * ONE source of truth for "which groups the menu bar covers" instead of a
  * second hardcoded copy that could silently drift out of sync. */
 export const MENU_GROUP_TITLES = {
-  interop: "File",
-  edit: "Edit",
-  view: "View",
+  interop: "Archivo",
+  edit: "Editar",
+  view: "Ver",
   test: "Test",
 };
 

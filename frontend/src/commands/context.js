@@ -26,7 +26,6 @@ export class ViewContext {
    *   exportJff?: (path: string) => Promise<void>,
    *   simTrace?: (word: string[], budget?: object) => Promise<object>,
    *   simBatch?: (words: string[][], budget?: object) => Promise<object[]>,
-   *   setActiveStates?: (ids: number[]) => void,
    *   testing?: {openSingle: Function, openBatch: Function},
    *   renameState?: (id: number, label: string) => Promise<boolean>,
    * }} hooks
@@ -50,7 +49,6 @@ export class ViewContext {
     // prompt/interop hooks above (testable without a real Tauri webview).
     this.simTrace = hooks.simTrace ?? (async () => ({ outcome: "Rejected", steps: [] }));
     this.simBatch = hooks.simBatch ?? (async () => []);
-    this.setActiveStates = hooks.setActiveStates ?? (() => {});
     this.testing = hooks.testing ?? { openSingle() {}, openBatch() {} };
     // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
     // Are Never Silent"). Real by default (needs only `docStore` + a DOM

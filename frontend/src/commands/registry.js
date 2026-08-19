@@ -33,7 +33,7 @@ export const actions = [
   // --- Tools (L0, kflap-v0.1 keys V/S/T/D) ---------------------------------
   {
     id: "tool.select",
-    title: "Select / Move",
+    title: "Seleccionar",
     group: "tools",
     keybinding: "v",
     when: () => true,
@@ -41,7 +41,7 @@ export const actions = [
   },
   {
     id: "tool.createState",
-    title: "Create State",
+    title: "Estado",
     group: "tools",
     keybinding: "s",
     when: () => true,
@@ -49,7 +49,7 @@ export const actions = [
   },
   {
     id: "tool.createTransition",
-    title: "Create Transition",
+    title: "Transición",
     group: "tools",
     keybinding: "t",
     when: () => true,
@@ -57,7 +57,7 @@ export const actions = [
   },
   {
     id: "tool.delete",
-    title: "Delete (click)",
+    title: "Borrar",
     group: "tools",
     keybinding: "d",
     when: () => true,
@@ -68,7 +68,7 @@ export const actions = [
   //     delete — spec `diagram-editor` > "Context Menu Actions") ------------
   {
     id: "state.rename",
-    title: "Rename State",
+    title: "Renombrar estado",
     group: "state",
     keybinding: "f2",
     when: hasStateSelected,
@@ -82,7 +82,7 @@ export const actions = [
   },
   {
     id: "state.markInitial",
-    title: "Mark as Initial",
+    title: "Marcar como inicial",
     group: "state",
     keybinding: null,
     when: hasStateSelected,
@@ -90,7 +90,7 @@ export const actions = [
   },
   {
     id: "state.toggleAccepting",
-    title: "Toggle Accepting",
+    title: "Alternar aceptación",
     group: "state",
     keybinding: null,
     when: hasStateSelected,
@@ -104,7 +104,7 @@ export const actions = [
   // --- Edit -----------------------------------------------------------------
   {
     id: "edit.deleteSelection",
-    title: "Delete Selection",
+    title: "Eliminar selección",
     group: "edit",
     keybinding: "delete",
     when: hasSelection,
@@ -122,7 +122,7 @@ export const actions = [
   },
   {
     id: "edit.undo",
-    title: "Undo",
+    title: "Deshacer",
     group: "edit",
     keybinding: "ctrl+z",
     when: () => true,
@@ -130,7 +130,7 @@ export const actions = [
   },
   {
     id: "edit.redo",
-    title: "Redo",
+    title: "Rehacer",
     group: "edit",
     keybinding: "ctrl+shift+z",
     when: () => true,
@@ -140,7 +140,7 @@ export const actions = [
   // --- View / layout ----------------------------------------------------
   {
     id: "view.zoomIn",
-    title: "Zoom In",
+    title: "Acercar",
     group: "view",
     keybinding: "ctrl+=",
     when: () => true,
@@ -148,7 +148,7 @@ export const actions = [
   },
   {
     id: "view.zoomOut",
-    title: "Zoom Out",
+    title: "Alejar",
     group: "view",
     keybinding: "ctrl+-",
     when: () => true,
@@ -156,7 +156,7 @@ export const actions = [
   },
   {
     id: "view.zoomReset",
-    title: "Reset Zoom",
+    title: "Restablecer zoom",
     group: "view",
     keybinding: "ctrl+0",
     when: () => true,
@@ -164,7 +164,7 @@ export const actions = [
   },
   {
     id: "view.fitToWindow",
-    title: "Fit to Window",
+    title: "Ajustar a ventana",
     group: "view",
     keybinding: "ctrl+1",
     when: () => true,
@@ -172,7 +172,7 @@ export const actions = [
   },
   {
     id: "view.circleLayout",
-    title: "Circle Layout",
+    title: "Disposición circular",
     group: "view",
     keybinding: "ctrl+l",
     when: () => true,
@@ -188,7 +188,7 @@ export const actions = [
   // both of its capabilities have a registry entry that reveals it.
   {
     id: "test.singleTrace",
-    title: "Test String…",
+    title: "Probar cadena…",
     group: "test",
     keybinding: null,
     when: () => true,
@@ -196,7 +196,7 @@ export const actions = [
   },
   {
     id: "test.batch",
-    title: "Batch Test…",
+    title: "Prueba por lotes…",
     group: "test",
     keybinding: null,
     when: () => true,
@@ -206,7 +206,7 @@ export const actions = [
   // --- Interop (L3, menu+palette only — design D6) -------------------------
   {
     id: "jff.import",
-    title: "Import .jff…",
+    title: "Importar .jff…",
     group: "interop",
     keybinding: null,
     when: () => true,
@@ -217,7 +217,7 @@ export const actions = [
   },
   {
     id: "jff.export",
-    title: "Export .jff…",
+    title: "Exportar .jff…",
     group: "interop",
     keybinding: null,
     when: () => true,

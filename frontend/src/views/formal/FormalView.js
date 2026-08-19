@@ -1,9 +1,10 @@
 // L1: formal-definition-view (task 7.5, spec `formal-definition-view`).
-// Collapsed by default (`<details>`, no `open`), renders M=(Q,Σ,δ,q0,F) as
-// editable text, and applies a valid edit as an ops sequence against the
-// shared `DocStore` (spec: "Valid edit applies everywhere") or shows an
-// inline error and leaves the document untouched (spec: "Invalid edit
-// rejected").
+// Renders M=(Q,Σ,δ,q0,F) as editable text, and applies a valid edit as an
+// ops sequence against the shared `DocStore` (spec: "Valid edit applies
+// everywhere") or shows an inline error and leaves the document untouched
+// (spec: "Invalid edit rejected"). Lives inside the right column's upper
+// tab group (main.js) — visibility is the tab's job now, not a `<details>`
+// collapse toggle.
 
 import {
   formatFormalText,
@@ -26,16 +27,14 @@ export class FormalView {
   }
 
   _build() {
-    this.details = document.createElement("details");
-    this.details.className = "formal-view";
-    const summary = document.createElement("summary");
-    summary.textContent = "Formal Definition";
+    this.root = document.createElement("div");
+    this.root.className = "formal-view";
 
     this.textarea = document.createElement("textarea");
     this.applyButton = document.createElement("button");
     this.applyButton.type = "button";
-    this.applyButton.className = "apply";
-    this.applyButton.textContent = "Apply definition";
+    this.applyButton.className = "apply btn-primary";
+    this.applyButton.textContent = "Aplicar definición";
     this.applyButton.addEventListener("click", () => {
       this._lastApplyPromise = this._onApply();
     });
@@ -43,8 +42,8 @@ export class FormalView {
     this.errorBox = document.createElement("div");
     this.errorBox.className = "formal-error";
 
-    this.details.append(summary, this.textarea, this.applyButton, this.errorBox);
-    this.container.appendChild(this.details);
+    this.root.append(this.textarea, this.applyButton, this.errorBox);
+    this.container.appendChild(this.root);
   }
 
   _renderIfNotEditing() {

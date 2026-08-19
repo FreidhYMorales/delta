@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { EPSILON, cellValue, computeCellUpdateOps, parseCellTargets, rowLabel } from "./tableLogic.js";
+import {
+  EPSILON,
+  cellValue,
+  computeCellUpdateOps,
+  nameWithMarkers,
+  parseAlphabetInput,
+  parseCellTargets,
+  parseNameCell,
+  rowLabel,
+} from "./tableLogic.js";
 
 describe("parseCellTargets", () => {
   it("splits comma-separated labels, trims whitespace, drops empties and dedupes", () => {
@@ -26,6 +35,81 @@ describe("rowLabel", () => {
 
   it("has no prefix for a plain state", () => {
     expect(rowLabel({ label: "q2", initial: false, accepting: false })).toBe("q2");
+  });
+});
+
+describe("parseAlphabetInput", () => {
+  it("splits comma-separated symbols, trims whitespace, drops empties and dedupes", () => {
+    expect(parseAlphabetInput(" a, b ,, a,0")).toEqual(["a", "b", "0"]);
+  });
+
+  it("allows multi-character symbols", () => {
+    expect(parseAlphabetInput("ab, 00, 11")).toEqual(["ab", "00", "11"]);
+  });
+
+  it("keeps a literal ε — the epsilon column is opt-in now, not automatic", () => {
+    expect(parseAlphabetInput("a, ε, b")).toEqual(["a", "ε", "b"]);
+  });
+
+  it("treats a whitespace-only entry as a request for the epsilon column", () => {
+    expect(parseAlphabetInput("a, ,b")).toEqual(["a", "ε", "b"]);
+  });
+
+  it("silently drops a truly empty entry (stray comma) instead of treating it as epsilon", () => {
+    expect(parseAlphabetInput("a,,b")).toEqual(["a", "b"]);
+  });
+
+  it("dedupes a whitespace entry against a literal ε typed elsewhere", () => {
+    expect(parseAlphabetInput("a, , ε, b")).toEqual(["a", "ε", "b"]);
+  });
+
+  it("returns an empty array for a blank input", () => {
+    expect(parseAlphabetInput("")).toEqual([]);
+  });
+});
+
+describe("nameWithMarkers", () => {
+  it("prefixes an initial state with ->", () => {
+    expect(nameWithMarkers({ label: "q0", initial: true, accepting: false })).toBe("->q0");
+  });
+
+  it("prefixes an accepting state with *", () => {
+    expect(nameWithMarkers({ label: "q1", initial: false, accepting: true })).toBe("*q1");
+  });
+
+  it("combines both markers, initial first", () => {
+    expect(nameWithMarkers({ label: "q0", initial: true, accepting: true })).toBe("->*q0");
+  });
+
+  it("has no prefix for a plain state", () => {
+    expect(nameWithMarkers({ label: "q2", initial: false, accepting: false })).toBe("q2");
+  });
+});
+
+describe("parseNameCell", () => {
+  it("detects a -> prefix as initial", () => {
+    expect(parseNameCell("->q0")).toEqual({ label: "q0", initial: true, accepting: false });
+  });
+
+  it("detects a * prefix as accepting", () => {
+    expect(parseNameCell("*q1")).toEqual({ label: "q1", initial: false, accepting: true });
+  });
+
+  it("detects both markers regardless of order", () => {
+    expect(parseNameCell("->*q0")).toEqual({ label: "q0", initial: true, accepting: true });
+    expect(parseNameCell("*->q0")).toEqual({ label: "q0", initial: true, accepting: true });
+  });
+
+  it("tolerates whitespace around and between the markers", () => {
+    expect(parseNameCell("  -> * q0  ")).toEqual({ label: "q0", initial: true, accepting: true });
+  });
+
+  it("reports no markers and the bare label for a plain name", () => {
+    expect(parseNameCell("q2")).toEqual({ label: "q2", initial: false, accepting: false });
+  });
+
+  it("does not treat a bare * inside the label (not at the start) as a marker", () => {
+    expect(parseNameCell("q*2")).toEqual({ label: "q*2", initial: false, accepting: false });
   });
 });
 

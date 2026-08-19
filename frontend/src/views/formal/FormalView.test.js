@@ -35,10 +35,10 @@ beforeEach(() => {
 });
 
 describe("FormalView (task 7.5)", () => {
-  it("is collapsed by default", async () => {
+  it("renders into a plain .formal-view wrapper (visibility is the tab group's job, main.js)", async () => {
     const { container } = await setup();
-    const details = container.querySelector("details.formal-view");
-    expect(details.open).toBe(false);
+    expect(container.querySelector(".formal-view")).toBeTruthy();
+    expect(container.querySelector(".formal-view textarea")).toBeTruthy();
   });
 
   it("renders the current formal definition in a textarea", async () => {

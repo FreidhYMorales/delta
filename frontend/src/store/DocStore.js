@@ -33,7 +33,16 @@ export class DocStore {
     this.edges = new Map();
     /** @type {Derived} */
     this.derived = { classification: "Dfa", alphabet: [], unreachable: [] };
+    /** @type {string|null} filesystem path of the last imported/exported .jff,
+     * for the canvas info bar's filename chip (wireframe parity). */
+    this.filePath = null;
     this._listeners = new Set();
+  }
+
+  /** @param {string} path */
+  setFilePath(path) {
+    this.filePath = path;
+    this._notify();
   }
 
   /** @param {(store: DocStore) => void} listener @returns {() => void} unsubscribe */

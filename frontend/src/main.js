@@ -1,8 +1,12 @@
 // App shell: wires the Tauri IPC client, DocStore, shared ViewContext and
-// the app's views together (PR5's DiagramView/TableView/FormalView plus
-// PR6's TestingView — L2 testing drawer, task 7.6). The L3 interop menu
-// (task 7.7) reuses `jff.import`/`jff.export`, already registered since
-// PR5, now wired to real native file dialogs below.
+// the app's views together. Layout is the plan worked out with the user
+// (wireframe, this session): menu bar, canvas pane (60%, DiagramView owns
+// its own internal toolbar), a draggable resizer, and a right column split
+// into an upper tab group (Tabla de estados / Definición formal) and a
+// lower tab group (TestingView's own Cadena/Lote/Resultados tabs) — see
+// docs/decisions.md for the self-loop/curved-edge geometry that went with
+// it. The L3 interop menu reuses `jff.import`/`jff.export`, wired to real
+// native file dialogs below.
 
 import "./style.css";
 import * as client from "./tauri/client.js";
@@ -13,11 +17,14 @@ import { TableView } from "./views/table/TableView.js";
 import { FormalView } from "./views/formal/FormalView.js";
 import { TestingView } from "./views/testing/TestingView.js";
 import { MenuBar } from "./views/menubar/MenuBar.js";
+import { Toolbar } from "./views/toolbar/Toolbar.js";
 import { circleLayout } from "./views/diagram/geometry.js";
 import { promptModal } from "./ui/promptModal.js";
 import { pickOpenPath, pickSavePath } from "./ui/nativeDialog.js";
 import { showNotice } from "./ui/notice.js";
 import { reportItemLines, reportTitle } from "./ui/interopReport.js";
+import { createTabs } from "./ui/tabs.js";
+import { wireResizer } from "./ui/resizer.js";
 
 function circleLayoutAction(docStore) {
   const states = docStore.getStates();
@@ -34,15 +41,33 @@ async function main() {
   const shell = document.createElement("div");
   shell.className = "app-shell";
   const menuBarHost = document.createElement("div");
+  const toolbarHost = document.createElement("div");
   const appBody = document.createElement("div");
   appBody.className = "app-body";
-  const diagramPane = document.createElement("div");
-  diagramPane.className = "diagram-pane";
-  const rightDock = document.createElement("div");
-  rightDock.className = "right-dock";
-  appBody.append(diagramPane, rightDock);
-  shell.append(menuBarHost, appBody);
+
+  const canvasPane = document.createElement("div");
+  canvasPane.className = "canvas-pane";
+
+  const resizer = document.createElement("div");
+  resizer.className = "resizer";
+
+  const rightCol = document.createElement("div");
+  rightCol.className = "right-col";
+  const panelUpper = document.createElement("div");
+  panelUpper.className = "panel-upper";
+  const panelLower = document.createElement("div");
+  panelLower.className = "panel-lower";
+  rightCol.append(panelUpper, panelLower);
+
+  appBody.append(canvasPane, resizer, rightCol);
+  shell.append(menuBarHost, toolbarHost, appBody);
   app.appendChild(shell);
+  wireResizer(resizer, appBody, canvasPane);
+
+  const upperTabs = createTabs(panelUpper, [
+    { id: "tabla", label: "Tabla de estados" },
+    { id: "formal", label: "Definición formal" },
+  ]);
 
   const docStore = new DocStore(client);
 
@@ -63,6 +88,7 @@ async function main() {
       try {
         const result = await client.jffImport(path);
         docStore.loadSnapshot(result.snapshot);
+        docStore.setFilePath(path);
         // spec `jflap-interop` > "Visible Loss Report on Lossy Conversion":
         // a non-empty report is always shown, never swallowed/console-only.
         if (result.report.items.length) {
@@ -80,6 +106,7 @@ async function main() {
     exportJff: async (path) => {
       try {
         const report = await client.jffExport(path);
+        docStore.setFilePath(path);
         if (report.items.length) {
           showNotice({
             kind: "info",
@@ -97,13 +124,13 @@ async function main() {
     layout: { circle: () => circleLayoutAction(docStore) },
   });
 
-  const diagramView = new DiagramView(diagramPane, docStore, ctx);
+  const diagramView = new DiagramView(canvasPane, docStore, ctx);
   ctx.viewport = diagramView.viewport;
-  ctx.setActiveStates = (ids) => diagramView.setActiveStates(ids);
+  new Toolbar(toolbarHost, ctx);
 
-  new TableView(rightDock, docStore);
-  new FormalView(rightDock, docStore);
-  const testingView = new TestingView(diagramPane, docStore, ctx);
+  new TableView(upperTabs.panels.get("tabla"), docStore, ctx);
+  new FormalView(upperTabs.panels.get("formal"), docStore);
+  const testingView = new TestingView(panelLower, docStore, ctx);
   ctx.testing = testingView.controls;
 
   // Constructed last so its `when(ctx)` guards evaluate against the fully

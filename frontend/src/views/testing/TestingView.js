@@ -1,15 +1,26 @@
-// L2: testing drawer (task 7.6, spec `fa-simulation`, design D6's
-// progressive-disclosure "L2 testing drawer (single trace + batch), bottom"
-// and the kflap-v0.1 UX reference (README "Verificación de cadenas"):
-// single-string verdict + step-by-step trace with `◀ ▶` highlighting the
-// active states on the diagram, plus a batch results table. Collapsed by
-// default like the L1 dock (`<details>`, no `open`), and — per design D6
-// ("nothing can exist as a toolbar-only tool") — only reachable through the
-// command registry's `test.singleTrace`/`test.batch` actions, which merely
-// open this drawer and focus the relevant input; running a trace itself is
-// still a user click, same as every other view in this app.
+// L2: testing panel (task 7.6, spec `fa-simulation`): single-string verdict
+// + the full trace rendered as connected chips (wireframe parity — the
+// previous `◀ ▶` step-nav + live diagram highlighting was dropped in favor
+// of showing the whole trace at once, docs/decisions.md), plus a batch
+// results table. Lives in the right column's lower tab group (main.js),
+// split into three tabs matching the layout plan agreed with the user:
+// "Cadena" (single-string input), "Lote" (batch input), "Resultados"
+// (verdict/trace/batch table) — clicking Calcular jumps straight to
+// Resultados, so the answer is always where you land. Only reachable
+// through the command registry's `test.singleTrace`/`test.batch` actions
+// (design D6: "nothing can exist as a toolbar-only tool"), which select the
+// relevant tab and focus its input; running a trace itself is still a user
+// click, same as every other view in this app.
 
+import { createTabs } from "../../ui/tabs.js";
 import { formatStepStates, isTruncated, parseBatchLines, tokenizeInput, verdictLabel } from "./testingLogic.js";
+
+/** @param {string} outcome one of `TraceDto.outcome`'s Rust-side values */
+function verdictVariant(outcome) {
+  if (outcome === "Accepted") return "accepted";
+  if (isTruncated(outcome)) return "truncated";
+  return "rejected";
+}
 
 export class TestingView {
   /**
@@ -24,7 +35,9 @@ export class TestingView {
     /** Current single-string trace result, or `null`. `{outcome, steps}` —
      * shape mirrors `TraceDto` (`src-tauri/src/commands/sim.rs`). */
     this._trace = null;
-    this._stepIndex = 0;
+    /** Which of the two Resultados sub-views to show: `"single"`, `"batch"`,
+     * or `null` before either has run once. */
+    this._resultMode = null;
 
     this._build();
     docStore.subscribe(() => this._renderBatchRows());
@@ -35,89 +48,106 @@ export class TestingView {
      * `ctx.viewport = diagramView.viewport` in `main.js`). */
     this.controls = {
       openSingle: () => {
-        this.details.open = true;
+        this._selectTab("cadena");
         this.singleInput.focus();
       },
       openBatch: () => {
-        this.details.open = true;
+        this._selectTab("lote");
         this.batchTextarea.focus();
       },
     };
   }
 
   _build() {
-    this.details = document.createElement("details");
-    this.details.className = "testing-view";
-    const summary = document.createElement("summary");
-    summary.textContent = "Testing";
-    this.details.addEventListener("toggle", () => {
-      if (!this.details.open) this._clearActiveStates();
-    });
+    this.root = document.createElement("div");
+    this.root.className = "testing-view";
 
-    // --- Single-string trace -------------------------------------------
-    const singleSection = document.createElement("div");
-    singleSection.className = "testing-single";
+    const { panels, select } = createTabs(this.root, [
+      { id: "cadena", label: "Cadena" },
+      { id: "lote", label: "Lote" },
+      { id: "resultados", label: "Resultados" },
+    ]);
+    this._selectTab = select;
+
+    // --- Cadena tab: single-string input, runs on Calcular -----------------
+    const cadenaSection = document.createElement("div");
+    cadenaSection.className = "testing-single";
+
+    const singleLabel = document.createElement("label");
+    singleLabel.className = "field-label";
+    singleLabel.textContent = "Cadena a verificar";
 
     this.singleInput = document.createElement("input");
     this.singleInput.type = "text";
-    this.singleInput.className = "testing-single-input";
+    this.singleInput.className = "testing-single-input string-input";
     this.singleInput.placeholder = "Input string (blank = ε)";
 
     this.runButton = document.createElement("button");
     this.runButton.type = "button";
-    this.runButton.textContent = "Run";
+    this.runButton.className = "btn-primary";
+    this.runButton.textContent = "Calcular →";
     this.runButton.addEventListener("click", () => {
       this._lastRunPromise = this._runSingle();
     });
+    const singleCalcRow = document.createElement("div");
+    singleCalcRow.className = "calc-row";
+    singleCalcRow.appendChild(this.runButton);
 
-    this.verdict = document.createElement("span");
-    this.verdict.className = "testing-verdict";
+    cadenaSection.append(singleLabel, this.singleInput, singleCalcRow);
+    panels.get("cadena").appendChild(cadenaSection);
 
-    const stepNav = document.createElement("div");
-    stepNav.className = "testing-step-nav";
-    this.prevStepButton = document.createElement("button");
-    this.prevStepButton.type = "button";
-    this.prevStepButton.className = "testing-step-prev";
-    this.prevStepButton.textContent = "◀";
-    this.prevStepButton.addEventListener("click", () => this._stepBy(-1));
-    this.stepLabel = document.createElement("span");
-    this.stepLabel.className = "testing-step-label";
-    this.nextStepButton = document.createElement("button");
-    this.nextStepButton.type = "button";
-    this.nextStepButton.className = "testing-step-next";
-    this.nextStepButton.textContent = "▶";
-    this.nextStepButton.addEventListener("click", () => this._stepBy(1));
-    stepNav.append(this.prevStepButton, this.stepLabel, this.nextStepButton);
+    // --- Lote tab: batch textarea, runs on Calcular lote --------------------
+    const loteSection = document.createElement("div");
+    loteSection.className = "testing-batch";
 
-    this.activeStatesLabel = document.createElement("div");
-    this.activeStatesLabel.className = "testing-active-states";
-
-    singleSection.append(this.singleInput, this.runButton, this.verdict, stepNav, this.activeStatesLabel);
-
-    // --- Batch ------------------------------------------------------------
-    const batchSection = document.createElement("div");
-    batchSection.className = "testing-batch";
+    const batchLabel = document.createElement("label");
+    batchLabel.className = "field-label";
+    batchLabel.textContent = "Una cadena por línea";
 
     this.batchTextarea = document.createElement("textarea");
-    this.batchTextarea.className = "testing-batch-input";
+    this.batchTextarea.className = "testing-batch-input string-input";
     this.batchTextarea.placeholder = "One string per line";
 
     this.batchRunButton = document.createElement("button");
     this.batchRunButton.type = "button";
-    this.batchRunButton.textContent = "Run batch";
+    this.batchRunButton.className = "btn-primary";
+    this.batchRunButton.textContent = "Calcular lote →";
     this.batchRunButton.addEventListener("click", () => {
       this._lastBatchPromise = this._runBatch();
     });
+    const batchCalcRow = document.createElement("div");
+    batchCalcRow.className = "calc-row";
+    batchCalcRow.appendChild(this.batchRunButton);
+
+    loteSection.append(batchLabel, this.batchTextarea, batchCalcRow);
+    panels.get("lote").appendChild(loteSection);
+
+    // --- Resultados tab: verdict pill + full trace as connected chips
+    // (wireframe parity, docs/decisions.md: replaces the previous ◀/▶
+    // step-nav + live canvas highlighting — explicit user call, since the
+    // wireframe shows the whole trace at once) + batch table -------------
+    const resultadosSection = document.createElement("div");
+    resultadosSection.className = "testing-results";
+
+    this.emptyHint = document.createElement("p");
+    this.emptyHint.className = "empty-hint";
+    this.emptyHint.textContent = 'Todavía no calculaste nada — probá "Calcular" en la pestaña Cadena.';
+
+    this.verdict = document.createElement("span");
+    this.verdict.className = "testing-verdict verdict";
+
+    this.traceRow = document.createElement("div");
+    this.traceRow.className = "trace-row";
 
     this.batchTable = document.createElement("table");
     this.batchTable.className = "testing-batch-table";
     this.batchTbody = document.createElement("tbody");
     this.batchTable.appendChild(this.batchTbody);
 
-    batchSection.append(this.batchTextarea, this.batchRunButton, this.batchTable);
+    resultadosSection.append(this.emptyHint, this.verdict, this.traceRow, this.batchTable);
+    panels.get("resultados").appendChild(resultadosSection);
 
-    this.details.append(summary, singleSection, batchSection);
-    this.container.appendChild(this.details);
+    this.container.appendChild(this.root);
   }
 
   _alphabet() {
@@ -131,8 +161,9 @@ export class TestingView {
   async _runSingle() {
     const word = tokenizeInput(this.singleInput.value, this._alphabet());
     this._trace = await this.ctx.simTrace(word);
-    this._stepIndex = 0;
-    this._renderSingle();
+    this._resultMode = "single";
+    this._renderResults();
+    this._selectTab("resultados");
   }
 
   async _runBatch() {
@@ -140,50 +171,57 @@ export class TestingView {
     const words = lines.map((line) => tokenizeInput(line, this._alphabet()));
     const traces = await this.ctx.simBatch(words);
     this._batchResults = lines.map((line, i) => ({ input: line, outcome: traces[i]?.outcome ?? "Rejected" }));
-    this._renderBatchRows();
-  }
-
-  _stepBy(delta) {
-    if (!this._trace || !this._trace.steps.length) return;
-    const max = this._trace.steps.length - 1;
-    this._stepIndex = Math.min(max, Math.max(0, this._stepIndex + delta));
-    this._renderSingle();
-  }
-
-  _clearActiveStates() {
-    this.ctx.setActiveStates([]);
+    this._resultMode = "batch";
+    this._renderResults();
+    this._selectTab("resultados");
   }
 
   _render() {
+    this._renderResults();
+  }
+
+  /** Resultados shows exactly one of: the empty hint, the single-trace
+   * verdict+trace-row, or the batch table — never a leftover from whichever
+   * ran previously (bug: after a batch run, the single-trace empty hint
+   * stayed visible alongside the batch table). `_resultMode` tracks which
+   * of the two was last run; `null` until either has run once. */
+  _renderResults() {
     this._renderSingle();
     this._renderBatchRows();
+    this.emptyHint.hidden = this._resultMode != null;
+    this.verdict.hidden = this._resultMode !== "single";
+    this.traceRow.hidden = this._resultMode !== "single";
+    this.batchTable.hidden = this._resultMode !== "batch";
   }
 
   _renderSingle() {
     if (!this._trace) {
       this.verdict.textContent = "";
-      this.stepLabel.textContent = "";
-      this.activeStatesLabel.textContent = "";
-      this.prevStepButton.disabled = true;
-      this.nextStepButton.disabled = true;
+      this.verdict.className = "testing-verdict verdict";
+      this.traceRow.innerHTML = "";
       return;
     }
     const { outcome, steps } = this._trace;
     this.verdict.textContent = verdictLabel(outcome);
-    this.verdict.classList.toggle("testing-verdict-accepted", outcome === "Accepted");
-    this.verdict.classList.toggle("testing-verdict-rejected", outcome === "Rejected" || outcome === "Stuck");
-    this.verdict.classList.toggle("testing-verdict-truncated", isTruncated(outcome));
+    const variant = verdictVariant(outcome);
+    this.verdict.className = "testing-verdict verdict";
+    this.verdict.classList.add(variant, `testing-verdict-${variant}`);
 
-    const total = steps.length;
-    this.stepLabel.textContent = total ? `Step ${this._stepIndex + 1}/${total}` : "No steps";
-    this.prevStepButton.disabled = this._stepIndex <= 0;
-    this.nextStepButton.disabled = total === 0 || this._stepIndex >= total - 1;
-
-    const activeIds = steps[this._stepIndex] ?? [];
-    this.activeStatesLabel.textContent = activeIds.length
-      ? `Active: ${formatStepStates(activeIds, this._labelOf())}`
-      : "Active: —";
-    this.ctx.setActiveStates(activeIds);
+    const labelOf = this._labelOf();
+    this.traceRow.innerHTML = "";
+    steps.forEach((stepIds, i) => {
+      const chip = document.createElement("span");
+      chip.className = "trace-step";
+      if (i === steps.length - 1) chip.classList.add("hit");
+      chip.textContent = stepIds.length ? formatStepStates(stepIds, labelOf) : "—";
+      this.traceRow.appendChild(chip);
+      if (i < steps.length - 1) {
+        const arrow = document.createElement("span");
+        arrow.className = "trace-arrow";
+        arrow.textContent = "→";
+        this.traceRow.appendChild(arrow);
+      }
+    });
   }
 
   _renderBatchRows() {

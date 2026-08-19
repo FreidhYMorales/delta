@@ -25,12 +25,11 @@ async function setup(hooks = {}) {
   };
   const docStore = new DocStore(client);
   await docStore.load();
-  const setActiveStates = vi.fn();
-  const ctx = new ViewContext(docStore, { setActiveStates, ...hooks });
+  const ctx = new ViewContext(docStore, hooks);
   const container = document.createElement("div");
   document.body.appendChild(container);
   const view = new TestingView(container, docStore, ctx);
-  return { docStore, ctx, container, view, setActiveStates };
+  return { docStore, ctx, container, view };
 }
 
 beforeEach(() => {
@@ -38,19 +37,19 @@ beforeEach(() => {
 });
 
 describe("TestingView (task 7.6)", () => {
-  it("is collapsed by default", async () => {
+  it("renders three tabs: Cadena, Lote, Resultados, with Cadena selected by default", async () => {
     const { container } = await setup();
-    const details = container.querySelector("details.testing-view");
-    expect(details).toBeTruthy();
-    expect(details.open).toBe(false);
+    const tabs = [...container.querySelectorAll(".tab")].map((t) => t.textContent);
+    expect(tabs).toEqual(["Cadena", "Lote", "Resultados"]);
+    expect(container.querySelector(".tab.active").textContent).toBe("Cadena");
   });
 
-  it("runs a single-string trace, tokenizing against the known alphabet, and shows the verdict", async () => {
+  it("runs a single-string trace, tokenizing against the known alphabet, shows the verdict and full trace, and jumps to Resultados", async () => {
     const simTrace = vi.fn().mockResolvedValue({
       outcome: "Accepted",
       steps: [[1], [2]],
     });
-    const { container, view, setActiveStates } = await setup({ simTrace });
+    const { container, view } = await setup({ simTrace });
 
     container.querySelector(".testing-single-input").value = "a";
     container.querySelector(".testing-single button").click();
@@ -58,42 +57,14 @@ describe("TestingView (task 7.6)", () => {
 
     expect(simTrace).toHaveBeenCalledWith(["a"]);
     expect(container.querySelector(".testing-verdict").textContent).toBe("Accepted");
-    expect(container.querySelector(".testing-step-label").textContent).toBe("Step 1/2");
-    expect(setActiveStates).toHaveBeenLastCalledWith([1]);
+    expect(container.querySelector(".testing-verdict").classList.contains("accepted")).toBe(true);
+    const steps = [...container.querySelectorAll(".trace-step")].map((s) => s.textContent);
+    expect(steps).toEqual(["q0", "q1"]);
+    expect(container.querySelector(".trace-step.hit").textContent).toBe("q1");
+    expect(container.querySelector(".tab.active").textContent).toBe("Resultados");
   });
 
-  it("steps forward/back through the trace with ◀ ▶, highlighting active states each time", async () => {
-    const simTrace = vi.fn().mockResolvedValue({
-      outcome: "Rejected",
-      steps: [[1], [2], []],
-    });
-    const { container, view, setActiveStates } = await setup({ simTrace });
-
-    container.querySelector(".testing-single-input").value = "aa";
-    container.querySelector(".testing-single button").click();
-    await view._lastRunPromise;
-    setActiveStates.mockClear();
-
-    container.querySelector(".testing-step-next").click();
-    expect(container.querySelector(".testing-step-label").textContent).toBe("Step 2/3");
-    expect(setActiveStates).toHaveBeenLastCalledWith([2]);
-
-    container.querySelector(".testing-step-prev").click();
-    expect(container.querySelector(".testing-step-label").textContent).toBe("Step 1/3");
-    expect(setActiveStates).toHaveBeenLastCalledWith([1]);
-  });
-
-  it("clears diagram highlighting when the drawer is collapsed again", async () => {
-    const { container, setActiveStates } = await setup();
-    const details = container.querySelector("details.testing-view");
-    details.open = true;
-    details.dispatchEvent(new Event("toggle"));
-    details.open = false;
-    details.dispatchEvent(new Event("toggle"));
-    expect(setActiveStates).toHaveBeenCalledWith([]);
-  });
-
-  it("runs a batch of strings (one per line) and renders a results table", async () => {
+  it("runs a batch of strings (one per line), renders a results table, and jumps to Resultados", async () => {
     const simBatch = vi.fn().mockResolvedValue([
       { outcome: "Accepted", steps: [] },
       { outcome: "Rejected", steps: [] },
@@ -110,20 +81,46 @@ describe("TestingView (task 7.6)", () => {
     expect(rows[0].textContent).toContain("a");
     expect(rows[0].textContent).toContain("Accepted");
     expect(rows[1].textContent).toContain("Rejected");
+    expect(container.querySelector(".tab.active").textContent).toBe("Resultados");
   });
 
-  it("exposes openSingle/openBatch controls that reveal the drawer and focus the right input", async () => {
+  it("Resultados shows exactly one of empty-hint/single-trace/batch-table at a time (bug: batch leaves the Cadena hint visible)", async () => {
+    const simTrace = vi.fn().mockResolvedValue({ outcome: "Accepted", steps: [[1]] });
+    const simBatch = vi.fn().mockResolvedValue([{ outcome: "Accepted", steps: [] }]);
+    const { container, view } = await setup({ simTrace, simBatch });
+
+    expect(container.querySelector(".empty-hint").hidden).toBe(false);
+    expect(container.querySelector(".testing-verdict").hidden).toBe(true);
+    expect(container.querySelector(".testing-batch-table").hidden).toBe(true);
+
+    container.querySelector(".testing-batch-input").value = "a";
+    container.querySelector(".testing-batch button").click();
+    await view._lastBatchPromise;
+
+    expect(container.querySelector(".empty-hint").hidden).toBe(true);
+    expect(container.querySelector(".testing-verdict").hidden).toBe(true);
+    expect(container.querySelector(".trace-row").hidden).toBe(true);
+    expect(container.querySelector(".testing-batch-table").hidden).toBe(false);
+
+    container.querySelector(".testing-single-input").value = "a";
+    container.querySelector(".testing-single button").click();
+    await view._lastRunPromise;
+
+    expect(container.querySelector(".empty-hint").hidden).toBe(true);
+    expect(container.querySelector(".testing-verdict").hidden).toBe(false);
+    expect(container.querySelector(".trace-row").hidden).toBe(false);
+    expect(container.querySelector(".testing-batch-table").hidden).toBe(true);
+  });
+
+  it("exposes openSingle/openBatch controls that select the right tab and focus its input", async () => {
     const { container, view } = await setup();
-    const details = container.querySelector("details.testing-view");
-    expect(details.open).toBe(false);
 
     view.controls.openSingle();
-    expect(details.open).toBe(true);
+    expect(container.querySelector(".tab.active").textContent).toBe("Cadena");
     expect(document.activeElement).toBe(container.querySelector(".testing-single-input"));
 
-    details.open = false;
     view.controls.openBatch();
-    expect(details.open).toBe(true);
+    expect(container.querySelector(".tab.active").textContent).toBe("Lote");
     expect(document.activeElement).toBe(container.querySelector(".testing-batch-input"));
   });
 });
