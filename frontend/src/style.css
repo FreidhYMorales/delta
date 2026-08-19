@@ -546,6 +546,16 @@ body {
   pointer-events: none;
 }
 
+/* Moore-only: a state's output, shown as a smaller muted line under its
+ * circle — no equivalent for FA/Mealy (see MooreDiagramView.js). */
+.state-output-label {
+  fill: var(--text-muted);
+  font-size: 10px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
 /* Free canvas navigation (drag-to-pan on empty canvas, mouse-wheel zoom) —
  * `.panning` is toggled on the svg root while a pan drag is in progress
  * (DiagramView.js), `.tool-create-state` while that tool is active (panning

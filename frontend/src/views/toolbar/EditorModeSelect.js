@@ -6,28 +6,45 @@
 //  - "Expresión Regular"/"Gramática Regular" stay menu-style jumps
 //    (`findAction(id).run(ctx)` against the FA `ViewContext`, then reset
 //    back to "Autómata Finito" — see docs/decisions.md) — not real modes.
-//  - "Máquina de Mealy" is a REAL mode now: selecting it calls
-//    `onSwitchMode("mealy")` and STAYS selected, same as "Autómata Finito"
-//    stays selected while in the FA editor. `main.js` owns what "switching
-//    mode" actually means (which canvas/toolbar/panels are visible).
+//  - "Máquina de Mealy"/"Máquina de Moore" are REAL modes: selecting one
+//    calls `onSwitchMode(value)` and STAYS selected, same as "Autómata
+//    Finito" stays selected while in the FA editor. `main.js` owns what
+//    "switching mode" actually means (which canvas/toolbar/panels are
+//    visible) — this component just reports the chosen value.
 // PDA/Turing machine stay honestly disabled placeholders — no editor
 // exists for them yet.
+//
+// The set of real modes is passed in (`hooks.modes`), not hardcoded to two
+// — Moore was the first mode added after Mealy, and PDA/Turing Machine are
+// next on this project's roadmap (see docs/decisions.md), so a third
+// hardcoded branch here would need rewriting again for each new one.
 
 import { EDITOR_MODE_IDS, findAction } from "../../commands/registry.js";
 
-const FINITE_VALUE = "finite";
-const MEALY_VALUE = "mealy";
+/** Real JFLAP's own "New" menu order (gui.action.NewAction, decompiled —
+ * docs/decisions.md): Finite Automaton, Mealy, Moore, then Pushdown/Turing
+ * (still disabled placeholders below). */
+const DEFAULT_MODES = [
+  { value: "finite", label: "Autómata Finito" },
+  { value: "mealy", label: "Máquina de Mealy" },
+  { value: "moore", label: "Máquina de Moore" },
+];
 
 export class EditorModeSelect {
   /**
    * @param {HTMLElement} container
    * @param {import('../../commands/context.js').ViewContext} ctx FA context, for the jump-style actions
-   * @param {{onSwitchMode?: (mode: 'finite'|'mealy') => void}} [hooks]
+   * @param {{
+   *   onSwitchMode?: (mode: string) => void,
+   *   modes?: {value: string, label: string}[],
+   * }} [hooks]
    */
-  constructor(container, ctx, { onSwitchMode } = {}) {
+  constructor(container, ctx, { onSwitchMode, modes = DEFAULT_MODES } = {}) {
     this.container = container;
     this.ctx = ctx;
     this.onSwitchMode = onSwitchMode ?? (() => {});
+    this.modes = modes;
+    this._modeValues = new Set(modes.map((m) => m.value));
     this._buildDom();
   }
 
@@ -41,18 +58,12 @@ export class EditorModeSelect {
     this.select = document.createElement("select");
     this.select.id = "editor-mode";
 
-    const finiteOption = document.createElement("option");
-    finiteOption.value = FINITE_VALUE;
-    finiteOption.textContent = "Autómata Finito";
-    this.select.appendChild(finiteOption);
-
-    // Real JFLAP's own "New" menu order (gui.action.NewAction, decompiled —
-    // docs/decisions.md): Mealy comes right after Finite Automaton, before
-    // Pushdown/Turing.
-    const mealyOption = document.createElement("option");
-    mealyOption.value = MEALY_VALUE;
-    mealyOption.textContent = "Máquina de Mealy";
-    this.select.appendChild(mealyOption);
+    for (const mode of this.modes) {
+      const option = document.createElement("option");
+      option.value = mode.value;
+      option.textContent = mode.label;
+      this.select.appendChild(option);
+    }
 
     for (const label of ["Autómata de Pila — próximamente", "Máquina de Turing — próximamente"]) {
       const option = document.createElement("option");
@@ -70,12 +81,12 @@ export class EditorModeSelect {
 
     this.select.addEventListener("change", () => {
       const value = this.select.value;
-      if (value === MEALY_VALUE || value === FINITE_VALUE) {
+      if (this._modeValues.has(value)) {
         this.onSwitchMode(value);
         return;
       }
       findAction(value)?.run(this.ctx);
-      this.select.value = FINITE_VALUE;
+      this.select.value = this.modes[0].value;
     });
 
     this.root.append(modeLabel, this.select);

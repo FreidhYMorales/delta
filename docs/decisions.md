@@ -10,6 +10,68 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Frontend de Moore (editor completo desde el arranque) y `switchMode` generalizado a N modos
+
+**Dónde**: `frontend/src/store/MooreDocStore.js`, `.../commands/{MooreContext,
+mooreRegistry}.js`, `.../views/mooreDiagram/{MooreDiagramView,MooreToolbar,
+MooreSimView,mooreLogic}.js`, `.../views/toolbar/EditorModeSelect.js`,
+`.../tauri/client.js`, `main.js`, `style.css`.
+
+**A diferencia de la primera ronda de Mealy, esta ronda de Moore nace con
+paridad completa** (registry propio + atajos de teclado + menú contextual +
+importar/exportar) en vez de dejarlo para una ronda de pulido posterior —
+ya se conocía el patrón completo de haberlo construido una vez para Mealy,
+así que no tenía sentido repetir el mismo camino de "v1 recortada, pulido
+después".
+
+**`switchMode`/`EditorModeSelect` dejaron de estar hardcodeados a dos
+modos**: con Moore como tercer modo real y Pila/Turing todavía pendientes
+en la hoja de ruta, mantener un toggle booleano (`showMealy = mode ===
+"mealy"`) habría significado reescribirlo de nuevo en cada máquina nueva.
+Ahora `main.js` arma un registro `modes = { finite, mealy, moore } ->
+{label, appBody, toolbar}`, `switchMode` itera ese registro (oculta todas
+las toolbars salvo la del modo destino, reemplaza el `app-body` actual por
+el del modo destino solo si cambió), y `menuBar.root.hidden = mode !==
+"finite"` en vez del `showMealy` de antes. `EditorModeSelect` recibe la
+lista de modos reales por parámetro (`hooks.modes`, con default de los tres
+actuales) en vez de tener `FINITE_VALUE`/`MEALY_VALUE` fijos en el módulo —
+listo para que Pila/Turing solo necesiten agregar una entrada más el día
+que tengan editor propio.
+
+**Diferencias reales de Moore frente a Mealy en el editor, todas
+consecuencia directa de que la salida vive en el estado, no en la arista**
+(ver la entrada de backend de Moore, más abajo): las aristas del canvas
+muestran solo el símbolo de entrada (sin el par entrada/salida de Mealy);
+cada círculo de estado tiene una segunda línea de texto más chica debajo
+mostrando su salida (`.state-output-label`, nuevo, sin equivalente en
+Mealy/AFD-AFN); el menú contextual y la toolbar suman una acción nueva sin
+equivalente en Mealy, `state.setOutput` ("Fijar salida"), con botón propio
+en la toolbar además de estar en el menú contextual.
+
+**`MooreContext` suma `promptInput`/`promptOutput`** como hooks separados
+(no una reutilización forzada de `promptLabel`/`promptTransition` de
+Mealy) porque tienen sitios de uso y semántica genuinamente distintos —
+símbolo de entrada de una arista vs. salida de un estado.
+
+**Cómo se verificó**: 488/488 tests de frontend (83 nuevos). `vite build`
+limpio. Verificado en vivo en un dev server temporal (cerrado después): el
+ciclo de tres modos (AFD/AFN → Moore → Mealy → AFD/AFN) confirmado correcto
+a nivel DOM (toolbar oculta por modo, `menu-bar` alternando `display:flex`/
+`none`, canvas correcto montado en cada paso) y capturado en pantalla el
+editor de Moore completo (toolbar V/S/T/D + Marcar inicial + Fijar salida,
+Abrir/Guardar, pestañas Tabla de estados/Definición formal/Simular). No se
+verificó interacción de canvas en vivo (crear estado, ver la sub-etiqueta
+de salida) — mismo límite ya documentado de sesiones anteriores: sin
+backend Tauri real, `docStore.apply` no funciona en el dev server suelto, y
+inyectar el DOM a mano para simularlo ya demostró ser poco confiable en una
+ronda anterior (ver la entrada de pulido de Mealy sobre el menú contextual)
+— cubierto en su lugar por un test dedicado de vitest para esa ruta de
+render.
+
+**Pendiente**: Tabla de estados y Definición formal de Moore (las pestañas
+ya existen, vacías, montadas en `mooreUpperTabs` — decisión deliberada para
+no tener que retocar `main.js` de nuevo la próxima ronda).
+
 ## 2026-08-19 — Capa IPC de Moore: `MooreSession` propia, espejo de `mealy_ipc.rs` con `StateOutputSet`
 
 **Dónde**: `src-tauri/src/moore_ipc.rs`, `commands/moore.rs` (nuevos),

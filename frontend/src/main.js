@@ -38,6 +38,11 @@ import { MealyToolbar } from "./views/mealyDiagram/MealyToolbar.js";
 import { MealySimView } from "./views/mealyDiagram/MealySimView.js";
 import { MealyTableView } from "./views/mealyTable/MealyTableView.js";
 import { MealyFormalView } from "./views/mealyFormal/MealyFormalView.js";
+import { MooreDocStore } from "./store/MooreDocStore.js";
+import { MooreContext } from "./commands/MooreContext.js";
+import { MooreDiagramView } from "./views/mooreDiagram/MooreDiagramView.js";
+import { MooreToolbar } from "./views/mooreDiagram/MooreToolbar.js";
+import { MooreSimView } from "./views/mooreDiagram/MooreSimView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -107,10 +112,27 @@ async function main() {
   mealyRightCol.append(mealyPanelUpper);
   mealyAppBody.append(mealyCanvasPane, mealyResizer, mealyRightCol);
 
+  // Moore's own app-body — same shape as Mealy's, a separate document
+  // (`MooreDocStore`), never mounted alongside FA's or Mealy's (see the
+  // generalized `switchMode` below).
+  const mooreAppBody = document.createElement("div");
+  mooreAppBody.className = "app-body";
+  const mooreCanvasPane = document.createElement("div");
+  mooreCanvasPane.className = "canvas-pane";
+  const mooreResizer = document.createElement("div");
+  mooreResizer.className = "resizer";
+  const mooreRightCol = document.createElement("div");
+  mooreRightCol.className = "right-col";
+  const moorePanelUpper = document.createElement("div");
+  moorePanelUpper.className = "panel-upper";
+  mooreRightCol.append(moorePanelUpper);
+  mooreAppBody.append(mooreCanvasPane, mooreResizer, mooreRightCol);
+
   shell.append(menuBarHost, toolbarHost, appBody);
   app.appendChild(shell);
   wireResizer(resizer, appBody, canvasPane);
   wireResizer(mealyResizer, mealyAppBody, mealyCanvasPane);
+  wireResizer(mooreResizer, mooreAppBody, mooreCanvasPane);
 
   const upperTabs = createTabs(panelUpper, [
     { id: "tabla", label: "Tabla de estados" },
@@ -281,33 +303,99 @@ async function main() {
   new MealyFormalView(mealyUpperTabs.panels.get("formal"), mealyDocStore);
   new MealySimView(mealyUpperTabs.panels.get("simular"), (input) => client.mealySim(input));
 
+  // --- Moore machine: a separate document/session, same "isolated, not a
+  // variant" rationale as Mealy's (docs/decisions.md, the Moore backend
+  // entry: output lives on the state, not the edge). ----------------------
+  const mooreDocStore = new MooreDocStore(client);
+  const mooreCtx = new MooreContext(mooreDocStore, {
+    promptLabel: async (id) => {
+      const state = mooreDocStore.getState(id);
+      return promptModal("Rename state", state?.label ?? "");
+    },
+    // A single input symbol per prompt (`parseInputPrompt`, `mooreLogic.js`)
+    // — no "input/output" pair like Mealy's `promptTransition`, Moore's
+    // output lives on the state and is set via `promptOutput` below.
+    promptInput: async (existing = "") => promptModal("Transición (símbolo de entrada, p.ej. a)", existing),
+    promptOutput: async (id) => {
+      const state = mooreDocStore.getState(id);
+      return promptModal("Salida del estado", state?.output ?? "");
+    },
+    // Native JSON only (no `.jff` for Moore, same as Mealy — see
+    // docs/decisions.md).
+    openFile: async () => {
+      const path = await pickOpenJsonPath();
+      if (!path) return;
+      try {
+        const snapshot = await client.mooreOpen(path);
+        mooreDocStore.loadSnapshot(snapshot);
+        mooreDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo abrir el archivo", message: String(error?.message ?? error) });
+      }
+    },
+    saveFile: async () => {
+      const path = await pickSaveJsonPath();
+      if (!path) return;
+      try {
+        await client.mooreSave(path);
+        mooreDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo guardar el archivo", message: String(error?.message ?? error) });
+      }
+    },
+  });
+  const mooreDiagramView = new MooreDiagramView(mooreCanvasPane, mooreDocStore, mooreCtx);
+  mooreCtx.viewport = mooreDiagramView.viewport;
+  const mooreToolbar = new MooreToolbar(toolbarHost, mooreCtx);
+
+  const mooreUpperTabs = createTabs(moorePanelUpper, [
+    { id: "tabla", label: "Tabla de estados" },
+    { id: "formal", label: "Definición formal" },
+    { id: "simular", label: "Simular" },
+  ]);
+  new MooreSimView(mooreUpperTabs.panels.get("simular"), (input) => client.mooreSim(input));
+
+  // `modes` drives both the "Editor" dropdown's real-mode options and
+  // `switchMode` below — a small registry instead of a hardcoded N-way
+  // branch, since Moore is the second mode added after Mealy and PDA/
+  // Turing Machine are next on this project's roadmap (docs/decisions.md).
+  // Real JFLAP's own "New" menu order: Finite Automaton, Mealy, Moore.
+  const modes = {
+    finite: { label: "Autómata Finito", appBody, toolbar: faToolbar },
+    mealy: { label: "Máquina de Mealy", appBody: mealyAppBody, toolbar: mealyToolbar },
+    moore: { label: "Máquina de Moore", appBody: mooreAppBody, toolbar: mooreToolbar },
+  };
+
   const modeSelect = new EditorModeSelect(toolbarHost, ctx, {
+    modes: Object.entries(modes).map(([value, m]) => ({ value, label: m.label })),
     onSwitchMode: (mode) => switchMode(mode),
   });
 
   // Constructed last so its `when(ctx)` guards evaluate against the fully
   // wired context (real viewport/testing hooks, not their startup no-ops).
   // FA-scoped (Archivo/Editar/Ver/Convertir/Test) — none of that applies to
-  // a Mealy document, so it hides on the same `.root.hidden` toggle as
-  // `faToolbar`/`mealyToolbar` below.
+  // a Mealy or Moore document, so it hides for every mode but "finite".
   const menuBar = new MenuBar(menuBarHost, ctx);
 
-  /** @param {'finite'|'mealy'} mode */
+  let currentAppBody = appBody;
+
+  /** @param {string} mode one of `modes`' keys */
   function switchMode(mode) {
-    const showMealy = mode === "mealy";
-    faToolbar.root.hidden = showMealy;
-    mealyToolbar.root.hidden = !showMealy;
-    menuBar.root.hidden = showMealy;
-    if (showMealy) {
-      appBody.replaceWith(mealyAppBody);
-    } else {
-      mealyAppBody.replaceWith(appBody);
+    for (const [id, entry] of Object.entries(modes)) {
+      entry.toolbar.root.hidden = id !== mode;
     }
+    const nextAppBody = modes[mode].appBody;
+    if (nextAppBody !== currentAppBody) {
+      currentAppBody.replaceWith(nextAppBody);
+      currentAppBody = nextAppBody;
+    }
+    menuBar.root.hidden = mode !== "finite";
     modeSelect.setMode(mode);
   }
   mealyToolbar.root.hidden = true;
+  mooreToolbar.root.hidden = true;
 
-  await Promise.all([docStore.load(), mealyDocStore.load()]);
+  await Promise.all([docStore.load(), mealyDocStore.load(), mooreDocStore.load()]);
 }
 
 main();

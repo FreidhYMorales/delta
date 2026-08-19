@@ -182,3 +182,49 @@ export function mealySave(path) {
 export function mealySim(input) {
   return call("mealy_sim", { input });
 }
+
+// --- Moore machine (src-tauri/src/commands/moore.rs) — a genuinely
+// separate document/session from FA and Mealy, same "isolated, not a
+// variant" rationale (docs/decisions.md, the Moore backend entry). ---------
+
+/** @returns {Promise<import('../store/MooreDocStore.js').MooreDocSnapshot>} */
+export function mooreSnapshot() {
+  return call("moore_snapshot");
+}
+
+/**
+ * @param {Array<object>} ops MooreEditOpDto[]
+ * @returns {Promise<import('../store/MooreDocStore.js').MooreEditResult>}
+ */
+export function mooreApply(ops) {
+  return call("moore_apply", { ops });
+}
+
+/** @returns {Promise<import('../store/MooreDocStore.js').MooreEditResult|null>} */
+export function mooreUndo() {
+  return call("moore_undo");
+}
+
+/** @returns {Promise<import('../store/MooreDocStore.js').MooreEditResult|null>} */
+export function mooreRedo() {
+  return call("moore_redo");
+}
+
+/** @param {string} path @returns {Promise<import('../store/MooreDocStore.js').MooreDocSnapshot>} */
+export function mooreOpen(path) {
+  return call("moore_open", { path });
+}
+
+/** @param {string} path @returns {Promise<void>} */
+export function mooreSave(path) {
+  return call("moore_save", { path });
+}
+
+/** @param {string[]} input @returns {Promise<object>} MooreSimDto (tagged
+ * on `outcome`: "Completed"|"NoInitialState"|"NoTransition"|"Ambiguous").
+ * `Completed.outputs` has length input.length+1 — the initial state's
+ * output is emitted before consuming anything (see engine::moore's doc
+ * comment / docs/decisions.md, the Moore backend entry). */
+export function mooreSim(input) {
+  return call("moore_sim", { input });
+}
