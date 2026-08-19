@@ -66,6 +66,15 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
+/* Same recurring bug as `.toolbar[hidden]`/`.menu-dropdown[hidden]`/
+ * `.verdict`/`.trace-row`/`.testing-batch-table[hidden]`: `.menu-bar`'s own
+ * `display: flex` above beats the browser's default `[hidden] { display:
+ * none }` rule regardless of specificity or source order, so it needs an
+ * explicit override to actually hide (main.js's `switchMode`). */
+.menu-bar[hidden] {
+  display: none;
+}
+
 .menu-bar-menu {
   position: relative;
 }

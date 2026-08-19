@@ -10,6 +10,63 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Mealy: Tabla de estados y Definición formal, MenuBar oculto fuera de modo AFD/AFN
+
+**Dónde**: `frontend/src/views/mealyTable/{MealyTableView,mealyTableLogic}.js`
+(nuevos), `frontend/src/views/mealyFormal/{MealyFormalView,mealyFormalLogic}.js`
+(nuevos), `frontend/src/store/applyMealyModel.js` (nuevo, equivalente Mealy de
+`applyAutomatonModel.js`), `main.js`, `style.css`.
+
+**Qué cerraba esto**: los dos últimos ítems que quedaban explícitamente
+pendientes de Mealy — Tabla de estados y Definición formal equivalentes, y
+que `MenuBar` (Archivo/Editar/Ver/Convertir/Test, todo específico de AFD/AFN)
+quedara visible sin sentido en modo Mealy.
+
+**Tabla y Definición formal, adaptadas a la ausencia de estados de
+aceptación**: el prefijo `"->"` en el nombre de estado sigue marcando
+inicial, pero no existe el `"*"` de aceptación (Mealy no tiene `F`). Cada
+celda de la tabla combina destino y salida (`estado/salida`) en vez de solo
+el estado destino, porque una transición de Mealy produce una salida por
+cada símbolo de entrada leído, no solo un estado siguiente — la misma
+convención `input/output` ya usada en el diagrama y ahora también en la
+tabla y en la definición formal (una sola línea `δ(desde, entrada) =
+hasta/salida` en vez de separar δ y λ), para no introducir una cuarta
+notación distinta entre los tres editores de Mealy. La 6-tupla usa `Δ` para
+el alfabeto de salida (`M=(Q,Σ,Δ,δ,λ,q0)`, notación estándar de libro de
+texto) — no se encontró la notación formal propia de JFLAP para Mealy en
+`idea/`, así que no está verificada contra el original, es una elección
+razonable pero no confirmada.
+
+**`MealyDoc::set_initial` reemplaza en silencio, sin aviso de colisión** (a
+diferencia de la tabla de AFD/AFN, que sí muestra un aviso al chocar
+nombres): confirmado leyendo `model/mealy.rs` — es un único slot
+`Option<StateId>`, no hay nada que rechazar. La tabla de Mealy no necesita
+esa lógica de aviso porque no hay forma de que la operación falle.
+
+**`MenuBar` se oculta con el mismo patrón que ya usan las dos toolbars**:
+`menuBar.root.hidden` se togglea en `switchMode` exactamente igual que
+`faToolbar.root.hidden`/`mealyToolbar.root.hidden`. Iba a ocurrir el mismo
+bug de cascada CSS de siempre (`.menu-bar { display: flex }` de autor le
+gana al `[hidden]` default del navegador) — esta vez se anticipó y se agregó
+`.menu-bar[hidden] { display: none; }` directamente, sin tener que
+encontrarlo en vivo primero (ya es la 4ª vez que aparece esta clase de bug
+en el proyecto: `.toolbar`, `.menu-dropdown`, `.verdict`/`.trace-row`/
+`.testing-batch-table`, y ahora `.menu-bar`).
+
+**`MealySimView` pasó a vivir dentro de un tab** (`mealyUpperTabs`, mismo
+mecanismo `createTabs` que ya usa el lado de AFD/AFN) en vez de montarse
+directo en `mealyPanelUpper` — necesario para que conviva con las dos
+pestañas nuevas ("Tabla de estados", "Definición formal", "Simular").
+
+**Cómo se verificó**: 405/405 tests de frontend (44 nuevos). `vite build`
+limpio. Verificado en vivo en un dev server temporal (cerrado después): el
+`display` de `.menu-bar` alterna `flex`/`none` correctamente en ambas
+direcciones al cambiar de modo, y las tres pestañas de Mealy renderizan y
+cambian bien, incluyendo la definición formal mostrando la 6-tupla vacía sin
+línea de `F`.
+
+---
+
 ## 2026-08-19 — Mealy: pulido final — registry propio, atajos/menú contextual, importar/exportar por UI
 
 **Dónde**: `frontend/src/commands/{mealyRegistry,mealyRegistry.test}.js` (nuevo),

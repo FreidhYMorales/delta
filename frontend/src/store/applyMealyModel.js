@@ -1,0 +1,45 @@
+// Mealy equivalent of `applyAutomatonModel.js` — syncs the live Mealy
+// document to a label-addressed model through the normal `docStore.apply`
+// undo/redo path. Kept separate rather than generalizing the FA helper:
+// the model shape differs (no `accepting`, transitions carry an `output`),
+// so is the sync plan (`mealyFormal/mealyFormalLogic.js`'s `planSyncOps`
+// emits `SetTransitions`, not `SetEdge`).
+
+import { planStateDiff, planSyncOps } from "../views/mealyFormal/mealyFormalLogic.js";
+
+/**
+ * @param {import('./MealyDocStore.js').MealyDocStore} docStore
+ * @param {{states:string[], initial:string|null, transitions:{from:string,input:string,to:string,output:string}[]}} model
+ */
+export async function applyMealyModel(docStore, model) {
+  const currentStates = docStore.getStates();
+  const { toAddLabels, toRemoveIds } = planStateDiff(model.states, currentStates);
+  const resolvedIdOf = new Map(currentStates.map((s) => [s.label, s.id]));
+
+  if (toAddLabels.length) {
+    const result = await docStore.apply(
+      toAddLabels.map((label, i) => ({
+        op: "AddState",
+        label,
+        x: 80 + i * 60,
+        y: 80 + currentStates.length * 40,
+      })),
+    );
+    for (const patch of result.patches) {
+      if (patch.patch === "StateAdded") resolvedIdOf.set(patch.label, patch.id);
+    }
+  }
+  if (toRemoveIds.length) {
+    await docStore.apply(toRemoveIds.map((id) => ({ op: "RemoveState", id })));
+    for (const id of toRemoveIds) {
+      for (const [label, mappedId] of resolvedIdOf) {
+        if (mappedId === id) resolvedIdOf.delete(label);
+      }
+    }
+  }
+
+  const stateAfterAddRemove = docStore.getStates();
+  const edgesAfterAddRemove = docStore.getEdges();
+  const ops = planSyncOps(model, resolvedIdOf, stateAfterAddRemove, edgesAfterAddRemove);
+  if (ops.length) await docStore.apply(ops);
+}

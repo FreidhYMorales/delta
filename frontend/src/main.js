@@ -36,6 +36,8 @@ import { MealyContext } from "./commands/MealyContext.js";
 import { MealyDiagramView } from "./views/mealyDiagram/MealyDiagramView.js";
 import { MealyToolbar } from "./views/mealyDiagram/MealyToolbar.js";
 import { MealySimView } from "./views/mealyDiagram/MealySimView.js";
+import { MealyTableView } from "./views/mealyTable/MealyTableView.js";
+import { MealyFormalView } from "./views/mealyFormal/MealyFormalView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -266,17 +268,36 @@ async function main() {
   const mealyDiagramView = new MealyDiagramView(mealyCanvasPane, mealyDocStore, mealyCtx);
   mealyCtx.viewport = mealyDiagramView.viewport;
   const mealyToolbar = new MealyToolbar(toolbarHost, mealyCtx);
-  new MealySimView(mealyPanelUpper, (input) => client.mealySim(input));
+
+  // Mealy's own upper tab group (Tabla de estados/Definición formal/
+  // Simular) — mirrors the FA `upperTabs` group above, minus Regex/
+  // Gramática (neither applies to a Mealy document, see docs/decisions.md).
+  const mealyUpperTabs = createTabs(mealyPanelUpper, [
+    { id: "tabla", label: "Tabla de estados" },
+    { id: "formal", label: "Definición formal" },
+    { id: "simular", label: "Simular" },
+  ]);
+  new MealyTableView(mealyUpperTabs.panels.get("tabla"), mealyDocStore, mealyCtx);
+  new MealyFormalView(mealyUpperTabs.panels.get("formal"), mealyDocStore);
+  new MealySimView(mealyUpperTabs.panels.get("simular"), (input) => client.mealySim(input));
 
   const modeSelect = new EditorModeSelect(toolbarHost, ctx, {
     onSwitchMode: (mode) => switchMode(mode),
   });
+
+  // Constructed last so its `when(ctx)` guards evaluate against the fully
+  // wired context (real viewport/testing hooks, not their startup no-ops).
+  // FA-scoped (Archivo/Editar/Ver/Convertir/Test) — none of that applies to
+  // a Mealy document, so it hides on the same `.root.hidden` toggle as
+  // `faToolbar`/`mealyToolbar` below.
+  const menuBar = new MenuBar(menuBarHost, ctx);
 
   /** @param {'finite'|'mealy'} mode */
   function switchMode(mode) {
     const showMealy = mode === "mealy";
     faToolbar.root.hidden = showMealy;
     mealyToolbar.root.hidden = !showMealy;
+    menuBar.root.hidden = showMealy;
     if (showMealy) {
       appBody.replaceWith(mealyAppBody);
     } else {
@@ -285,10 +306,6 @@ async function main() {
     modeSelect.setMode(mode);
   }
   mealyToolbar.root.hidden = true;
-
-  // Constructed last so its `when(ctx)` guards evaluate against the fully
-  // wired context (real viewport/testing hooks, not their startup no-ops).
-  new MenuBar(menuBarHost, ctx);
 
   await Promise.all([docStore.load(), mealyDocStore.load()]);
 }
