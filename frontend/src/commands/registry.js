@@ -179,6 +179,31 @@ export const actions = [
     run: (ctx) => ctx.layout.circle(),
   },
 
+  // --- Convert (FA -> FA transforms, JFLAP's own "Convert" menu) -----------
+  // Unlike the regex/grammar generate actions, these transform the CURRENT
+  // automaton in place through the normal `docStore.apply` undo/redo path
+  // (`ctx.convertToDfa`/`ctx.minimizeDfa`, `store/applyAutomatonModel.js`),
+  // not a whole-document swap — see docs/decisions.md.
+  {
+    id: "convert.toDfa",
+    title: "Convertir a AFD",
+    group: "convert",
+    keybinding: null,
+    when: () => true,
+    run: (ctx) => ctx.convertToDfa(),
+  },
+  {
+    id: "convert.minimizeDfa",
+    title: "Minimizar AFD",
+    group: "convert",
+    keybinding: null,
+    // `minimize_dfa` itself rejects a non-deterministic automaton — gating
+    // here means the menu item is visibly disabled instead of a click away
+    // from an error notice for the common case (still editing an NFA).
+    when: (ctx) => ctx.docStore.derived.classification === "Dfa",
+    run: (ctx) => ctx.minimizeDfa(),
+  },
+
   // --- Testing (L2, testing drawer — design D6) -----------------------------
   // These actions only OPEN the drawer and focus the relevant input; running
   // a trace/batch is still a deliberate click inside `TestingView`, same as

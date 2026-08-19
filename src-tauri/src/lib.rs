@@ -25,6 +25,8 @@ pub fn run() {
       convert::conv_from_regex,
       convert::conv_to_grammar,
       convert::conv_from_grammar,
+      convert::conv_nfa_to_dfa,
+      convert::conv_minimize_dfa,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

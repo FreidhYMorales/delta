@@ -28,6 +28,8 @@ import { showNotice } from "./ui/notice.js";
 import { reportItemLines, reportTitle } from "./ui/interopReport.js";
 import { createTabs } from "./ui/tabs.js";
 import { wireResizer } from "./ui/resizer.js";
+import { applyAutomatonModel } from "./store/applyAutomatonModel.js";
+import { docSnapshotToModel } from "./views/formal/formalLogic.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -150,6 +152,28 @@ async function main() {
       // regular_grammar_to_nfa assigns no real (x, y) either.
       await circleLayoutAction(docStore);
       return snapshot;
+    },
+    // "Convertir" menu: FA -> FA transforms, applied through the normal
+    // `docStore.apply` undo/redo path (`applyAutomatonModel`) instead of a
+    // whole-document swap — see docs/decisions.md for why this direction
+    // differs from `fromRegex`/`fromGrammar` above.
+    convertToDfa: async () => {
+      try {
+        const preview = await client.convNfaToDfa();
+        await applyAutomatonModel(docStore, docSnapshotToModel(preview));
+        await circleLayoutAction(docStore);
+      } catch (error) {
+        showNotice({ kind: "error", title: "Conversión a AFD falló", message: String(error?.message ?? error) });
+      }
+    },
+    minimizeDfa: async () => {
+      try {
+        const preview = await client.convMinimizeDfa();
+        await applyAutomatonModel(docStore, docSnapshotToModel(preview));
+        await circleLayoutAction(docStore);
+      } catch (error) {
+        showNotice({ kind: "error", title: "Minimización falló", message: String(error?.message ?? error) });
+      }
     },
     layout: { circle: () => circleLayoutAction(docStore) },
   });

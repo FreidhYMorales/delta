@@ -121,3 +121,21 @@ export function convToGrammar() {
 export function convFromGrammar(text) {
   return call("conv_from_grammar", { text });
 }
+
+/** @returns {Promise<import('../store/DocStore.js').DocSnapshot>} a preview
+ * of the equivalent DFA (subset construction) — read-only, never mutates
+ * the session; the caller (`ctx.convertToDfa`, `main.js`) diffs this
+ * against the live document and applies the difference itself. */
+export function convNfaToDfa() {
+  return call("conv_nfa_to_dfa");
+}
+
+/**
+ * @returns {Promise<import('../store/DocStore.js').DocSnapshot>} a preview
+ * of the minimized DFA — rejects if the current automaton isn't already
+ * deterministic (same message `automata-cli` prints, not new user-facing
+ * copy — see the Rust doc comment on `conv_minimize_dfa`).
+ */
+export function convMinimizeDfa() {
+  return call("conv_minimize_dfa");
+}

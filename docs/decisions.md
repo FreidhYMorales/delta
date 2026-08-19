@@ -10,6 +10,75 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — AFN→AFD / Minimizar AFD: transformación in-place, no reemplazo de documento
+
+**Dónde**: `src-tauri/src/commands/convert.rs`, `src-tauri/src/lib.rs`,
+`frontend/src/tauri/client.js`, `frontend/src/commands/context.js`,
+`frontend/src/commands/registry.js`, `frontend/src/views/menubar/MenuBar.js`
+(nuevo grupo "Convertir"), `frontend/src/main.js`,
+`frontend/src/views/formal/formalLogic.js` (nuevo `docSnapshotToModel`),
+`frontend/src/store/applyAutomatonModel.js` (nuevo, extraído de
+`FormalView`).
+
+**Por qué esto NO usa el patrón "reemplazo de documento completo" de
+regex/gramática**: `nfa_to_dfa`/`minimize_dfa` son FA→FA, no FA→otra
+representación — transforman el autómata que el usuario ya viene
+construyendo, no cargan uno independiente. Con el patrón de
+`conv_from_regex`/`conv_from_grammar` (`*doc = Document { model, history:
+History::new(200), ... }`) se pierde el historial de undo — Ctrl+Z después
+de "Convertir a AFD" no tendría nada que deshacer. Para una herramienta
+donde deshacer es funcionalidad central en todos lados, eso es una
+regresión real, no un detalle menor.
+
+**Qué se hizo en cambio**: los comandos Tauri (`conv_nfa_to_dfa`/
+`conv_minimize_dfa`) son de solo lectura — devuelven una *preview* (un
+`DocSnapshot` armado sobre un `Document` descartable, nunca tocan la sesión
+real) — y el frontend sincroniza el documento vivo contra esa preview a
+través del camino normal de `docStore.apply`, reusando literalmente la
+lógica que `FormalView` ya tenía para aplicar la definición formal editada:
+`planStateDiff`/`planSyncOps` (`formalLogic.js`) no son específicas de la
+vista de texto, son el primitivo general "hacé que el documento coincida
+con este modelo con estados por etiqueta" — se extrajo la orquestación
+(`docStore.apply` en dos tandas: agregar/quitar estados, resolver ids
+recién asignados, después sincronizar transiciones/flags) a
+`store/applyAutomatonModel.js`, y `FormalView._onApply` ahora es un
+llamado de tres líneas a esa función en vez de duplicar la lógica. Un nuevo
+`docSnapshotToModel` (pura, `formalLogic.js`) adapta un `DocSnapshot`
+(id-addressed) a la misma forma que ya produce `parseFormalText` desde
+texto — mismo consumidor, dos fuentes distintas. Resultado: Ctrl+Z deshace
+una conversión exactamente igual que cualquier otra edición.
+
+**Minimizar se deshabilita, no falla**: `minimize_dfa` rechaza un autómata
+no determinista (`MinimizeError::NotDeterministic`, mensaje en inglés — a
+diferencia de los parsers de regex/gramática, este NO es texto nuevo de
+cara al usuario, es el mismo mensaje que ya imprime `automata-cli`). En vez
+de dejar que el click falle con un aviso de error para el caso común
+(todavía editando un AFN), la acción `convert.minimizeDfa` se gatea con
+`when(ctx) => ctx.docStore.derived.classification === "Dfa"` — el ítem del
+menú aparece visiblemente deshabilitado en vez de ofrecer un click que
+sabemos de antemano que va a fallar.
+
+**Nuevo grupo de menú "Convertir"**: ninguna de las dos acciones tiene un
+lugar natural en el toolbar (no hay un ícono para "convertir"), así que
+siguen el mismo criterio ya establecido para `edit`/`view`/`test`: si no
+hay otra superficie visible, va al menú. `MENU_GROUP_TITLES` (`MenuBar.js`)
+ya itera grupos genéricamente, así que agregar la entrada `convert:
+"Convertir"` fue el único cambio necesario ahí — nada de lógica nueva de
+renderizado.
+
+**Cómo se verificó**: `cargo check -p app -p automata-core` limpio (no se
+tocó lógica de `automata-core`, `nfa_to_dfa`/`minimize_dfa` ya estaban
+probadas). 283/283 tests de frontend (18 nuevos, incluyendo 3 para
+`applyAutomatonModel.js` de forma aislada — agregar+resolver id,
+quitar-en-cascada, y el caso "ya coincide, cero llamadas a apply" — y el
+gating habilitado/deshabilitado de `convert.minimizeDfa`). Refactor de
+`FormalView` verificado sin regresión: sus 20 tests existentes siguen
+pasando exactamente igual apuntando a la función extraída. `vite build`
+limpio. Verificado en vivo: el menú "Convertir" aparece con sus dos
+opciones.
+
+---
+
 ## 2026-08-19 — Gramática regular: parser de texto propio, distinto de `Display`, y un bug real que encontró el proptest
 
 **Dónde**: `crates/automata-core/src/grammar/parser.rs` (nuevo),

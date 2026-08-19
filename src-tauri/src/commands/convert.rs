@@ -3,14 +3,35 @@
 //! FA<->right-linear-grammar loops (`automata_core::convert::*`), the
 //! "Expresión Regular" / "Gramática Regular" entries in the toolbar's
 //! Editor dropdown (`frontend/src/views/toolbar/Toolbar.js`) jump to.
+//!
+//! `conv_nfa_to_dfa` / `conv_minimize_dfa` are a different shape: FA -> FA,
+//! not FA -> a different representation, so unlike the regex/grammar pair
+//! they're never a whole-document replacement — the frontend (`main.js`'s
+//! `ctx.convertToDfa`/`ctx.minimizeDfa`) diffs the returned preview against
+//! the live document and applies the result through the normal
+//! `docStore.apply` undo/redo path (reusing `formalLogic.js`'s
+//! `planStateDiff`/`planSyncOps`, the same machinery `FormalView` already
+//! uses), so Ctrl+Z undoes a conversion exactly like any other edit. These
+//! two commands only ever *preview* the target — read-only, same as
+//! `to_regex`/`to_grammar`.
 
-use automata_core::convert::{fa_to_regex, fa_to_regular_grammar, regex_to_nfa, regular_grammar_to_nfa};
+use automata_core::convert::{
+    fa_to_regex, fa_to_regular_grammar, minimize_dfa, nfa_to_dfa, regex_to_nfa, regular_grammar_to_nfa,
+};
 use automata_core::doc::{Document, History};
 use automata_core::grammar::RegularGrammar;
 use automata_core::regex::Regex;
 
 use crate::ipc::{snapshot_of, DocSnapshot};
 use crate::state::Session;
+
+/// Wraps a freestanding `FaDoc` (never the session's own model) in a
+/// scratch `Document` purely to reuse `snapshot_of`'s serialization —
+/// `history`/`revision` are meaningless here since this is never stored
+/// back into the session.
+fn preview_snapshot(model: automata_core::model::fa::FaDoc) -> DocSnapshot {
+    snapshot_of(&Document { model, history: History::new(0), revision: 0 })
+}
 
 /// Plain, directly-testable logic (mirrors `commands::doc`/`commands::sim`'s
 /// convention: plain fn takes `&Session`, the `#[tauri::command]` wrapper
@@ -83,4 +104,36 @@ pub fn conv_to_grammar(session: tauri::State<'_, Session>) -> String {
 #[tauri::command]
 pub fn conv_from_grammar(session: tauri::State<'_, Session>, text: String) -> Result<DocSnapshot, String> {
     from_grammar(&session, text)
+}
+
+/// Preview of the equivalent DFA (subset construction) — never mutates the
+/// session. `nfa_to_dfa` always succeeds: a document with no initial state
+/// previews as the empty automaton (zero states), same "no special-casing
+/// needed" shape as `fa_to_regex`'s `∅`.
+pub fn nfa_to_dfa_preview(session: &Session) -> DocSnapshot {
+    let doc = session.0.lock().expect("session mutex poisoned");
+    preview_snapshot(nfa_to_dfa(&doc.model))
+}
+
+/// Preview of the minimized DFA (Moore partition refinement) — never
+/// mutates the session. Rejects (mirrors `MinimizeError`'s own English
+/// message — unlike the regex/grammar parsers, this isn't new user-facing
+/// copy, it's the same message `automata-cli` already prints) when the
+/// current document isn't already deterministic; the frontend action is
+/// gated on `derived.classification === "Dfa"` so this is normally
+/// unreachable, not the primary way a user finds out.
+pub fn minimize_dfa_preview(session: &Session) -> Result<DocSnapshot, String> {
+    let doc = session.0.lock().expect("session mutex poisoned");
+    let target = minimize_dfa(&doc.model).map_err(|e| e.to_string())?;
+    Ok(preview_snapshot(target))
+}
+
+#[tauri::command]
+pub fn conv_nfa_to_dfa(session: tauri::State<'_, Session>) -> DocSnapshot {
+    nfa_to_dfa_preview(&session)
+}
+
+#[tauri::command]
+pub fn conv_minimize_dfa(session: tauri::State<'_, Session>) -> Result<DocSnapshot, String> {
+    minimize_dfa_preview(&session)
 }

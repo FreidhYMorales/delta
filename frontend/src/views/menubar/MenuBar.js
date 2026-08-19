@@ -1,4 +1,4 @@
-// Top-level app menu bar (File / Edit / View / Test) — the UI/UX audit's fix
+// Top-level app menu bar (File / Edit / View / Convertir / Test) — the UI/UX audit's fix
 // for actions that had ZERO visible trigger anywhere (`jff.import`,
 // `jff.export`, `test.singleTrace`, `test.batch`) and for keyboard-only
 // actions with no visible affordance (undo/redo/zoom/fit/circle layout).
@@ -26,6 +26,7 @@ export const MENU_GROUP_TITLES = {
   interop: "Archivo",
   edit: "Editar",
   view: "Ver",
+  convert: "Convertir",
   test: "Test",
 };
 

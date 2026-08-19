@@ -33,6 +33,8 @@ export class ViewContext {
    *   testing?: {openSingle: Function, openBatch: Function},
    *   openRegexTab?: () => void,
    *   openGrammarTab?: () => void,
+   *   convertToDfa?: () => Promise<void>,
+   *   minimizeDfa?: () => Promise<void>,
    *   renameState?: (id: number, label: string) => Promise<boolean>,
    * }} hooks
    */
@@ -84,6 +86,18 @@ export class ViewContext {
     // this is testable without a real app shell.
     this.openRegexTab = hooks.openRegexTab ?? (() => {});
     this.openGrammarTab = hooks.openGrammarTab ?? (() => {});
+    // "Convertir" menu (`convert.toDfa`/`convert.minimizeDfa` — a menu
+    // group of its own, MenuBar.js's MENU_GROUP_TITLES). Unlike
+    // `toRegex`/`toGrammar`, FA->FA conversions are never a whole-document
+    // replacement: the real hook (`main.js`) fetches a read-only preview
+    // (`conv_nfa_to_dfa`/`conv_minimize_dfa`) and syncs the live document to
+    // it through the normal `docStore.apply` undo/redo path
+    // (`applyAutomatonModel`), so Ctrl+Z undoes a conversion exactly like
+    // any other edit. No safe default (same reasoning as `fromRegex`).
+    this.convertToDfa =
+      hooks.convertToDfa ?? (async () => { throw new Error("No hay conversión AFN→AFD disponible."); });
+    this.minimizeDfa =
+      hooks.minimizeDfa ?? (async () => { throw new Error("No hay minimización de AFD disponible."); });
     // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
     // Are Never Silent"). Real by default (needs only `docStore` + a DOM
     // notice, both available without a Tauri webview) — overridable in

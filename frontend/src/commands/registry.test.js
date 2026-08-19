@@ -22,7 +22,12 @@ function fakeCtx(overrides = {}) {
     setTool: vi.fn(),
     selection: null,
     setSelection: vi.fn(),
-    docStore: { apply: vi.fn().mockResolvedValue(undefined), undo: vi.fn(), redo: vi.fn() },
+    docStore: {
+      apply: vi.fn().mockResolvedValue(undefined),
+      undo: vi.fn(),
+      redo: vi.fn(),
+      derived: { classification: "Dfa", alphabet: [], unreachable: [] },
+    },
     viewport: { zoomIn: vi.fn(), zoomOut: vi.fn(), reset: vi.fn(), fitToWindow: vi.fn() },
     layout: { circle: vi.fn() },
     promptPath: vi.fn().mockResolvedValue("/tmp/x.jff"),
@@ -33,6 +38,8 @@ function fakeCtx(overrides = {}) {
     testing: { openSingle: vi.fn(), openBatch: vi.fn() },
     openRegexTab: vi.fn(),
     openGrammarTab: vi.fn(),
+    convertToDfa: vi.fn(),
+    minimizeDfa: vi.fn(),
     ...overrides,
   };
 }
@@ -248,6 +255,35 @@ describe("action.run behavior", () => {
     const ctx = fakeCtx();
     findAction("editor.openGrammar").run(ctx);
     expect(ctx.openGrammarTab).toHaveBeenCalled();
+  });
+
+  it("convert.toDfa calls ctx.convertToDfa", () => {
+    const ctx = fakeCtx();
+    findAction("convert.toDfa").run(ctx);
+    expect(ctx.convertToDfa).toHaveBeenCalled();
+  });
+
+  it("convert.toDfa is available regardless of the current classification", () => {
+    const nfaCtx = fakeCtx({
+      docStore: { apply: vi.fn(), undo: vi.fn(), redo: vi.fn(), derived: { classification: "Nfa", alphabet: [], unreachable: [] } },
+    });
+    expect(findAction("convert.toDfa").when(nfaCtx)).toBe(true);
+  });
+
+  it("convert.minimizeDfa calls ctx.minimizeDfa", () => {
+    const ctx = fakeCtx();
+    findAction("convert.minimizeDfa").run(ctx);
+    expect(ctx.minimizeDfa).toHaveBeenCalled();
+  });
+
+  it("convert.minimizeDfa is only available when the current automaton is already a DFA", () => {
+    const dfaCtx = fakeCtx();
+    expect(findAction("convert.minimizeDfa").when(dfaCtx)).toBe(true);
+
+    const nfaCtx = fakeCtx({
+      docStore: { apply: vi.fn(), undo: vi.fn(), redo: vi.fn(), derived: { classification: "Nfa", alphabet: [], unreachable: [] } },
+    });
+    expect(findAction("convert.minimizeDfa").when(nfaCtx)).toBe(false);
   });
 
   it("jff.import prompts for a path and imports it", async () => {

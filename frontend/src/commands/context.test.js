@@ -109,6 +109,16 @@ describe("ViewContext", () => {
     const ctx = new ViewContext({});
     expect(() => ctx.openGrammarTab()).not.toThrow();
   });
+
+  it("exposes a convertToDfa hook that fails loudly by default (no safe fallback to convert)", async () => {
+    const ctx = new ViewContext({});
+    await expect(ctx.convertToDfa()).rejects.toThrow();
+  });
+
+  it("exposes a minimizeDfa hook that fails loudly by default (no safe fallback to minimize)", async () => {
+    const ctx = new ViewContext({});
+    await expect(ctx.minimizeDfa()).rejects.toThrow();
+  });
 });
 
 describe("ViewContext.renameState default (task 7.9: rename collisions are never silent)", () => {
