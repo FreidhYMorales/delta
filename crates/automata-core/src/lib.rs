@@ -13,4 +13,5 @@ pub mod interop;
 pub mod mealy_doc;
 pub mod model;
 pub mod moore_doc;
+pub mod pda_doc;
 pub mod regex;

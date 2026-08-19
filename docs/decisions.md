@@ -10,6 +10,71 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Autómata de Pila: backend vía el `Machine` trait genérico, primer uso real de `run_bounded`
+
+**Dónde**: `crates/automata-core/src/model/pda.rs`, `pda_doc.rs`,
+`engine/pda.rs` (nuevos); `engine/mod.rs` (fix real, ver abajo); `dto.rs`
+(variante `Pda`); `automata-cli` (`pda-inspect`/`pda-sim --accept-by`).
+
+**Verificado contra JFLAP real antes de diseñar nada** (decompilado con
+`cfr`: `automata/pda/{PDATransition,PushdownAutomaton,PDAConfiguration,
+PDAStepByStateSimulator,PDAStepWithClosureSimulator,CharacterStack}.class`):
+PDA sí tiene estados de aceptación (`PushdownAutomaton extends Automaton`
+directo). Cada transición es `(input, pop, push)` independiente — puede
+haber varias entre el mismo par de estados, así que a diferencia de FA/
+Mealy/Moore (un solo "paquete" por par `(from,to)`), acá las transiciones
+son una lista plana direccionable por id propio. El modo de aceptación
+(pila vacía vs. estado final) es una elección de cada corrida de
+simulación, JFLAP la pregunta por diálogo — **no se guarda en el
+autómata**. La pila arranca siempre con un símbolo `"Z"` empujado antes de
+correr cualquier entrada, convención fija de JFLAP.
+
+**Primer uso real del trait `Machine`/`run_bounded`** (`engine/mod.rs`) que
+ya estaba pensado para esto desde su propio comentario de diseño ("for a
+future PDA, `(StateId, Stack)`") — a diferencia de Mealy/Moore, que
+necesitaban semántica determinista de transductor y por eso NO podían usar
+ese motor genérico (tienen su propio stepper de un solo estado vivo).
+`PdaEngine` implementa `Machine` con `Config = (StateId, Vec<SymbolId>)`
+(último elemento = tope de pila), y reusa `run_bounded`/`Outcome`/`Trace`
+tal cual, sin inventar equivalentes propios.
+
+**Bug real encontrado y arreglado en código compartido** (`run_bounded`):
+al agotar el input, la función marcaba `any_exhausted=true` y hacía
+`continue`, saltándose el `step()` de esa configuración por completo — para
+una máquina cuyo `step` puede consumir cero símbolos (movimientos-ε; PDA
+vaciando pila sin más entrada que leer, o una futura MT), eso descartaba en
+silencio cualquier progreso-ε útil después de que el input se agotara —
+justo lo que un PDA necesita todo el tiempo para aceptar por pila vacía.
+JFLAP real sigue explorando esos casos. Arreglado llamando siempre a
+`step()`, sin `continue`, y rastreando `any_exhausted` aparte. **Cero
+cambio de comportamiento para AFD/AFN**: confirmado leyendo
+`FaEngine::step` — ya se autoguarda con `if at >= input.len() { return
+SmallVec::new(); }`, así que el fix solo agrega una llamada que ya
+devolvía vacío. `cargo test --workspace` sigue 100% verde (185 tests de
+`automata-core`, reproducido de forma independiente).
+
+**Cómo se verificó**: PDA de `{a^n b^n}` construido a mano (empuja `A` por
+cada `a`, un movimiento-ε adivina el cambio de fase, saca `A` por cada `b`,
+otro movimiento-ε saca la `Z` del fondo una vez expuesta) — corroborado con
+`automata-cli pda-sim` para ambos modos de aceptación, reproducido de forma
+independiente con un fixture JSON propio, no solo confiando el reporte:
+`""`, `"a b"`, `"a a b b"` → aceptado en ambos modos; `"a a b"`
+(desbalanceado) → **aceptado por estado final, rechazado por pila vacía**
+— el caso que prueba que los dos modos corren lógica genuinamente distinta,
+no una bandera sin efecto; `"a b b"` → atascado en ambos modos.
+
+**Hallazgo pendiente de decidir, no bloqueante**: al escribir el proptest
+de undo/redo de PDA se notó que los de Mealy y Moore (`mealy_doc.rs`/
+`moore_doc.rs`, ya commiteados) declaran un `Vec<StateId>` para rastrear
+ids creados pero nunca insertan en él tras un `AddState` exitoso — sus 256
+casos de proptest en la práctica solo ejercitan `AddState`, nunca
+`RemoveState`/`MoveState`/`RenameState`/`SetInitial`/edición de aristas,
+aunque ambos proptests siguen pasando (no hay ningún bug real detrás, solo
+cobertura más débil de lo que aparenta). El de PDA se escribió leyendo
+`doc.states()`/`doc.transitions()` en vivo en vez de un vector aparte,
+evitando el mismo problema. Pendiente decidir si vale la pena portar el
+arreglo a Mealy/Moore.
+
 ## 2026-08-19 — Moore queda completo: Tabla de estados y Definición formal, δ y λ como funciones separadas
 
 **Dónde**: `frontend/src/views/mooreTable/{MooreTableView,mooreTableLogic}.js`,

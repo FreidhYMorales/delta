@@ -108,10 +108,21 @@ pub fn run_bounded<M: Machine>(m: &M, input: &[SymbolId], budget: Budget) -> Tra
         let mut seen: HashSet<(M::Config, usize)> = HashSet::new();
         let mut next: Vec<(M::Config, usize)> = Vec::new();
 
+        // Always step every live config, even one that has already
+        // exhausted the input: a machine whose `step` can consume zero
+        // symbols (epsilon moves — PDA stack-only pops, future TM) may still
+        // have useful zero-consuming transitions to take *after* input ends
+        // (e.g. a PDA popping its stack down to empty for empty-stack
+        // acceptance once there's nothing left to read). A machine that only
+        // ever consumes real symbols (FA) already guards this itself —
+        // `FaEngine::step` returns no successors once `at >= input.len()` —
+        // so this costs those machines nothing beyond one guarded call.
+        // `any_exhausted` still needs to be tracked independently of
+        // whether `step` found further work, to keep the Rejected-vs-Stuck
+        // distinction below meaningful.
         for (cfg, at) in &frontier {
             if *at >= input.len() {
                 any_exhausted = true;
-                continue;
             }
             for (ncfg, nat) in m.step(cfg, input, *at) {
                 if seen.insert((ncfg.clone(), nat)) {
@@ -150,3 +161,4 @@ pub fn run_bounded<M: Machine>(m: &M, input: &[SymbolId], budget: Budget) -> Tra
 pub mod fa;
 pub mod mealy;
 pub mod moore;
+pub mod pda;

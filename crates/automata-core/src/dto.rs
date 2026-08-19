@@ -17,6 +17,7 @@ use crate::ids::StateId;
 use crate::model::fa::FaDoc;
 use crate::model::mealy::MealyDoc;
 use crate::model::moore::MooreDoc;
+use crate::model::pda::PdaDoc;
 
 pub const CURRENT_VERSION: u32 = 1;
 
@@ -36,6 +37,7 @@ pub enum MachineDoc {
     Fa(FaDto),
     Mealy(MealyDto),
     Moore(MooreDto),
+    Pda(PdaDto),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -110,6 +112,39 @@ pub struct MooreEdgeDto {
     pub to: usize,
     /// Input symbols only — no per-symbol output (unlike `MealyEdgeDto`).
     pub inputs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PdaDto {
+    pub states: Vec<PdaStateDto>,
+    /// A flat list, **not** grouped by `(from, to)` like `FaDto`/
+    /// `MealyDto`/`MooreDto`'s edges — a PDA transition is individually
+    /// addressable (`model::pda`'s doc comment), so several can share the
+    /// same endpoints with different `(input, pop, push)` triples.
+    pub transitions: Vec<PdaTransitionDto>,
+    pub initial: Option<usize>,
+}
+
+/// Has `accepting`, unlike `MealyStateDto`/`MooreStateDto` — a PDA
+/// genuinely has accepting states (see `model::pda`'s doc comment).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PdaStateDto {
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+    pub accepting: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PdaTransitionDto {
+    pub from: usize,
+    pub to: usize,
+    /// `None` = epsilon.
+    pub input: Option<String>,
+    /// Top-to-bottom order — see `model::pda`'s doc comment.
+    pub pop: Vec<String>,
+    /// Top-to-bottom order — see `model::pda`'s doc comment.
+    pub push: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -222,6 +257,7 @@ pub fn load_from_str(s: &str) -> Result<FaDoc, DtoError> {
         MachineDoc::Fa(dto) => fa_from_dto(&dto),
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Mealy" }),
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Moore" }),
+        MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Pda" }),
     }
 }
 
@@ -299,6 +335,7 @@ pub fn mealy_load_from_str(s: &str) -> Result<MealyDoc, DtoError> {
         MachineDoc::Mealy(dto) => mealy_from_dto(&dto),
         MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Fa" }),
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Moore" }),
+        MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Pda" }),
     }
 }
 
@@ -374,6 +411,90 @@ pub fn moore_load_from_str(s: &str) -> Result<MooreDoc, DtoError> {
         MachineDoc::Moore(dto) => moore_from_dto(&dto),
         MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Fa" }),
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Mealy" }),
+        MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Pda" }),
+    }
+}
+
+/// Project a `PdaDoc` into its serializable DTO — same "positional index,
+/// sorted for reproducibility" rules as `fa_to_dto`/`mealy_to_dto`/
+/// `moore_to_dto`, except transitions are a flat list (each individually
+/// addressable, see `model::pda`'s doc comment) sorted by
+/// `(from, to, input, pop, push)` rather than grouped by endpoint.
+pub fn pda_to_dto(doc: &PdaDoc) -> PdaDto {
+    let alive: Vec<StateId> = doc.states().collect();
+    let index_of: HashMap<StateId, usize> = alive.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+
+    let states = alive
+        .iter()
+        .map(|&id| {
+            let meta = doc.state_meta(id).expect("alive state has meta");
+            PdaStateDto {
+                label: doc.state_label(id).expect("alive state has label").to_string(),
+                x: meta.x,
+                y: meta.y,
+                accepting: meta.accepting,
+            }
+        })
+        .collect();
+
+    let mut transitions: Vec<PdaTransitionDto> = doc
+        .transitions()
+        .map(|(_, t)| {
+            let input = t.input.map(|s| doc.input_symbol_label(s).expect("interned input has a label").to_string());
+            let pop: Vec<String> =
+                t.pop.iter().map(|s| doc.stack_symbol_label(*s).expect("interned stack symbol has a label").to_string()).collect();
+            let push: Vec<String> =
+                t.push.iter().map(|s| doc.stack_symbol_label(*s).expect("interned stack symbol has a label").to_string()).collect();
+            PdaTransitionDto { from: index_of[&t.from], to: index_of[&t.to], input, pop, push }
+        })
+        .collect();
+    transitions.sort_by(|a, b| (a.from, a.to, &a.input, &a.pop, &a.push).cmp(&(b.from, b.to, &b.input, &b.pop, &b.push)));
+
+    let initial = doc.initial_state().map(|id| index_of[&id]);
+
+    PdaDto { states, transitions, initial }
+}
+
+/// Reconstruct a `PdaDoc` from its DTO, allocating fresh `StateId`s in
+/// `states` array order.
+pub fn pda_from_dto(dto: &PdaDto) -> Result<PdaDoc, DtoError> {
+    let mut doc = PdaDoc::new();
+    let mut ids = Vec::with_capacity(dto.states.len());
+    for s in &dto.states {
+        let id = doc.add_state(&s.label, s.x, s.y).map_err(|_| DtoError::InvalidStateIndex(ids.len()))?;
+        doc.set_accepting(id, s.accepting);
+        ids.push(id);
+    }
+    for t in &dto.transitions {
+        let from = *ids.get(t.from).ok_or(DtoError::InvalidStateIndex(t.from))?;
+        let to = *ids.get(t.to).ok_or(DtoError::InvalidStateIndex(t.to))?;
+        let input = t.input.as_deref().map(|l| doc.intern_input_symbol(l));
+        let pop: Vec<_> = t.pop.iter().map(|l| doc.intern_stack_symbol(l)).collect();
+        let push: Vec<_> = t.push.iter().map(|l| doc.intern_stack_symbol(l)).collect();
+        doc.add_transition(from, to, input, pop, push);
+    }
+    if let Some(idx) = dto.initial {
+        let id = *ids.get(idx).ok_or(DtoError::InvalidStateIndex(idx))?;
+        doc.set_initial(Some(id));
+    }
+    Ok(doc)
+}
+
+pub fn pda_save_to_string(doc: &PdaDoc) -> Result<String, DtoError> {
+    let envelope = Envelope { version: CURRENT_VERSION, document: MachineDoc::Pda(pda_to_dto(doc)) };
+    Ok(serde_json::to_string_pretty(&envelope)?)
+}
+
+pub fn pda_load_from_str(s: &str) -> Result<PdaDoc, DtoError> {
+    let envelope: Envelope = serde_json::from_str(s)?;
+    if envelope.version != CURRENT_VERSION {
+        return Err(DtoError::UnsupportedVersion(envelope.version));
+    }
+    match envelope.document {
+        MachineDoc::Pda(dto) => pda_from_dto(&dto),
+        MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Fa" }),
+        MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Mealy" }),
+        MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Moore" }),
     }
 }
 
@@ -629,6 +750,111 @@ mod tests {
                 let json = moore_save_to_string(&doc).unwrap();
                 let reloaded = moore_load_from_str(&json).unwrap();
                 prop_assert_eq!(moore_to_dto(&doc), moore_to_dto(&reloaded));
+            }
+        }
+    }
+
+    mod pda {
+        use super::*;
+        use crate::model::pda::PdaDoc;
+
+        fn build_pda_doc(
+            num_states: usize,
+            accepting: Vec<bool>,
+            transition_specs: Vec<(usize, usize, Option<String>, Vec<String>, Vec<String>)>,
+            initial: Option<usize>,
+        ) -> PdaDoc {
+            let mut doc = PdaDoc::new();
+            let mut ids = Vec::with_capacity(num_states);
+            for i in 0..num_states {
+                let id = doc.add_state(&format!("s{i}"), i as f64, (i * 2) as f64).unwrap();
+                if accepting.get(i).copied().unwrap_or(false) {
+                    doc.set_accepting(id, true);
+                }
+                ids.push(id);
+            }
+            if num_states > 0 {
+                for (from_idx, to_idx, input, pop, push) in transition_specs {
+                    let from = ids[from_idx % num_states];
+                    let to = ids[to_idx % num_states];
+                    let input_id = input.as_deref().map(|l| doc.intern_input_symbol(l));
+                    let pop_ids: Vec<_> = pop.iter().map(|l| doc.intern_stack_symbol(l)).collect();
+                    let push_ids: Vec<_> = push.iter().map(|l| doc.intern_stack_symbol(l)).collect();
+                    doc.add_transition(from, to, input_id, pop_ids, push_ids);
+                }
+                if let Some(idx) = initial {
+                    doc.set_initial(Some(ids[idx % num_states]));
+                }
+            }
+            doc
+        }
+
+        #[test]
+        fn envelope_carries_the_pda_kind_tag() {
+            let doc = build_pda_doc(1, vec![], vec![], None);
+            let json = pda_save_to_string(&doc).unwrap();
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(value["version"].as_u64(), Some(1));
+            assert_eq!(value["document"]["kind"].as_str(), Some("Pda"));
+        }
+
+        #[test]
+        fn loading_a_fa_document_as_pda_fails_with_a_clear_error() {
+            let fa_json = save_to_string(&build_doc(1, vec![], None)).unwrap();
+            let err = pda_load_from_str(&fa_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Pda", found: "Fa" }));
+        }
+
+        #[test]
+        fn loading_a_pda_document_as_fa_fails_with_a_clear_error() {
+            let pda_json = pda_save_to_string(&build_pda_doc(1, vec![], vec![], None)).unwrap();
+            let err = load_from_str(&pda_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Fa", found: "Pda" }));
+        }
+
+        #[test]
+        fn accepting_and_multiple_transitions_between_the_same_pair_round_trip_through_save_and_load() {
+            let doc = build_pda_doc(
+                2,
+                vec![false, true],
+                vec![
+                    (0, 1, Some("a".into()), vec![], vec!["A".into()]),
+                    (0, 1, None, vec!["Z".into()], vec![]),
+                ],
+                Some(0),
+            );
+            assert_eq!(doc.transitions().count(), 2, "both transitions between the same (from,to) must survive");
+            let json = pda_save_to_string(&doc).unwrap();
+            let reloaded = pda_load_from_str(&json).unwrap();
+            assert_eq!(pda_to_dto(&doc), pda_to_dto(&reloaded));
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            /// Same "save-then-load is an identity" invariant as FA's/
+            /// Mealy's/Moore's own round-trip proptests, one level over for
+            /// the Pda DTO/envelope pair.
+            #[test]
+            fn save_load_round_trip_is_identity(
+                num_states in 0usize..10,
+                accepting in prop::collection::vec(any::<bool>(), 0..10),
+                transition_specs in prop::collection::vec(
+                    (
+                        0usize..10,
+                        0usize..10,
+                        prop::option::of("[a-b]"),
+                        prop::collection::vec("[x-y]", 0..2),
+                        prop::collection::vec("[x-y]", 0..2),
+                    ),
+                    0..10,
+                ),
+                initial in prop::option::of(0usize..10),
+            ) {
+                let doc = build_pda_doc(num_states, accepting, transition_specs, initial);
+                let json = pda_save_to_string(&doc).unwrap();
+                let reloaded = pda_load_from_str(&json).unwrap();
+                prop_assert_eq!(pda_to_dto(&doc), pda_to_dto(&reloaded));
             }
         }
     }

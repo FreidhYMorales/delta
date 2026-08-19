@@ -7,6 +7,9 @@
 //! `mealy-sim`/`mealy-inspect` (same idea, for Mealy machines — there's no
 //! GUI for those at all yet, so this is the only way to exercise them).
 //! `moore-sim`/`moore-inspect` are the same idea again, for Moore machines.
+//! `pda-sim`/`pda-inspect` are the same idea for Pushdown Automata — `pda-sim`
+//! also takes `--accept-by final|empty` since that's a genuine per-run
+//! choice in real JFLAP too, never stored on the document (docs/decisions.md).
 
 use std::fs;
 use std::process::ExitCode;
@@ -17,12 +20,14 @@ use automata_core::dto;
 use automata_core::engine::fa::FaEngine;
 use automata_core::engine::mealy::{run_mealy, MealyOutcome};
 use automata_core::engine::moore::{run_moore, MooreOutcome};
+use automata_core::engine::pda::{run_pda, AcceptMode};
 use automata_core::engine::{run_bounded, Budget};
 use automata_core::ids::SymbolId;
 use automata_core::interop::jff::reader;
 use automata_core::model::fa::{Classification, FaDoc};
 use automata_core::model::mealy::MealyDoc;
 use automata_core::model::moore::MooreDoc;
+use automata_core::model::pda::PdaDoc;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -121,6 +126,33 @@ enum Command {
         #[arg(long)]
         inputs_file: Option<String>,
     },
+    /// Load a Pushdown Automaton (native JSON only) and print its structure.
+    PdaInspect {
+        #[arg(long)]
+        file: String,
+    },
+    /// Load a PDA and run one or many inputs through it, printing the
+    /// `Outcome` (`Accepted`/`Rejected`/`Stuck`/`Truncated*`) each one
+    /// produces under the chosen accept mode.
+    PdaSim {
+        #[arg(long)]
+        file: String,
+        /// Space-separated input symbols, e.g. "a a b b". Omit for the empty input.
+        #[arg(long)]
+        input: Option<String>,
+        /// File with one input per line (space-separated symbols), run as a batch.
+        #[arg(long)]
+        inputs_file: Option<String>,
+        /// `final` = accept by final state, `empty` = accept by empty
+        /// stack — a genuine per-run choice in real JFLAP too, never
+        /// stored on the document itself (see docs/decisions.md).
+        #[arg(value_enum, long, default_value_t = AcceptByArg::Final)]
+        accept_by: AcceptByArg,
+        #[arg(long, default_value_t = 10_000)]
+        max_steps: usize,
+        #[arg(long, default_value_t = 5_000)]
+        max_configs: usize,
+    },
     /// Synthesize a worst-case-shaped automaton and time compile + simulation.
     Stress {
         #[arg(value_enum, long, default_value_t = Topology::Chain)]
@@ -134,6 +166,21 @@ enum Command {
         #[arg(long, default_value_t = 50_000)]
         max_configs: usize,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum AcceptByArg {
+    Final,
+    Empty,
+}
+
+impl From<AcceptByArg> for AcceptMode {
+    fn from(a: AcceptByArg) -> Self {
+        match a {
+            AcceptByArg::Final => AcceptMode::FinalState,
+            AcceptByArg::Empty => AcceptMode::EmptyStack,
+        }
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -355,6 +402,40 @@ fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
+        Command::PdaInspect { file } => {
+            let doc = load_pda_doc(&file)?;
+            let accepting_count = doc.states().filter(|&s| doc.is_accepting(s)).count();
+            println!("states:            {}", doc.states().count());
+            println!("accepting states:  {accepting_count}");
+            println!("transitions:       {}", doc.transitions().count());
+            println!("input alphabet:    {}", doc.input_alphabet().len());
+            println!("stack alphabet:    {}", doc.stack_alphabet().len());
+            println!("initial state set: {}", doc.initial_state().is_some());
+            println!("deterministic:     {}", doc.is_deterministic());
+            Ok(())
+        }
+
+        Command::PdaSim { file, input, inputs_file, accept_by, max_steps, max_configs } => {
+            let doc = load_pda_doc(&file)?;
+            let mode: AcceptMode = accept_by.into();
+            let budget = Budget { max_steps, max_configs };
+            let inputs = collect_words(input, inputs_file)?;
+            for w in inputs {
+                let symbols: Vec<&str> = w.iter().map(String::as_str).collect();
+                let start = Instant::now();
+                let result = run_pda(&doc, &symbols, mode, budget);
+                let elapsed = start.elapsed();
+                println!(
+                    "{:?}  input={:?}  steps={}  elapsed={:?}",
+                    result.outcome,
+                    w,
+                    result.steps.len(),
+                    elapsed
+                );
+            }
+            Ok(())
+        }
+
         Command::Stress { topology, states, input_len, max_steps, max_configs } => {
             if states < 2 {
                 return Err("stress requires at least 2 states".to_string());
@@ -443,6 +524,13 @@ fn load_mealy_doc(path: &str) -> Result<MealyDoc, String> {
 fn load_moore_doc(path: &str) -> Result<MooreDoc, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))?;
     dto::moore_load_from_str(&text).map_err(|e| e.to_string())
+}
+
+/// Native JSON only — no `.jff` for PDAs yet, same scope cut as Mealy/Moore
+/// (see docs/decisions.md).
+fn load_pda_doc(path: &str) -> Result<PdaDoc, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))?;
+    dto::pda_load_from_str(&text).map_err(|e| e.to_string())
 }
 
 fn collect_words(word: Option<String>, words_file: Option<String>) -> Result<Vec<Vec<String>>, String> {
