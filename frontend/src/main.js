@@ -27,12 +27,18 @@ import { reportItemLines, reportTitle } from "./ui/interopReport.js";
 import { createTabs } from "./ui/tabs.js";
 import { wireResizer } from "./ui/resizer.js";
 
+/** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
+ * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
+ * right after loading a regex-generated automaton whose states all start
+ * stacked at (0,0) — `convert::regex_to_nfa` assigns no real coordinates)
+ * can await it; the "Círculo" toolbar action ignores the return value, same
+ * as before. */
 function circleLayoutAction(docStore) {
   const states = docStore.getStates();
-  if (!states.length) return;
+  if (!states.length) return undefined;
   const radius = Math.min(160, 60 + states.length * 8);
   const positions = circleLayout(states, { centerX: 300, centerY: 200, radius });
-  docStore.apply(positions.map((p) => ({ op: "MoveState", id: p.id, x: p.x, y: p.y })));
+  return docStore.apply(positions.map((p) => ({ op: "MoveState", id: p.id, x: p.x, y: p.y })));
 }
 
 async function main() {
@@ -124,6 +130,14 @@ async function main() {
     simTrace: (word, budget) => client.simTrace(word, budget),
     simBatch: (words, budget) => client.simBatch(words, budget),
     toRegex: () => client.convToRegex(),
+    fromRegex: async (pattern) => {
+      const snapshot = await client.convFromRegex(pattern);
+      docStore.loadSnapshot(snapshot);
+      // regex_to_nfa assigns no real (x, y) — every state lands at the
+      // same point without this, on top of each other.
+      await circleLayoutAction(docStore);
+      return snapshot;
+    },
     layout: { circle: () => circleLayoutAction(docStore) },
   });
 

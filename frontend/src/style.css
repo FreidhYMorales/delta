@@ -828,7 +828,8 @@ body {
   overflow-wrap: break-word;
 }
 
-.formal-error {
+.formal-error,
+.regex-error {
   color: var(--danger);
   font-size: var(--font-size-sm);
   min-height: 1.2em;

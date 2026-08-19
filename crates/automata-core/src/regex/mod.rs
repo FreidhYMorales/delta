@@ -10,6 +10,9 @@
 
 use std::fmt;
 
+pub mod parser;
+pub use parser::{parse, ParseError};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Regex {
     /// Matches nothing — the empty language, `∅`. Not part of classic regex

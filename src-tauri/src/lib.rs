@@ -22,6 +22,7 @@ pub fn run() {
       jff::jff_import,
       jff::jff_export,
       convert::conv_to_regex,
+      convert::conv_from_regex,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

@@ -1,11 +1,12 @@
-// Read-only derivation of the regular expression equivalent to the current
-// automaton (`automata_core::convert::fa_to_regex`, via `ctx.toRegex` ->
-// the `conv_to_regex` Tauri command). First concrete step towards a real
-// "Expresión Regular" editor mode (still a disabled option in the
-// Toolbar.js mode select): this direction (automaton -> regex) needed no
-// new document type or IPC mutation surface, just one derived value, so it
-// ships first — regex -> automaton (typing a regex and materializing a new
-// FA document) is a separate, bigger step for later.
+// Both directions of the FA<->regex loop, in one tab (first concrete step
+// towards a real "Expresión Regular" editor mode — still a disabled option
+// in Toolbar.js's mode select; neither direction here needed that bigger
+// switchable-document-type architecture, so they ship first):
+//  - automaton -> regex (`ctx.toRegex`, `conv_to_regex`): read-only, derived
+//    from the current document, re-fetched on every change.
+//  - regex -> automaton (`ctx.fromRegex`, `conv_from_regex`): typing a
+//    pattern and clicking Generar REPLACES the current document — same
+//    "whole-document swap" shape as opening a file, not an edit to it.
 
 export class RegexView {
   /**
@@ -40,7 +41,30 @@ export class RegexView {
     this.output.className = "regex-output";
     this.output.readOnly = true;
 
-    this.root.append(this.label, this.output);
+    const genLabel = document.createElement("label");
+    genLabel.className = "field-label";
+    genLabel.textContent = "Generar autómata desde una expresión regular";
+
+    this.genInput = document.createElement("input");
+    this.genInput.type = "text";
+    this.genInput.className = "regex-input string-input";
+    this.genInput.placeholder = "p.ej. a(b+c)*";
+
+    this.genButton = document.createElement("button");
+    this.genButton.type = "button";
+    this.genButton.className = "btn-primary";
+    this.genButton.textContent = "Generar autómata (reemplaza el actual) →";
+    this.genButton.addEventListener("click", () => {
+      this._lastGeneratePromise = this._onGenerate();
+    });
+    const genRow = document.createElement("div");
+    genRow.className = "calc-row";
+    genRow.appendChild(this.genButton);
+
+    this.genError = document.createElement("div");
+    this.genError.className = "regex-error";
+
+    this.root.append(this.label, this.output, genLabel, this.genInput, genRow, this.genError);
     this.container.appendChild(this.root);
   }
 
@@ -49,5 +73,14 @@ export class RegexView {
     const regex = await this.ctx.toRegex();
     if (token !== this._requestToken) return;
     this.output.value = regex;
+  }
+
+  async _onGenerate() {
+    this.genError.textContent = "";
+    try {
+      await this.ctx.fromRegex(this.genInput.value);
+    } catch (error) {
+      this.genError.textContent = String(error?.message ?? error);
+    }
   }
 }

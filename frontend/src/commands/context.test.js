@@ -84,6 +84,11 @@ describe("ViewContext", () => {
     const ctx = new ViewContext({});
     expect(await ctx.toRegex()).toBe("∅");
   });
+
+  it("exposes a fromRegex hook that fails loudly by default (no safe fallback to generate)", async () => {
+    const ctx = new ViewContext({});
+    await expect(ctx.fromRegex("a*")).rejects.toThrow();
+  });
 });
 
 describe("ViewContext.renameState default (task 7.9: rename collisions are never silent)", () => {

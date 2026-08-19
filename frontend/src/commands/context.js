@@ -27,6 +27,7 @@ export class ViewContext {
    *   simTrace?: (word: string[], budget?: object) => Promise<object>,
    *   simBatch?: (words: string[][], budget?: object) => Promise<object[]>,
    *   toRegex?: () => Promise<string>,
+   *   fromRegex?: (pattern: string) => Promise<import('../store/DocStore.js').DocSnapshot>,
    *   testing?: {openSingle: Function, openBatch: Function},
    *   renameState?: (id: number, label: string) => Promise<boolean>,
    * }} hooks
@@ -57,6 +58,14 @@ export class ViewContext {
     // no Tauri webview, so default to the same "∅" an empty document itself
     // derives to.
     this.toRegex = hooks.toRegex ?? (async () => "∅");
+    // The other direction (regex -> a brand new FA document, replacing the
+    // current one — `commands::convert::from_regex`, same "whole-document
+    // swap" shape as opening a file). No safe client-side fallback exists
+    // here (unlike `toRegex`'s "∅"): without a real hook there is nothing
+    // sensible to generate, so the default just fails loudly instead of
+    // pretending to succeed.
+    this.fromRegex =
+      hooks.fromRegex ?? (async () => { throw new Error("No hay conversión regex→autómata disponible."); });
     this.testing = hooks.testing ?? { openSingle() {}, openBatch() {} };
     // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
     // Are Never Silent"). Real by default (needs only `docStore` + a DOM

@@ -90,3 +90,14 @@ export function jffExport(path) {
 export function convToRegex() {
   return call("conv_to_regex");
 }
+
+/**
+ * Replaces the session's current document with the NFA built from
+ * `pattern` (Thompson's construction) — rejects with the parser's own
+ * Spanish, user-facing error message on invalid syntax.
+ * @param {string} pattern
+ * @returns {Promise<import('../store/DocStore.js').DocSnapshot>}
+ */
+export function convFromRegex(pattern) {
+  return call("conv_from_regex", { pattern });
+}

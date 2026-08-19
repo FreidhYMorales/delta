@@ -12,7 +12,7 @@ function snapshot() {
   };
 }
 
-async function setup(toRegex = vi.fn().mockResolvedValue("ε")) {
+async function setup(toRegex = vi.fn().mockResolvedValue("ε"), fromRegex = vi.fn()) {
   const snap = snapshot();
   const client = {
     docSnapshot: vi.fn().mockResolvedValue(snap),
@@ -22,7 +22,7 @@ async function setup(toRegex = vi.fn().mockResolvedValue("ε")) {
   };
   const docStore = new DocStore(client);
   await docStore.load();
-  const ctx = new ViewContext(docStore, { toRegex });
+  const ctx = new ViewContext(docStore, { toRegex, fromRegex });
   const container = document.createElement("div");
   document.body.appendChild(container);
   const view = new RegexView(container, docStore, ctx);
@@ -92,5 +92,53 @@ describe("RegexView", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(container.querySelector(".regex-output").value).toBe("b*");
+  });
+});
+
+describe("RegexView generate-from-regex", () => {
+  it("renders a text input and a generate button", async () => {
+    const { container } = await setup();
+    expect(container.querySelector(".regex-input")).toBeTruthy();
+    expect(container.querySelector(".regex-error")).toBeTruthy();
+  });
+
+  it("calls ctx.fromRegex with the typed pattern on click", async () => {
+    const fromRegex = vi.fn().mockResolvedValue({ revision: 2, states: [], edges: [], derived: {} });
+    const { container, view } = await setup(undefined, fromRegex);
+
+    container.querySelector(".regex-input").value = "a(b+c)*";
+    container.querySelector(".btn-primary").click();
+    await view._lastGeneratePromise;
+
+    expect(fromRegex).toHaveBeenCalledWith("a(b+c)*");
+  });
+
+  it("shows the rejection message in .regex-error and does not throw when the pattern is invalid", async () => {
+    const fromRegex = vi.fn().mockRejectedValue(new Error("'*' inesperado (posición 0)"));
+    const { container, view } = await setup(undefined, fromRegex);
+
+    container.querySelector(".regex-input").value = "*a";
+    container.querySelector(".btn-primary").click();
+    await view._lastGeneratePromise;
+
+    expect(container.querySelector(".regex-error").textContent).toBe("'*' inesperado (posición 0)");
+  });
+
+  it("clears a previous error once a later generate call succeeds", async () => {
+    const fromRegex = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("bad"))
+      .mockResolvedValueOnce({ revision: 2, states: [], edges: [], derived: {} });
+    const { container, view } = await setup(undefined, fromRegex);
+
+    container.querySelector(".regex-input").value = "*a";
+    container.querySelector(".btn-primary").click();
+    await view._lastGeneratePromise;
+    expect(container.querySelector(".regex-error").textContent).toBe("bad");
+
+    container.querySelector(".regex-input").value = "a";
+    container.querySelector(".btn-primary").click();
+    await view._lastGeneratePromise;
+    expect(container.querySelector(".regex-error").textContent).toBe("");
   });
 });

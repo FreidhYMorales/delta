@@ -10,6 +10,71 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Segundo paso hacia "Expresión Regular": parser de texto + regex→autómata
+
+**Dónde**: `crates/automata-core/src/regex/parser.rs` (nuevo),
+`crates/automata-core/src/regex/mod.rs`, `src-tauri/src/commands/convert.rs`,
+`src-tauri/src/lib.rs`, `frontend/src/tauri/client.js`,
+`frontend/src/commands/context.js`, `frontend/src/main.js`,
+`frontend/src/views/regex/RegexView.js`, `frontend/src/style.css`.
+
+**Qué faltaba**: `regex_to_nfa` (Thompson) ya existía y estaba probada desde
+la ronda anterior, pero solo tomaba un `Regex` (el AST), nunca un string —
+en todo el codebase, `Regex` se construía siempre a mano con combinadores
+(`Symbol`/`.concat()`/`.union()`/`.star()`), nunca desde texto tipeado por un
+usuario. No había ningún parser.
+
+**Qué se decidió**:
+- **Parser propio, sin dependencia nueva** (`regex/parser.rs`, recursive
+  descent a mano — mismo estilo que el resto del crate, que ya tiene Tarjan
+  y demás algoritmos escritos a mano): `+` unión (más suelto), yuxtaposición
+  = concatenación, `*` postfijo (más apretado), paréntesis, `ε`/`∅`
+  literales. Es deliberadamente el inverso exacto de `Display` — cada
+  carácter no reservado es su propio símbolo de un solo carácter, porque
+  `Display` imprime símbolos concatenados sin separador (`Symbol("00")`
+  seguido de `Symbol("1")` imprime `001`, indistinguible de tres símbolos de
+  un carácter) — un símbolo multi-carácter en el input haría el parseo
+  ambiguo. `impl FromStr for Regex` para poder hacer `pattern.parse()`.
+- **Mensajes de error en español, no en inglés** — a diferencia de todo otro
+  tipo de error de este crate (ej. `MinimizeError`, en inglés, coherente con
+  que todo comentario/identificador del código es en inglés): este es el
+  primer error de `automata-core` que se muestra tal cual al usuario final
+  en la UI (vía `conv_from_regex` → `RegexView`'s `.regex-error`), así que
+  funciona como copy de UI, no como diagnóstico interno — y toda la UI
+  nueva de esta app es en español.
+- **`conv_from_regex` reemplaza el documento completo** (`commands::doc::open`'s
+  mismo patrón exacto: `*doc = Document { model, history: History::new(200),
+  revision: next }`) en vez de fusionar/agregar — generar desde una regex es
+  conceptualmente "abrir un documento distinto", no una edición del actual.
+  Sin confirmación extra en el frontend: mismo criterio que `doc_open`/
+  `jff_import`, que tampoco la piden.
+- **Layout automático post-generación**: `regex_to_nfa` no asigna
+  coordenadas reales (todos los estados nacen en `(0,0)`), así que
+  `ctx.fromRegex` en `main.js` aplica `circleLayoutAction` (la misma lógica
+  del botón "Círculo") inmediatamente después de cargar el snapshot nuevo.
+- **Ambas direcciones viven en la misma pestaña "Expresión regular"** — no
+  se tocó la arquitectura de "Editor intercambiable" que se dejó afuera a
+  propósito en la ronda anterior; generar sigue siendo una mutación sobre el
+  mismo tipo de documento FA, no un segundo tipo de documento.
+
+**Cómo se verificó**: 30/30 tests del módulo `regex` (`cargo test -p
+automata-core regex::`), incluyendo un proptest nuevo
+(`round_trip_preserves_language_of_random_regexes`, 256 casos: AST regex
+aleatorio → `Display` → `parse` → comparar lenguaje de ambos vía
+`regex_to_nfa` sobre palabras aleatorias) que verifica que `parse` y
+`Display` son inversos genuinos entre sí — mismo patrón que
+`fa_to_regex::tests::round_trip_preserves_language_of_random_nfas`, un nivel
+más adentro. `cargo check -p app -p automata-core` limpio. 257/257 tests de
+frontend (7 nuevos: 3 en `context.test.js`/`RegexView.test.js` para el hook
+`fromRegex` y su default sin fallback seguro, 4 para el flujo de generar:
+render, llamada con el patrón tipeado, mensaje de error visible, error
+anterior que se limpia en un intento posterior exitoso). `vite build`
+limpio. Verificado visualmente en un dev server temporal: layout correcto,
+y el camino de error confirmado end-to-end (mismo `TypeError` de siempre por
+falta de backend Tauri real en ese entorno — no un bug nuevo).
+
+---
+
 ## 2026-08-19 — Primer paso hacia "Expresión Regular": conversión autómata→regex
 
 **Dónde**: `src-tauri/src/commands/convert.rs` (nuevo), `src-tauri/src/commands/mod.rs`,
