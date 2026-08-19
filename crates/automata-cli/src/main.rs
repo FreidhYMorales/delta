@@ -3,7 +3,9 @@
 //! Exists so backend logic (correctness and performance) can be exercised
 //! with cases larger and more adversarial than are practical to build by
 //! hand in the GUI: see `sim` (run real/native files), `inspect` (structural
-//! summary), and `stress` (synthetic worst-case topologies with timing).
+//! summary), `stress` (synthetic worst-case topologies with timing), and
+//! `mealy-sim`/`mealy-inspect` (same idea, for Mealy machines — there's no
+//! GUI for those at all yet, so this is the only way to exercise them).
 
 use std::fs;
 use std::process::ExitCode;
@@ -12,10 +14,12 @@ use std::time::Instant;
 use automata_core::convert::{fa_to_regex, fa_to_regular_grammar, minimize_dfa, nfa_to_dfa};
 use automata_core::dto;
 use automata_core::engine::fa::FaEngine;
+use automata_core::engine::mealy::{run_mealy, MealyOutcome};
 use automata_core::engine::{run_bounded, Budget};
 use automata_core::ids::SymbolId;
 use automata_core::interop::jff::reader;
 use automata_core::model::fa::{Classification, FaDoc};
+use automata_core::model::mealy::MealyDoc;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -77,6 +81,23 @@ enum Command {
     ToRegex {
         #[arg(long)]
         file: String,
+    },
+    /// Load a Mealy machine (native JSON only) and print its structure.
+    MealyInspect {
+        #[arg(long)]
+        file: String,
+    },
+    /// Load a Mealy machine and run one or many inputs through it, printing
+    /// the output string each one produces (or exactly where it got stuck).
+    MealySim {
+        #[arg(long)]
+        file: String,
+        /// Space-separated input symbols, e.g. "0 1 1 0". Omit for the empty input.
+        #[arg(long)]
+        input: Option<String>,
+        /// File with one input per line (space-separated symbols), run as a batch.
+        #[arg(long)]
+        inputs_file: Option<String>,
     },
     /// Synthesize a worst-case-shaped automaton and time compile + simulation.
     Stress {
@@ -234,6 +255,44 @@ fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
+        Command::MealyInspect { file } => {
+            let doc = load_mealy_doc(&file)?;
+            let state_count = doc.states().count();
+            let transition_count: usize = doc.edges().map(|(_, t)| t.len()).sum();
+            println!("states:            {state_count}");
+            println!("transitions:       {transition_count}");
+            println!("input alphabet:    {}", doc.input_alphabet().len());
+            println!("output alphabet:   {}", doc.output_alphabet().len());
+            println!("initial state set: {}", doc.initial_state().is_some());
+            println!("deterministic:     {}", doc.is_deterministic());
+            Ok(())
+        }
+
+        Command::MealySim { file, input, inputs_file } => {
+            let doc = load_mealy_doc(&file)?;
+            let inputs = collect_words(input, inputs_file)?;
+            for w in inputs {
+                let symbols: Vec<&str> = w.iter().map(String::as_str).collect();
+                let outcome = run_mealy(&doc, &symbols);
+                match outcome {
+                    MealyOutcome::Completed(outputs) => {
+                        println!("input={:?}  output={:?}", w, outputs.join(" "));
+                    }
+                    MealyOutcome::NoInitialState => println!("input={w:?}  sin estado inicial"),
+                    MealyOutcome::NoTransition { at } => {
+                        println!("input={w:?}  sin transición en la posición {at} (símbolo {:?})", w[at]);
+                    }
+                    MealyOutcome::Ambiguous { at } => {
+                        println!(
+                            "input={w:?}  ambiguo (no determinista) en la posición {at} (símbolo {:?})",
+                            w[at]
+                        );
+                    }
+                }
+            }
+            Ok(())
+        }
+
         Command::Stress { topology, states, input_len, max_steps, max_configs } => {
             if states < 2 {
                 return Err("stress requires at least 2 states".to_string());
@@ -308,6 +367,13 @@ fn load_doc(path: &str) -> Result<FaDoc, String> {
     } else {
         dto::load_from_str(&text).map_err(|e| e.to_string())
     }
+}
+
+/// Native JSON only — no `.jff` for Mealy machines yet (out of scope for
+/// this round; see docs/decisions.md).
+fn load_mealy_doc(path: &str) -> Result<MealyDoc, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))?;
+    dto::mealy_load_from_str(&text).map_err(|e| e.to_string())
 }
 
 fn collect_words(word: Option<String>, words_file: Option<String>) -> Result<Vec<Vec<String>>, String> {

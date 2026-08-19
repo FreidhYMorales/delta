@@ -10,6 +10,87 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Máquina de Mealy: backend completo, aislado de `FaDoc` (opción B)
+
+**Dónde**: `crates/automata-core/src/model/mealy.rs` (nuevo), `.../mealy_doc.rs`
+(nuevo), `.../engine/mealy.rs` (nuevo), `.../dto.rs` (nuevo variante
+`MachineDoc::Mealy` + funciones `mealy_*`), `crates/automata-cli/src/main.rs`
+(`mealy-inspect`/`mealy-sim`).
+
+**El orden recomendado y por qué Mealy es primero**: se comparó el orden
+real del menú "New" de JFLAP (decompilado con `cfr` desde
+`gui/action/NewAction.class`): Finite Automaton → **Mealy Machine → Moore
+Machine** → Pushdown Automaton → Turing Machine → ... — Mealy/Moore van
+antes que PDA en JFLAP real, no después como se asumió al principio.
+
+**Por qué NO se extendió `FaDoc`/`SymbolSet` (opción A descartada)**: en
+JFLAP, `MealyTransition extends Transition` agregando un campo (`myOutput`)
+se ve "gratis" por herencia Java. En Rust no hay ese polimorfismo:
+`SymbolSet` (`model/fa.rs`) agrupa varios símbolos por arista compartiendo
+un solo flag `epsilon`, sin lugar para que cada símbolo tenga su propia
+salida — que es justo lo que necesita Mealy (mismo origen→destino, distinta
+salida según qué símbolo se lea). Generalizar `SymbolSet` habría sido el
+primer cambio invasivo al modelo central en toda la sesión, arriesgando
+regresiones en todo lo ya probado (jff interop, AFN→AFD, minimizar, regex,
+gramática — todo lee `edge.symbols` directo). Se optó por la **opción B**:
+`MealyDoc` genuinamente separado, con su propio `EditOp`/`Document`/
+`History` (`mealy_doc.rs`) — duplica el mecanismo de undo/redo, pero deja
+`FaDoc` intocado y arranca (antes de lo esperado) la arquitectura de
+"Editor intercambiable" que sabíamos que iba a hacer falta.
+
+**Qué SÍ se reutilizó, sin duplicar**: `ids::Arena<Id>` ya era genérico
+(`StateId`/`SymbolId` son newtypes vía macro) — `MealyDoc` usa dos arenas
+(`input_symbols`/`output_symbols`) del mismo tipo genérico, sin inventar
+nada nuevo ahí. El enum `dto::MachineDoc` ya estaba diseñado para esto
+(comentario propio: "v1 ships only `Fa`; unknown future kinds ... fail with
+a message, never panic") — agregar `Mealy(MealyDto)` fue la extensión que
+ese diseño anticipaba, no una sorpresa.
+
+**Diferencias deliberadas de `FaDoc`** (documentadas en el doc-comment de
+`model/mealy.rs`): sin flag `accepting` (verificado con `javap` sobre
+`automata.mealy.MealyMachine`/`MealyStepByStateSimulator`: JFLAP lo hereda
+de `Automaton` pero nunca lo lee para la semántica de Mealy — cargar un
+campo que nada usa sería copiar sobras de herencia OOP, no una necesidad
+real); sin transiciones ε (una transición Mealy lee exactamente un símbolo
+y produce exactamente uno; una épsilon no tendría con qué emparejar una
+salida).
+
+**Motor de simulación separado del trait `Machine`**: `Machine`/
+`run_bounded` (`engine/mod.rs`) están pensados para resultados
+aceptar/rechazar sobre un *conjunto* de configuraciones que branchea —
+Mealy no encaja ahí: lo que importa es el string de salida, y un Mealy
+tiene que ser determinista para tener sentido como transductor síncrono. En
+vez de branchear y "explorar" el no-determinismo, `run_mealy`
+(`engine/mealy.rs`) avanza un solo estado vivo a la vez y **reporta** la
+ambigüedad como resultado atascado (`MealyOutcome::Ambiguous`) en vez de
+elegir una rama en silencio.
+
+**Verificación por CLI con ejemplos calculados a mano** (pedido explícito
+del usuario): se armó el Mealy de complemento a 2 en binario (LSB primero;
+`q0` copia hasta el primer 1 inclusive, `q1` complementa el resto) como
+fixture JSON nueva, y se corrió por `automata-cli mealy-sim` contra 4
+entradas calculadas a mano por fuera del código:
+- `1 0 1 1` → `1 1 0 0` (1101 → complemento a 2 = 1100, LSB primero)
+- `0 0 0` → `0 0 0` (nunca aparece un 1, nunca complementa)
+- `1 1 1 1` → `1 0 0 0`
+- `0 1 0` → `0 1 1`
+
+Las cuatro coincidieron exactamente. También se verificaron los tres casos
+de error por CLI (`mealy-sim`/`mealy-inspect`): sin estado inicial, símbolo
+sin transición, y una máquina a propósito no determinista (`mealy-inspect`
+reportó `deterministic: false` correctamente).
+
+**Cómo se verificó además**: 125 tests unitarios en `automata-core` (antes:
+~113) — incluye dos proptests nuevos de 256 casos cada uno: round-trip
+aplicar→deshacer sobre `MealyDocument` (mismo patrón que
+`doc::history::apply_then_undo_round_trip`, sin encontrar ningún bug esta
+vez) y round-trip guardar→cargar JSON de `MealyDto` (mismo patrón que el de
+`FaDto`). `cargo check -p app` limpio — la capa Tauri no se tocó en
+absoluto este round, a propósito: esto fue backend puro, verificado por
+CLI; la conexión Tauri/frontend queda para la próxima ronda.
+
+---
+
 ## 2026-08-19 — AFN→AFD / Minimizar AFD: transformación in-place, no reemplazo de documento
 
 **Dónde**: `src-tauri/src/commands/convert.rs`, `src-tauri/src/lib.rs`,

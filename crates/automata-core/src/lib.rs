@@ -10,5 +10,6 @@ pub mod engine;
 pub mod grammar;
 pub mod ids;
 pub mod interop;
+pub mod mealy_doc;
 pub mod model;
 pub mod regex;

@@ -15,13 +15,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::StateId;
 use crate::model::fa::FaDoc;
+use crate::model::mealy::MealyDoc;
 
 pub const CURRENT_VERSION: u32 = 1;
 
+/// The `kind`-tagged boundary enum design D1 anticipated growing (see this
+/// module's own doc comment: "v1 ships only `Fa`; unknown future kinds ...
+/// fail with a message, never panic") — `Mealy` is the first addition to
+/// it. `load_from_str`/`save_to_string` stay FA-only on purpose (option B
+/// of the Mealy decision, docs/decisions.md: isolate, don't touch the
+/// already-tested FA persistence path) — `mealy_load_from_str`/
+/// `mealy_save_to_string` below are Mealy's own equivalents, sharing this
+/// same envelope shape rather than inventing a second wire format.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 pub enum MachineDoc {
     Fa(FaDto),
+    Mealy(MealyDto),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -47,6 +57,31 @@ pub struct EdgeDto {
     pub symbols: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MealyDto {
+    pub states: Vec<MealyStateDto>,
+    pub edges: Vec<MealyEdgeDto>,
+    pub initial: Option<usize>,
+}
+
+/// No `accepting` field — see `model::mealy`'s doc comment for why.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MealyStateDto {
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MealyEdgeDto {
+    pub from: usize,
+    pub to: usize,
+    /// `(input, output)` pairs — a Mealy edge is a small map, not a flat
+    /// symbol set (see `model::mealy`'s doc comment on why `SymbolSet`
+    /// doesn't fit here).
+    pub transitions: Vec<(String, String)>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Envelope {
     version: u32,
@@ -59,6 +94,8 @@ pub enum DtoError {
     UnsupportedVersion(u32),
     #[error("state index {0} is out of range")]
     InvalidStateIndex(usize),
+    #[error("expected a {expected} document, found a {found} one")]
+    WrongKind { expected: &'static str, found: &'static str },
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }
@@ -153,6 +190,83 @@ pub fn load_from_str(s: &str) -> Result<FaDoc, DtoError> {
     }
     match envelope.document {
         MachineDoc::Fa(dto) => fa_from_dto(&dto),
+        MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Mealy" }),
+    }
+}
+
+/// Project a `MealyDoc` into its serializable DTO — same "positional index,
+/// sorted for reproducibility" rules as `fa_to_dto`.
+pub fn mealy_to_dto(doc: &MealyDoc) -> MealyDto {
+    let alive: Vec<StateId> = doc.states().collect();
+    let index_of: HashMap<StateId, usize> = alive.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+
+    let states = alive
+        .iter()
+        .map(|&id| {
+            let meta = doc.state_meta(id).expect("alive state has meta");
+            MealyStateDto { label: doc.state_label(id).expect("alive state has label").to_string(), x: meta.x, y: meta.y }
+        })
+        .collect();
+
+    let mut edges: Vec<MealyEdgeDto> = doc
+        .edges()
+        .map(|((from, to), transitions)| {
+            let mut pairs: Vec<(String, String)> = transitions
+                .iter()
+                .map(|(input, output)| {
+                    (
+                        doc.input_symbol_label(*input).expect("interned input has a label").to_string(),
+                        doc.output_symbol_label(*output).expect("interned output has a label").to_string(),
+                    )
+                })
+                .collect();
+            pairs.sort();
+            MealyEdgeDto { from: index_of[from], to: index_of[to], transitions: pairs }
+        })
+        .collect();
+    edges.sort_by_key(|e| (e.from, e.to));
+
+    let initial = doc.initial_state().map(|id| index_of[&id]);
+
+    MealyDto { states, edges, initial }
+}
+
+/// Reconstruct a `MealyDoc` from its DTO, allocating fresh `StateId`s in
+/// `states` array order.
+pub fn mealy_from_dto(dto: &MealyDto) -> Result<MealyDoc, DtoError> {
+    let mut doc = MealyDoc::new();
+    let mut ids = Vec::with_capacity(dto.states.len());
+    for s in &dto.states {
+        let id = doc.add_state(&s.label, s.x, s.y).map_err(|_| DtoError::InvalidStateIndex(ids.len()))?;
+        ids.push(id);
+    }
+    for e in &dto.edges {
+        let from = *ids.get(e.from).ok_or(DtoError::InvalidStateIndex(e.from))?;
+        let to = *ids.get(e.to).ok_or(DtoError::InvalidStateIndex(e.to))?;
+        for (input, output) in &e.transitions {
+            doc.add_transition(from, to, input, output);
+        }
+    }
+    if let Some(idx) = dto.initial {
+        let id = *ids.get(idx).ok_or(DtoError::InvalidStateIndex(idx))?;
+        doc.set_initial(Some(id));
+    }
+    Ok(doc)
+}
+
+pub fn mealy_save_to_string(doc: &MealyDoc) -> Result<String, DtoError> {
+    let envelope = Envelope { version: CURRENT_VERSION, document: MachineDoc::Mealy(mealy_to_dto(doc)) };
+    Ok(serde_json::to_string_pretty(&envelope)?)
+}
+
+pub fn mealy_load_from_str(s: &str) -> Result<MealyDoc, DtoError> {
+    let envelope: Envelope = serde_json::from_str(s)?;
+    if envelope.version != CURRENT_VERSION {
+        return Err(DtoError::UnsupportedVersion(envelope.version));
+    }
+    match envelope.document {
+        MachineDoc::Mealy(dto) => mealy_from_dto(&dto),
+        MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Fa" }),
     }
 }
 
@@ -227,6 +341,85 @@ mod tests {
             let json = save_to_string(&doc).unwrap();
             let reloaded = load_from_str(&json).unwrap();
             prop_assert_eq!(fa_to_dto(&doc), fa_to_dto(&reloaded));
+        }
+    }
+
+    mod mealy {
+        use super::*;
+
+        fn build_mealy_doc(
+            num_states: usize,
+            edge_specs: Vec<(usize, usize, Vec<(String, String)>)>,
+            initial: Option<usize>,
+        ) -> MealyDoc {
+            let mut doc = MealyDoc::new();
+            let mut ids = Vec::with_capacity(num_states);
+            for i in 0..num_states {
+                ids.push(doc.add_state(&format!("s{i}"), i as f64, (i * 2) as f64).unwrap());
+            }
+            if num_states > 0 {
+                for (from_idx, to_idx, pairs) in edge_specs {
+                    let from = ids[from_idx % num_states];
+                    let to = ids[to_idx % num_states];
+                    for (input, output) in pairs {
+                        doc.add_transition(from, to, &input, &output);
+                    }
+                }
+                if let Some(idx) = initial {
+                    doc.set_initial(Some(ids[idx % num_states]));
+                }
+            }
+            doc
+        }
+
+        #[test]
+        fn envelope_carries_the_mealy_kind_tag() {
+            let doc = build_mealy_doc(1, vec![], None);
+            let json = mealy_save_to_string(&doc).unwrap();
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(value["version"].as_u64(), Some(1));
+            assert_eq!(value["document"]["kind"].as_str(), Some("Mealy"));
+        }
+
+        #[test]
+        fn loading_a_fa_document_as_mealy_fails_with_a_clear_error() {
+            let fa_json = save_to_string(&build_doc(1, vec![], None)).unwrap();
+            let err = mealy_load_from_str(&fa_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Mealy", found: "Fa" }));
+        }
+
+        #[test]
+        fn loading_a_mealy_document_as_fa_fails_with_a_clear_error() {
+            let mealy_json = mealy_save_to_string(&build_mealy_doc(1, vec![], None)).unwrap();
+            let err = load_from_str(&mealy_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Fa", found: "Mealy" }));
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            /// Same "save-then-load is an identity" invariant as FA's own
+            /// `save_load_round_trip_is_identity`, one level over for the
+            /// Mealy DTO/envelope pair.
+            #[test]
+            fn save_load_round_trip_is_identity(
+                num_states in 0usize..12,
+                edge_specs in prop::collection::vec(
+                    (
+                        0usize..12,
+                        0usize..12,
+                        prop::collection::vec(("[a-b]", "[x-y]"), 0..3)
+                            .prop_map(|v| v.into_iter().map(|(i, o)| (i.to_string(), o.to_string())).collect::<Vec<_>>()),
+                    ),
+                    0..10,
+                ),
+                initial in prop::option::of(0usize..12),
+            ) {
+                let doc = build_mealy_doc(num_states, edge_specs, initial);
+                let json = mealy_save_to_string(&doc).unwrap();
+                let reloaded = mealy_load_from_str(&json).unwrap();
+                prop_assert_eq!(mealy_to_dto(&doc), mealy_to_dto(&reloaded));
+            }
         }
     }
 }
