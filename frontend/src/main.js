@@ -43,6 +43,8 @@ import { MooreContext } from "./commands/MooreContext.js";
 import { MooreDiagramView } from "./views/mooreDiagram/MooreDiagramView.js";
 import { MooreToolbar } from "./views/mooreDiagram/MooreToolbar.js";
 import { MooreSimView } from "./views/mooreDiagram/MooreSimView.js";
+import { MooreTableView } from "./views/mooreTable/MooreTableView.js";
+import { MooreFormalView } from "./views/mooreFormal/MooreFormalView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -353,6 +355,8 @@ async function main() {
     { id: "formal", label: "Definición formal" },
     { id: "simular", label: "Simular" },
   ]);
+  new MooreTableView(mooreUpperTabs.panels.get("tabla"), mooreDocStore, mooreCtx);
+  new MooreFormalView(mooreUpperTabs.panels.get("formal"), mooreDocStore);
   new MooreSimView(mooreUpperTabs.panels.get("simular"), (input) => client.mooreSim(input));
 
   // `modes` drives both the "Editor" dropdown's real-mode options and

@@ -10,6 +10,37 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Moore queda completo: Tabla de estados y Definición formal, δ y λ como funciones separadas
+
+**Dónde**: `frontend/src/views/mooreTable/{MooreTableView,mooreTableLogic}.js`,
+`.../mooreFormal/{MooreFormalView,mooreFormalLogic}.js`,
+`.../store/applyMooreModel.js` (nuevos), `main.js`.
+
+**Cierra Moore Machine de punta a punta** — backend, IPC, diagrama, tabla,
+definición formal, simulación, atajos/menú contextual/importar-exportar —
+al mismo nivel que quedó Mealy.
+
+**La tabla suma una columna "Salida"** que Mealy no tiene (justo después de
+"Estado", antes de las columnas de alfabeto) — editable, vacío limpia la
+salida (`SetOutput{state, output:null}`). Cada celda de alfabeto muestra
+solo el estado destino, sin el par `destino/salida` de la tabla de Mealy,
+porque la salida de Moore no es por-transición.
+
+**La definición formal separa δ y λ en dos líneas distintas** (`δ(desde,
+entrada) = hasta` por transición, `λ(estado) = salida` por cada estado con
+salida no nula) — a diferencia de la línea combinada `δ(desde,entrada)=
+hasta/salida` de Mealy. No es una elección de estilo: en Moore δ y λ son
+funciones genuinamente separadas (δ: Q×Σ→Q, λ: Q→Δ), mientras que en Mealy
+una sola función δ: Q×Σ→Q×Δ ya combina ambas — la notación de cada vista
+refleja la diferencia real, no busca uniformidad forzada entre las dos.
+
+**Cómo se verificó**: 543/543 tests de frontend (55 nuevos). `vite build`
+limpio. No se levantó un dev server para esta ronda — montar dos vistas
+nuevas en pestañas ya construidas y vacías (`mooreUpperTabs`, creadas en la
+ronda anterior específicamente para esto) es de bajo riesgo estructural, y
+`main.js` confirmado con solo 2 imports + 2 llamadas de montaje, sin
+cambios de estructura.
+
 ## 2026-08-19 — Frontend de Moore (editor completo desde el arranque) y `switchMode` generalizado a N modos
 
 **Dónde**: `frontend/src/store/MooreDocStore.js`, `.../commands/{MooreContext,
