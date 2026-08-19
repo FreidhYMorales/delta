@@ -2,8 +2,9 @@
 // the app's views together. Layout is the plan worked out with the user
 // (wireframe, this session): menu bar, canvas pane (60%, DiagramView owns
 // its own internal toolbar), a draggable resizer, and a right column split
-// into an upper tab group (Tabla de estados / Definición formal) and a
-// lower tab group (TestingView's own Cadena/Lote/Resultados tabs) — see
+// into an upper tab group (Tabla de estados / Definición formal / Expresión
+// regular / Gramática regular) and a lower tab group (TestingView's own
+// Cadena/Lote/Resultados tabs) — see
 // docs/decisions.md for the self-loop/curved-edge geometry that went with
 // it. The L3 interop menu reuses `jff.import`/`jff.export`, wired to real
 // native file dialogs below.
@@ -16,6 +17,7 @@ import { DiagramView } from "./views/diagram/DiagramView.js";
 import { TableView } from "./views/table/TableView.js";
 import { FormalView } from "./views/formal/FormalView.js";
 import { RegexView } from "./views/regex/RegexView.js";
+import { GrammarView } from "./views/grammar/GrammarView.js";
 import { TestingView } from "./views/testing/TestingView.js";
 import { MenuBar } from "./views/menubar/MenuBar.js";
 import { Toolbar } from "./views/toolbar/Toolbar.js";
@@ -75,6 +77,7 @@ async function main() {
     { id: "tabla", label: "Tabla de estados" },
     { id: "formal", label: "Definición formal" },
     { id: "regex", label: "Expresión regular" },
+    { id: "grammar", label: "Gramática regular" },
   ]);
 
   const docStore = new DocStore(client);
@@ -139,6 +142,15 @@ async function main() {
       await circleLayoutAction(docStore);
       return snapshot;
     },
+    toGrammar: () => client.convToGrammar(),
+    openGrammarTab: () => upperTabs.select("grammar"),
+    fromGrammar: async (text) => {
+      const snapshot = await client.convFromGrammar(text);
+      docStore.loadSnapshot(snapshot);
+      // regular_grammar_to_nfa assigns no real (x, y) either.
+      await circleLayoutAction(docStore);
+      return snapshot;
+    },
     layout: { circle: () => circleLayoutAction(docStore) },
   });
 
@@ -149,6 +161,7 @@ async function main() {
   new TableView(upperTabs.panels.get("tabla"), docStore, ctx);
   new FormalView(upperTabs.panels.get("formal"), docStore);
   new RegexView(upperTabs.panels.get("regex"), docStore, ctx);
+  new GrammarView(upperTabs.panels.get("grammar"), docStore, ctx);
   const testingView = new TestingView(panelLower, docStore, ctx);
   ctx.testing = testingView.controls;
 

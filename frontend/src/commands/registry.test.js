@@ -32,6 +32,7 @@ function fakeCtx(overrides = {}) {
     renameState: vi.fn().mockResolvedValue(true),
     testing: { openSingle: vi.fn(), openBatch: vi.fn() },
     openRegexTab: vi.fn(),
+    openGrammarTab: vi.fn(),
     ...overrides,
   };
 }
@@ -241,6 +242,12 @@ describe("action.run behavior", () => {
     const ctx = fakeCtx();
     findAction("editor.openRegex").run(ctx);
     expect(ctx.openRegexTab).toHaveBeenCalled();
+  });
+
+  it("editor.openGrammar jumps to the Gramática regular tab", () => {
+    const ctx = fakeCtx();
+    findAction("editor.openGrammar").run(ctx);
+    expect(ctx.openGrammarTab).toHaveBeenCalled();
   });
 
   it("jff.import prompts for a path and imports it", async () => {

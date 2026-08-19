@@ -28,8 +28,11 @@ export class ViewContext {
    *   simBatch?: (words: string[][], budget?: object) => Promise<object[]>,
    *   toRegex?: () => Promise<string>,
    *   fromRegex?: (pattern: string) => Promise<import('../store/DocStore.js').DocSnapshot>,
+   *   toGrammar?: () => Promise<string>,
+   *   fromGrammar?: (text: string) => Promise<import('../store/DocStore.js').DocSnapshot>,
    *   testing?: {openSingle: Function, openBatch: Function},
    *   openRegexTab?: () => void,
+   *   openGrammarTab?: () => void,
    *   renameState?: (id: number, label: string) => Promise<boolean>,
    * }} hooks
    */
@@ -67,12 +70,20 @@ export class ViewContext {
     // pretending to succeed.
     this.fromRegex =
       hooks.fromRegex ?? (async () => { throw new Error("No hay conversión regex→autómata disponible."); });
+    // Same pair, for the right-linear grammar direction (`GrammarView`) —
+    // "" is the empty grammar `grammar::format` itself derives for an empty
+    // document, same rationale as `toRegex`'s "∅" default.
+    this.toGrammar = hooks.toGrammar ?? (async () => "");
+    this.fromGrammar =
+      hooks.fromGrammar ?? (async () => { throw new Error("No hay conversión gramática→autómata disponible."); });
     this.testing = hooks.testing ?? { openSingle() {}, openBatch() {} };
-    // "Editor" dropdown -> "Expresión Regular" (Toolbar.js/editor.openRegex):
-    // a menu-style jump to the tab, wired by the app shell (main.js is the
-    // only place with the upper tab group's `select` in scope) — safe no-op
-    // default so this is testable without a real app shell.
+    // "Editor" dropdown -> "Expresión Regular" / "Gramática Regular"
+    // (Toolbar.js/editor.openRegex, editor.openGrammar): a menu-style jump
+    // to the tab, wired by the app shell (main.js is the only place with
+    // the upper tab group's `select` in scope) — safe no-op defaults so
+    // this is testable without a real app shell.
     this.openRegexTab = hooks.openRegexTab ?? (() => {});
+    this.openGrammarTab = hooks.openGrammarTab ?? (() => {});
     // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
     // Are Never Silent"). Real by default (needs only `docStore` + a DOM
     // notice, both available without a Tauri webview) — overridable in

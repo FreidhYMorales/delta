@@ -216,6 +216,14 @@ export const actions = [
     when: () => true,
     run: (ctx) => ctx.openRegexTab(),
   },
+  {
+    id: "editor.openGrammar",
+    title: "Gramática Regular",
+    group: "editor",
+    keybinding: null,
+    when: () => true,
+    run: (ctx) => ctx.openGrammarTab(),
+  },
 
   // --- Interop (L3, menu+palette only — design D6) -------------------------
   {

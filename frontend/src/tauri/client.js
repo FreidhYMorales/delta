@@ -101,3 +101,23 @@ export function convToRegex() {
 export function convFromRegex(pattern) {
   return call("conv_from_regex", { pattern });
 }
+
+/** @returns {Promise<string>} the right-linear grammar equivalent to the
+ * session's current automaton, in `grammar::format`'s syntax (not
+ * `RegularGrammar`'s more compact `Display` — see the Rust doc comment on
+ * `conv_to_grammar`), so it's always copy-paste-able back into
+ * `convFromGrammar`. */
+export function convToGrammar() {
+  return call("conv_to_grammar");
+}
+
+/**
+ * Replaces the session's current document with the NFA built from `text`
+ * (a right-linear grammar, one production per line) — rejects with the
+ * parser's own Spanish, user-facing error message on invalid syntax.
+ * @param {string} text
+ * @returns {Promise<import('../store/DocStore.js').DocSnapshot>}
+ */
+export function convFromGrammar(text) {
+  return call("conv_from_grammar", { text });
+}

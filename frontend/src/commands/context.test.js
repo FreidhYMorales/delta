@@ -94,6 +94,21 @@ describe("ViewContext", () => {
     const ctx = new ViewContext({});
     expect(() => ctx.openRegexTab()).not.toThrow();
   });
+
+  it("exposes a toGrammar hook defaulting to the empty grammar", async () => {
+    const ctx = new ViewContext({});
+    expect(await ctx.toGrammar()).toBe("");
+  });
+
+  it("exposes a fromGrammar hook that fails loudly by default (no safe fallback to generate)", async () => {
+    const ctx = new ViewContext({});
+    await expect(ctx.fromGrammar("q0 -> a q1")).rejects.toThrow();
+  });
+
+  it("exposes an openGrammarTab hook defaulting to a safe no-op", () => {
+    const ctx = new ViewContext({});
+    expect(() => ctx.openGrammarTab()).not.toThrow();
+  });
 });
 
 describe("ViewContext.renameState default (task 7.9: rename collisions are never silent)", () => {

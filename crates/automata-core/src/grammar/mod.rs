@@ -10,6 +10,9 @@
 
 use std::fmt;
 
+pub mod parser;
+pub use parser::{format, parse, ParseError};
+
 /// A right-linear production: `lhs -> symbol rhs` (`Derive`) or `lhs -> ε`
 /// (`Terminate`). `symbol` may be the empty string for a source epsilon
 /// transition — that is still a `Derive` (it names a `rhs` non-terminal),

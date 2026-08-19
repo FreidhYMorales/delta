@@ -23,6 +23,8 @@ pub fn run() {
       jff::jff_export,
       convert::conv_to_regex,
       convert::conv_from_regex,
+      convert::conv_to_grammar,
+      convert::conv_from_grammar,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

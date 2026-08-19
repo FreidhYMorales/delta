@@ -1,10 +1,12 @@
-//! `conv_to_regex` / `conv_from_regex` — the two directions of the FA<->regex
-//! loop (`automata_core::convert::{fa_to_regex, regex_to_nfa}`), first step
-//! towards a real "Expresión Regular" editor mode — see
-//! `frontend/src/views/toolbar/Toolbar.js`.
+//! `conv_to_regex` / `conv_from_regex` and `conv_to_grammar` /
+//! `conv_from_grammar` — both directions of the FA<->regex and
+//! FA<->right-linear-grammar loops (`automata_core::convert::*`), the
+//! "Expresión Regular" / "Gramática Regular" entries in the toolbar's
+//! Editor dropdown (`frontend/src/views/toolbar/Toolbar.js`) jump to.
 
-use automata_core::convert::{fa_to_regex, regex_to_nfa};
+use automata_core::convert::{fa_to_regex, fa_to_regular_grammar, regex_to_nfa, regular_grammar_to_nfa};
 use automata_core::doc::{Document, History};
+use automata_core::grammar::RegularGrammar;
 use automata_core::regex::Regex;
 
 use crate::ipc::{snapshot_of, DocSnapshot};
@@ -39,6 +41,30 @@ pub fn from_regex(session: &Session, pattern: String) -> Result<DocSnapshot, Str
     Ok(snapshot_of(&doc))
 }
 
+/// Same read-only shape as `to_regex`, for the "Gramática regular
+/// equivalente" box. Uses `grammar::format` — not `RegularGrammar`'s own
+/// `Display` (a more compact, `automata-cli`-oriented rendering, delimiter
+/// -free between a production's symbol and its destination) — specifically
+/// so what's shown here is always copy-paste-able straight back into the
+/// "Generar autómata" box below it (see `grammar/parser.rs`'s doc comment
+/// for exactly why the two renderings differ).
+pub fn to_grammar(session: &Session) -> String {
+    let doc = session.0.lock().expect("session mutex poisoned");
+    automata_core::grammar::format(&fa_to_regular_grammar(&doc.model))
+}
+
+/// Same "whole-document replacement" shape as `from_regex`, for a typed
+/// right-linear grammar instead of a regex.
+pub fn from_grammar(session: &Session, text: String) -> Result<DocSnapshot, String> {
+    let grammar: RegularGrammar =
+        text.parse().map_err(|e: automata_core::grammar::ParseError| e.to_string())?;
+    let model = regular_grammar_to_nfa(&grammar);
+    let mut doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
+    let next_revision = doc.revision + 1;
+    *doc = Document { model, history: History::new(200), revision: next_revision };
+    Ok(snapshot_of(&doc))
+}
+
 #[tauri::command]
 pub fn conv_to_regex(session: tauri::State<'_, Session>) -> String {
     to_regex(&session)
@@ -47,4 +73,14 @@ pub fn conv_to_regex(session: tauri::State<'_, Session>) -> String {
 #[tauri::command]
 pub fn conv_from_regex(session: tauri::State<'_, Session>, pattern: String) -> Result<DocSnapshot, String> {
     from_regex(&session, pattern)
+}
+
+#[tauri::command]
+pub fn conv_to_grammar(session: tauri::State<'_, Session>) -> String {
+    to_grammar(&session)
+}
+
+#[tauri::command]
+pub fn conv_from_grammar(session: tauri::State<'_, Session>, text: String) -> Result<DocSnapshot, String> {
+    from_grammar(&session, text)
 }

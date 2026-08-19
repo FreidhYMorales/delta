@@ -10,6 +10,78 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Gramática regular: parser de texto propio, distinto de `Display`, y un bug real que encontró el proptest
+
+**Dónde**: `crates/automata-core/src/grammar/parser.rs` (nuevo),
+`crates/automata-core/src/grammar/mod.rs`, `src-tauri/src/commands/convert.rs`,
+`src-tauri/src/lib.rs`, `frontend/src/tauri/client.js`,
+`frontend/src/commands/context.js`, `frontend/src/commands/registry.js`,
+`frontend/src/main.js`, `frontend/src/views/grammar/GrammarView.js` (nuevo),
+`frontend/src/style.css`.
+
+**Qué se pidió**: mismo patrón que ya se hizo dos veces para expresiones
+regulares — pestaña derivada + generación — pero para `fa_to_regular_grammar`/
+`regular_grammar_to_nfa`, que ya existían y estaban probadas.
+
+**Por qué el formato de texto NO es igual al de `Display`** (a diferencia de
+`regex/parser.rs`, que sí es el inverso exacto de `Regex::Display`):
+`Production`'s `Display` imprime `lhs -> symbolrhs` sin ningún delimitador
+entre el símbolo y el no terminal destino (`q0 -> aq1`). Para regex eso es
+seguro porque cada carácter es su propio símbolo; acá los no terminales son
+etiquetas de estado de largo arbitrario (`q0`, `q10`, ...), así que un
+parser no puede saber dónde termina el símbolo y empieza el nombre del
+estado sin ya conocer de antemano el conjunto completo de nombres — y ese
+conjunto es justo lo que el texto está definiendo. Se resolvió con un
+espacio obligatorio entre símbolo y destino (`q0 -> a q1`), sacrificando la
+paridad byte-a-byte con `Display` a cambio de que el formato deje de ser
+ambiguo. `grammar::format` es el inverso real de `parse` (nuevo, no
+`Display`) — `conv_to_grammar` usa `format`, no `Display`, específicamente
+para que lo que se ve en "Gramática regular equivalente" sea siempre
+copiable y pegable tal cual en el cuadro de generar.
+
+**El símbolo inicial necesitó un header explícito (`inicio: q0`)**: el plan
+original era "el `lhs` de la primera producción es el símbolo inicial" (así
+arranca JFLAP mismo). El proptest de round-trip (256 casos, automáticos)
+encontró el contraejemplo real en la primera corrida: un estado inicial sin
+transiciones salientes y no-aceptador nunca aparece como `lhs` de ninguna
+producción, así que no hay ninguna línea que reordenar al frente — `format`
+perdía silenciosamente cuál era el inicio, y el autómata reconstruido
+aceptaba/rechazaba distinto al original. Se agregó una línea de cabecera
+opcional `inicio: <estado>` que `format` solo emite cuando el estado inicial
+no tiene producción propia (el caso común queda exactamente como una lista
+de producciones sin cabecera, tal como la escribiría un estudiante a mano).
+Ver el propio doc-comment de `format` en `parser.rs` para el detalle
+completo — quedó documentado ahí porque es la clase de bug que un test
+manual jamás encuentra (requiere un automaton inicial-pero-sin-salida, un
+caso muy poco intuitivo de armar a propósito).
+
+**Límite conocido, documentado, no un bug**: al igual que el parser de
+regex no puede expresar "sin estado inicial" salvo con `∅`, el de gramática
+tampoco puede expresar un autómata con productions pero sin ningún estado
+inicial en absoluto (`start: None`) — el texto tipeado siempre implica algún
+símbolo inicial. El proptest de round-trip excluye ese caso explícitamente
+(`prop_assume!`) en vez de fingir que está cubierto.
+
+**Mismos patrones ya establecidos, reaplicados**: mensajes de error en
+español (primer error de este módulo mostrado tal cual al usuario, igual
+que `regex::ParseError`); `conv_from_grammar` reemplaza el documento entero
+igual que `conv_from_regex`/`doc_open`; nueva acción de registry
+`editor.openGrammar` (grupo `"editor"`, cubierta por `EDITOR_MODE_IDS`, sin
+tocar la arquitectura de "Editor intercambiable" — la razón completa de por
+qué no está en la entrada anterior de hoy); layout automático post-generación
+porque `regular_grammar_to_nfa` tampoco asigna `(x, y)` reales.
+
+**Cómo se verificó**: 25/25 tests del módulo `grammar` (`cargo test -p
+automata-core grammar::`), incluyendo el proptest de 256 casos que encontró
+el bug de arriba antes de llegar a main. `cargo check -p app -p
+automata-core` limpio. 274/274 tests de frontend (13 nuevos). `vite build`
+limpio. Verificado en vivo en un dev server temporal: el dropdown salta a
+"Gramática regular" y vuelve solo a "Autómata Finito"; el flujo de
+generación confirmado hasta el límite conocido del entorno (sin backend
+Tauri real).
+
+---
+
 ## 2026-08-19 — El dropdown "Editor" como menú de acceso, no como selector de tipo de documento
 
 **Dónde**: `frontend/src/commands/registry.js` (nueva acción `editor.openRegex`

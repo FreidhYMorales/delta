@@ -794,11 +794,14 @@ body {
   overflow-wrap: break-word;
 }
 
-/* First step towards the "Expresión Regular" editor mode (still a disabled
- * option in the Toolbar's mode select): a read-only derived value, so it
- * reuses `.formal-view`'s flex-fill/textarea shape but with no apply
- * button/error row underneath — there's nothing to submit here. */
-.regex-view {
+/* First step towards the "Expresión Regular"/"Gramática Regular" editor
+ * modes (still disabled options in the Toolbar's mode select — see
+ * docs/decisions.md): a read-only derived value on top plus a
+ * generate-from-text section below, so both reuse `.formal-view`'s
+ * flex-fill/textarea shape. `.grammar-view` mirrors `.regex-view` exactly
+ * (`GrammarView.js`). */
+.regex-view,
+.grammar-view {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -806,12 +809,14 @@ body {
   gap: var(--space-xs);
 }
 
-.regex-view-label {
+.regex-view-label,
+.grammar-view-label {
   color: var(--text-muted);
   font-size: var(--font-size-sm);
 }
 
-.regex-output {
+.regex-output,
+.grammar-output {
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -828,8 +833,17 @@ body {
   overflow-wrap: break-word;
 }
 
+/* The grammar generate-box is a <textarea> (one production per line), not
+ * a single-line <input> like the regex one — same sizing convention as
+ * `.testing-batch-input`. */
+.grammar-input {
+  min-height: 6rem;
+  resize: vertical;
+}
+
 .formal-error,
-.regex-error {
+.regex-error,
+.grammar-error {
   color: var(--danger);
   font-size: var(--font-size-sm);
   min-height: 1.2em;
