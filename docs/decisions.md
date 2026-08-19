@@ -10,6 +10,62 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-19 — Frontend de Mealy: editor de canvas real, "Editor" pasa a ser un cambio de modo de verdad
+
+**Dónde**: `frontend/src/store/MealyDocStore.js`, `.../commands/MealyContext.js`,
+`.../views/mealyDiagram/{MealyDiagramView,MealyToolbar,MealySimView,mealyLogic}.js`,
+`.../views/toolbar/EditorModeSelect.js` (nuevo, extraído de `Toolbar.js`),
+`.../main.js`, `.../style.css`.
+
+**Alcance de esta ronda (v1, explícitamente recortado)**: canvas arrastrable
+completo (crear/mover/seleccionar/borrar estados y transiciones, pan/zoom,
+undo/redo real vía `mealy_apply`), "Marcar inicial" por botón, y un panel
+"Simular" (una entrada, un resultado — sin lote ni traza paso a paso).
+**Deliberadamente afuera todavía**: Tabla de estados/Definición formal
+equivalentes para Mealy, importación/exportación de archivo por UI (el
+comando `mealy_open`/`mealy_save` ya existe, falta el botón), menú
+contextual/atajos de teclado (sin registry propio para Mealy). Se puede
+sumar en una ronda futura sin tocar lo que ya está.
+
+**Reuso real, no solo declarado**: `views/diagram/geometry.js` (`circleLayout`,
+`edgeEndpoints`, `preferredLoopAngle`, `selfLoopPath`, `curvedEdgePath`,
+`nextStateLabel`) se importa tal cual en `MealyDiagramView.js` — nada de esa
+matemática de curvas es específica de AFD/AFN, así que no hubo que
+reescribirla. `MealyContext.renameState` reusa `renameState.js`'s
+`wasRenamed` (también genérico).
+
+**El dropdown "Editor" ahora SÍ es un cambio de modo real** para "Máquina
+de Mealy" (no un salto tipo menú como Regex/Gramática) — al elegirlo queda
+seleccionado, no vuelve solo a "Autómata Finito". Esto obligó a sacar el
+`<select>` de `Toolbar.js` (`EditorModeSelect.js`, nuevo componente): la
+selección tiene que seguir visible y funcional sin importar cuál de las dos
+toolbars de herramientas (`Toolbar` de AFD/AFN, `MealyToolbar`) esté
+mostrándose en un momento dado — antes vivían juntos en un solo `.toolbar`.
+`main.js` arma dos `app-body` completos (uno por documento) y hace
+`replaceWith` entre ellos al cambiar de modo; las dos toolbars de
+herramientas se ocultan/muestran vía `.root.hidden`.
+
+**Bug real encontrado en vivo, mismo patrón que ya pasó dos veces antes**:
+`.toolbar[hidden]` no ocultaba nada — `.toolbar { display: flex; ... }` (regla
+de autor) le sigue ganando a la regla default `[hidden] { display: none }`
+del navegador (user-agent), sin importar especificidad ni orden — exactamente
+el mismo bug que ya afectó a `.menu-dropdown[hidden]` y a
+`.verdict`/`.trace-row`/`.testing-batch-table[hidden]` en rondas anteriores.
+Encontrado navegando la app real (jsdom no aplica cascada CSS de verdad, así
+que ningún test unitario lo iba a agarrar) — arreglado con
+`.toolbar[hidden] { display: none; }` explícito.
+
+**Cómo se verificó**: 329/329 tests de frontend (52 nuevos: `MealyDocStore`,
+`MealyContext`/`MealyDiagramView`/`MealyToolbar`/`MealySimView`/`mealyLogic`,
+`EditorModeSelect`, más el ajuste de `Toolbar.test.js` tras sacarle el
+`<select>`). `vite build` limpio. Verificado en vivo en un dev server
+temporal: cambio de modo bidireccional (AFD/AFN ↔ Mealy) con la toolbar y el
+canvas correctos en ambas direcciones, y el flujo completo de creación de
+estado confirmado hasta el límite conocido del entorno (mismo `TypeError`
+de `invoke` de siempre, sin backend Tauri real ahí — no un bug nuevo).
+
+---
+
 ## 2026-08-19 — Capa IPC de Mealy: `MealySession` propia, espejo completo de `ipc.rs`, sin tocar la de AFD/AFN
 
 **Dónde**: `src-tauri/src/state.rs` (`MealySession`), `.../mealy_ipc.rs`

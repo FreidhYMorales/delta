@@ -21,6 +21,7 @@ import { GrammarView } from "./views/grammar/GrammarView.js";
 import { TestingView } from "./views/testing/TestingView.js";
 import { MenuBar } from "./views/menubar/MenuBar.js";
 import { Toolbar } from "./views/toolbar/Toolbar.js";
+import { EditorModeSelect } from "./views/toolbar/EditorModeSelect.js";
 import { circleLayout } from "./views/diagram/geometry.js";
 import { promptModal } from "./ui/promptModal.js";
 import { pickOpenPath, pickSavePath } from "./ui/nativeDialog.js";
@@ -30,6 +31,11 @@ import { createTabs } from "./ui/tabs.js";
 import { wireResizer } from "./ui/resizer.js";
 import { applyAutomatonModel } from "./store/applyAutomatonModel.js";
 import { docSnapshotToModel } from "./views/formal/formalLogic.js";
+import { MealyDocStore } from "./store/MealyDocStore.js";
+import { MealyContext } from "./commands/MealyContext.js";
+import { MealyDiagramView } from "./views/mealyDiagram/MealyDiagramView.js";
+import { MealyToolbar } from "./views/mealyDiagram/MealyToolbar.js";
+import { MealySimView } from "./views/mealyDiagram/MealySimView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -52,7 +58,17 @@ async function main() {
   const shell = document.createElement("div");
   shell.className = "app-shell";
   const menuBarHost = document.createElement("div");
+  // Holds both tool-button toolbars (FA's `Toolbar`, Mealy's `MealyToolbar`
+  // — only one visible at a time, toggled via their own `.root.hidden`)
+  // plus the always-visible `EditorModeSelect` that switches between them —
+  // all three appended as DIRECT children of this flex row (not wrapped in
+  // extra host divs) so `.mode-select`'s own `margin-left: auto` still
+  // pushes it to the right of whichever toolbar is showing. See
+  // `EditorModeSelect.js`'s header comment for why the mode-select had to
+  // move out of `Toolbar.js` for this.
   const toolbarHost = document.createElement("div");
+  toolbarHost.className = "toolbar-row";
+
   const appBody = document.createElement("div");
   appBody.className = "app-body";
 
@@ -71,9 +87,28 @@ async function main() {
   rightCol.append(panelUpper, panelLower);
 
   appBody.append(canvasPane, resizer, rightCol);
+
+  // Mealy's own app-body — same canvas/right-col shape, a separate document
+  // (`MealyDocStore`), never mounted alongside the FA one (see
+  // `switchMode` below): only one of `appBody`/`mealyAppBody` is attached
+  // to `shell` at a time.
+  const mealyAppBody = document.createElement("div");
+  mealyAppBody.className = "app-body";
+  const mealyCanvasPane = document.createElement("div");
+  mealyCanvasPane.className = "canvas-pane";
+  const mealyResizer = document.createElement("div");
+  mealyResizer.className = "resizer";
+  const mealyRightCol = document.createElement("div");
+  mealyRightCol.className = "right-col";
+  const mealyPanelUpper = document.createElement("div");
+  mealyPanelUpper.className = "panel-upper";
+  mealyRightCol.append(mealyPanelUpper);
+  mealyAppBody.append(mealyCanvasPane, mealyResizer, mealyRightCol);
+
   shell.append(menuBarHost, toolbarHost, appBody);
   app.appendChild(shell);
   wireResizer(resizer, appBody, canvasPane);
+  wireResizer(mealyResizer, mealyAppBody, mealyCanvasPane);
 
   const upperTabs = createTabs(panelUpper, [
     { id: "tabla", label: "Tabla de estados" },
@@ -180,7 +215,7 @@ async function main() {
 
   const diagramView = new DiagramView(canvasPane, docStore, ctx);
   ctx.viewport = diagramView.viewport;
-  new Toolbar(toolbarHost, ctx);
+  const faToolbar = new Toolbar(toolbarHost, ctx);
 
   new TableView(upperTabs.panels.get("tabla"), docStore, ctx);
   new FormalView(upperTabs.panels.get("formal"), docStore);
@@ -189,11 +224,50 @@ async function main() {
   const testingView = new TestingView(panelLower, docStore, ctx);
   ctx.testing = testingView.controls;
 
+  // --- Mealy machine: a separate document/session, only mounted while
+  // the mode select is on "Máquina de Mealy" — see docs/decisions.md for
+  // why this is a genuinely separate document type rather than an FA
+  // extension. -------------------------------------------------------------
+  const mealyDocStore = new MealyDocStore(client);
+  const mealyCtx = new MealyContext(mealyDocStore, {
+    promptLabel: async (id) => {
+      const state = mealyDocStore.getState(id);
+      return promptModal("Rename state", state?.label ?? "");
+    },
+    // One prompt for the whole "input/output" pair (`parseTransitionPrompt`,
+    // `mealyLogic.js`) — validated by the caller (`MealyDiagramView`), so
+    // this hook only needs to surface the modal.
+    promptTransition: async (existing = "") => promptModal("Transición (formato input/output, p.ej. a/x)", existing),
+  });
+  const mealyDiagramView = new MealyDiagramView(mealyCanvasPane, mealyDocStore, mealyCtx);
+  mealyCtx.viewport = mealyDiagramView.viewport;
+  const mealyToolbar = new MealyToolbar(toolbarHost, mealyCtx);
+  mealyToolbar.markInitial = () => mealyDiagramView.markInitial();
+  new MealySimView(mealyPanelUpper, (input) => client.mealySim(input));
+
+  const modeSelect = new EditorModeSelect(toolbarHost, ctx, {
+    onSwitchMode: (mode) => switchMode(mode),
+  });
+
+  /** @param {'finite'|'mealy'} mode */
+  function switchMode(mode) {
+    const showMealy = mode === "mealy";
+    faToolbar.root.hidden = showMealy;
+    mealyToolbar.root.hidden = !showMealy;
+    if (showMealy) {
+      appBody.replaceWith(mealyAppBody);
+    } else {
+      mealyAppBody.replaceWith(appBody);
+    }
+    modeSelect.setMode(mode);
+  }
+  mealyToolbar.root.hidden = true;
+
   // Constructed last so its `when(ctx)` guards evaluate against the fully
   // wired context (real viewport/testing hooks, not their startup no-ops).
   new MenuBar(menuBarHost, ctx);
 
-  await docStore.load();
+  await Promise.all([docStore.load(), mealyDocStore.load()]);
 }
 
 main();

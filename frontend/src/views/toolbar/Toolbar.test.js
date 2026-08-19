@@ -44,44 +44,9 @@ describe("Toolbar (moved out of DiagramView for wireframe parity: it spans the f
     expect(container.querySelector(".toolbar-sep")).not.toBeNull();
   });
 
-  it("renders a real <select> for the editor mode: Finito/Expresión Regular/Gramática Regular enabled, PDA/Turing not", () => {
+  it("no longer renders the Editor mode <select> (moved to EditorModeSelect.js)", () => {
     const { container } = setup();
-    const select = container.querySelector(".mode-select select");
-    const options = [...select.querySelectorAll("option")];
-    expect(options.map((o) => o.textContent)).toEqual([
-      "Autómata Finito",
-      "Autómata de Pila — próximamente",
-      "Máquina de Turing — próximamente",
-      "Expresión Regular",
-      "Gramática Regular",
-    ]);
-    expect(options.map((o) => o.disabled)).toEqual([false, true, true, false, false]);
-  });
-
-  it("selecting 'Expresión Regular' jumps there via the registry action, then resets to Autómata Finito", () => {
-    const { container, ctx } = setup();
-    const openRegexTab = vi.fn();
-    ctx.openRegexTab = openRegexTab;
-    const select = container.querySelector(".mode-select select");
-
-    select.value = "editor.openRegex";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(openRegexTab).toHaveBeenCalled();
-    expect(select.value).toBe("finite");
-  });
-
-  it("selecting 'Gramática Regular' jumps there via the registry action, then resets to Autómata Finito", () => {
-    const { container, ctx } = setup();
-    const openGrammarTab = vi.fn();
-    ctx.openGrammarTab = openGrammarTab;
-    const select = container.querySelector(".mode-select select");
-
-    select.value = "editor.openGrammar";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(openGrammarTab).toHaveBeenCalled();
-    expect(select.value).toBe("finite");
+    expect(container.querySelector(".mode-select")).toBeNull();
   });
 
   it("clicking a toolbar button dispatches the matching registry action and highlights it", () => {

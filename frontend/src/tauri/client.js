@@ -139,3 +139,46 @@ export function convNfaToDfa() {
 export function convMinimizeDfa() {
   return call("conv_minimize_dfa");
 }
+
+// --- Mealy machine (src-tauri/src/commands/mealy.rs) — a genuinely
+// separate document/session from the FA one above, same "isolated, not a
+// variant" rationale as `MealyDoc` vs `FaDoc` (docs/decisions.md). ---------
+
+/** @returns {Promise<import('../store/MealyDocStore.js').MealyDocSnapshot>} */
+export function mealySnapshot() {
+  return call("mealy_snapshot");
+}
+
+/**
+ * @param {Array<object>} ops MealyEditOpDto[]
+ * @returns {Promise<import('../store/MealyDocStore.js').MealyEditResult>}
+ */
+export function mealyApply(ops) {
+  return call("mealy_apply", { ops });
+}
+
+/** @returns {Promise<import('../store/MealyDocStore.js').MealyEditResult|null>} */
+export function mealyUndo() {
+  return call("mealy_undo");
+}
+
+/** @returns {Promise<import('../store/MealyDocStore.js').MealyEditResult|null>} */
+export function mealyRedo() {
+  return call("mealy_redo");
+}
+
+/** @param {string} path @returns {Promise<import('../store/MealyDocStore.js').MealyDocSnapshot>} */
+export function mealyOpen(path) {
+  return call("mealy_open", { path });
+}
+
+/** @param {string} path @returns {Promise<void>} */
+export function mealySave(path) {
+  return call("mealy_save", { path });
+}
+
+/** @param {string[]} input @returns {Promise<object>} MealySimDto (tagged
+ * on `outcome`: "Completed"|"NoInitialState"|"NoTransition"|"Ambiguous"). */
+export function mealySim(input) {
+  return call("mealy_sim", { input });
+}

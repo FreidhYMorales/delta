@@ -250,7 +250,14 @@ body {
 /* Full-width app toolbar (Toolbar.js) — a sibling of the canvas/right-col
  * split, not scoped to either side of it (wireframe parity: the artifact's
  * `.toolbar` sits directly under `.menubar`, spanning the whole app). */
-.toolbar {
+/* The "bar" chrome (background/padding/border) lives on `.toolbar-row`
+ * (`main.js`'s `toolbarHost`) instead of `.toolbar` itself now that a row
+ * can hold two swappable tool-button toolbars (FA's `.toolbar`, Mealy's
+ * `.toolbar.mealy-toolbar`) plus the always-visible `.mode-select`
+ * (`EditorModeSelect.js`) as three separate flex children sharing one bar,
+ * instead of `.mode-select` being nested inside a single `.toolbar` the
+ * way it used to be. */
+.toolbar-row {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -258,6 +265,24 @@ body {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* `main.js` toggles which of the two tool-button toolbars (FA's/Mealy's)
+ * is visible via the plain `hidden` attribute — without this, `.toolbar`'s
+ * own `display: flex` (an AUTHOR rule) always wins over the browser's
+ * `[hidden] { display: none }` USER-AGENT default, regardless of selector
+ * specificity or source order. This exact class of bug has already bitten
+ * `.menu-dropdown[hidden]` and `.verdict`/`.trace-row`/
+ * `.testing-batch-table[hidden]` earlier in this project — see
+ * docs/decisions.md. */
+.toolbar[hidden] {
+  display: none;
 }
 
 /* Pill-shaped button groups (tools, then view/layout) — each group is one
