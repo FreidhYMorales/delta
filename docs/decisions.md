@@ -10,6 +10,68 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-23 — Autómata de Pila: editor de frontend, arco visible por transición en vez del "arco único + etiquetas huérfanas" de JFLAP real
+
+**Dónde**: `frontend/src/store/PdaDocStore.js`, `commands/PdaContext.js`,
+`commands/pdaRegistry.js`, `views/pdaDiagram/{PdaDiagramView,PdaToolbar,
+PdaSimView,pdaLogic}.js` (nuevos, con tests); `main.js` (tercer árbol de
+`app-body`, entrada `pda` en el registro `modes`), `tauri/client.js`
+(wrappers `pda*`), `EditorModeSelect.js` (PDA pasa de placeholder deshabilitado
+a modo real). Tabla de estados/Definición formal quedan fuera de esta ronda
+(mismo alcance que la primera ronda de Moore) — solo "Simular" queda montado.
+
+**El desafío de renderizado genuinamente nuevo**: a diferencia de FA/Mealy/
+Moore (un solo payload por par `(from,to)`), PDA permite varias transiciones
+distintas entre el mismo par de estados, cada una con su propio id. Verificado
+contra JFLAP real antes de diseñar (decompilado con `cfr`:
+`gui/viewer/AutomatonDrawer.class`, `InvisibleCurvedArrow.class`): JFLAP
+dibuja un solo arco visible (con flecha) para la primera transición del grupo,
+y cada transición extra se renderiza como `InvisibleCurvedArrow` — su
+`draw()` solo llama `drawText()`, nunca la línea/flecha, así que las
+transiciones extra terminan siendo etiquetas de texto flotantes sin arco
+propio, aunque siguen siendo clickeables por sus límites de curva invisibles.
+
+**Decisión deliberada de no replicarlo**: en un clon desde cero eso se lee
+como incompleto/confuso. En cambio, cada transición dibuja su propio arco
+completo, real e independientemente clickeable, reutilizando
+`curvedEdgePath(from,to,r,side,offset)` (ya existente y testeado en
+`geometry.js`) con un `offset` que crece por índice dentro de su grupo
+`(from,to)` (`36 + index*26`), y `selfLoopPath` con `angleDeg` creciente por
+índice para auto-loops múltiples en el mismo estado. El modelo de datos
+sigue siendo plano/no agrupado (`PdaTransitionView[]`) — el agrupamiento es
+puramente un detalle de renderizado.
+
+**Formato de etiqueta**: `"input , pop ; push"`, verificado contra el
+`PDATransition.getDescription()` real de JFLAP (decompilado). Usa el glifo
+"ε" ya establecido en este proyecto para FA (no la "λ" propia de JFLAP), por
+consistencia interna.
+
+**Otras decisiones de esta ronda**: `state.toggleAccepting` es un toggle
+directo (sin prompt), a diferencia del `state.setOutput` de Moore que sí
+necesitaba un valor. Crear/editar una transición usa tres prompts
+secuenciales (`promptInput`/`promptPop`/`promptPush`) en vez de parsear el
+formato compuesto de display — cancelar en cualquier paso aborta la
+operación completa, sin transiciones parciales. Eliminar una transición
+apunta a su `id` específico (`RemoveTransition{id}`), no al par `(from,to)`
+como en Mealy/Moore, porque ahí sí sería ambiguo cuál de varias transiciones
+borrar.
+
+**Verificado**: leí el diff completo de `main.js`/`client.js`/
+`EditorModeSelect.js` (aditivo, sigue el patrón de Moore) y el código real
+del fan-out en `PdaDiagramView.js` antes de commitear — coincide exactamente
+con lo especificado. `npx vitest run` 100% verde (646 tests, 53 archivos,
++103 nuevos de esta ronda, reproducido de forma independiente). `npx vite
+build` compila limpio. **No verificado en navegador en vivo**: la app
+requiere el runtime real de Tauri (`window.__TAURI_INTERNALS__`) para el
+IPC — un `vite dev` en Chrome no tiene backend detrás, y Tauri abre una
+ventana nativa fuera del alcance de la automatización de Chrome disponible
+en este entorno. La cobertura de tests incluye un caso dedicado (dos
+transiciones entre el mismo par, con paths `d` distintos, labels distintos,
+selección/borrado/edición independientes) que da confianza razonable sin
+esa verificación en vivo.
+
+---
+
 ## 2026-08-23 — Autómata de Pila: capa de IPC de Tauri, transiciones direccionables individualmente vía patches por `TransitionId`
 
 **Dónde**: `src-tauri/src/pda_ipc.rs`, `src-tauri/src/commands/pda.rs`

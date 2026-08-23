@@ -6,28 +6,30 @@
 //  - "Expresión Regular"/"Gramática Regular" stay menu-style jumps
 //    (`findAction(id).run(ctx)` against the FA `ViewContext`, then reset
 //    back to "Autómata Finito" — see docs/decisions.md) — not real modes.
-//  - "Máquina de Mealy"/"Máquina de Moore" are REAL modes: selecting one
-//    calls `onSwitchMode(value)` and STAYS selected, same as "Autómata
-//    Finito" stays selected while in the FA editor. `main.js` owns what
-//    "switching mode" actually means (which canvas/toolbar/panels are
-//    visible) — this component just reports the chosen value.
-// PDA/Turing machine stay honestly disabled placeholders — no editor
-// exists for them yet.
+//  - "Máquina de Mealy"/"Máquina de Moore"/"Autómata de Pila" are REAL
+//    modes: selecting one calls `onSwitchMode(value)` and STAYS selected,
+//    same as "Autómata Finito" stays selected while in the FA editor.
+//    `main.js` owns what "switching mode" actually means (which canvas/
+//    toolbar/panels are visible) — this component just reports the chosen
+//    value.
+// Turing Machine stays an honestly disabled placeholder — no editor exists
+// for it yet.
 //
-// The set of real modes is passed in (`hooks.modes`), not hardcoded to two
-// — Moore was the first mode added after Mealy, and PDA/Turing Machine are
-// next on this project's roadmap (see docs/decisions.md), so a third
+// The set of real modes is passed in (`hooks.modes`), not hardcoded to a
+// fixed count — Moore and PDA were each added after Mealy, and Turing
+// Machine is next on this project's roadmap (see docs/decisions.md), so a
 // hardcoded branch here would need rewriting again for each new one.
 
 import { EDITOR_MODE_IDS, findAction } from "../../commands/registry.js";
 
 /** Real JFLAP's own "New" menu order (gui.action.NewAction, decompiled —
- * docs/decisions.md): Finite Automaton, Mealy, Moore, then Pushdown/Turing
- * (still disabled placeholders below). */
+ * docs/decisions.md): Finite Automaton, Mealy, Moore, Pushdown, then Turing
+ * (still a disabled placeholder below). */
 const DEFAULT_MODES = [
   { value: "finite", label: "Autómata Finito" },
   { value: "mealy", label: "Máquina de Mealy" },
   { value: "moore", label: "Máquina de Moore" },
+  { value: "pda", label: "Autómata de Pila" },
 ];
 
 export class EditorModeSelect {
@@ -65,7 +67,7 @@ export class EditorModeSelect {
       this.select.appendChild(option);
     }
 
-    for (const label of ["Autómata de Pila — próximamente", "Máquina de Turing — próximamente"]) {
+    for (const label of ["Máquina de Turing — próximamente"]) {
       const option = document.createElement("option");
       option.textContent = label;
       option.disabled = true;

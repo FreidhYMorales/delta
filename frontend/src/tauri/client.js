@@ -228,3 +228,53 @@ export function mooreSave(path) {
 export function mooreSim(input) {
   return call("moore_sim", { input });
 }
+
+// --- Pushdown Automaton (src-tauri/src/commands/pda.rs) — a genuinely
+// separate document/session; transitions are individually addressable, not
+// grouped by (from,to) like FA/Mealy/Moore's edges (docs/decisions.md, the
+// PDA Tauri IPC entry). ---------------------------------------------------
+
+/** @returns {Promise<import('../store/PdaDocStore.js').PdaDocSnapshot>} */
+export function pdaSnapshot() {
+  return call("pda_snapshot");
+}
+
+/**
+ * @param {Array<object>} ops PdaEditOpDto[]
+ * @returns {Promise<import('../store/PdaDocStore.js').PdaEditResult>}
+ */
+export function pdaApply(ops) {
+  return call("pda_apply", { ops });
+}
+
+/** @returns {Promise<import('../store/PdaDocStore.js').PdaEditResult|null>} */
+export function pdaUndo() {
+  return call("pda_undo");
+}
+
+/** @returns {Promise<import('../store/PdaDocStore.js').PdaEditResult|null>} */
+export function pdaRedo() {
+  return call("pda_redo");
+}
+
+/** @param {string} path @returns {Promise<import('../store/PdaDocStore.js').PdaDocSnapshot>} */
+export function pdaOpen(path) {
+  return call("pda_open", { path });
+}
+
+/** @param {string} path @returns {Promise<void>} */
+export function pdaSave(path) {
+  return call("pda_save", { path });
+}
+
+/**
+ * @param {string[]} input
+ * @param {"final"|"empty"} [acceptBy] the accept mode is a per-run choice,
+ *   never document state (see docs/decisions.md, the PDA backend entry) —
+ *   defaults server-side to "final" (`commands::pda::AcceptByDto`'s `Default`).
+ * @param {{max_steps:number,max_configs:number}} [budget]
+ * @returns {Promise<object>} PdaTraceDto ({outcome, steps: Array<Array<{state,stack}>>}).
+ */
+export function pdaSim(input, acceptBy, budget) {
+  return call("pda_sim", { input, acceptBy, budget });
+}

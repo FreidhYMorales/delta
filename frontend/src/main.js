@@ -45,6 +45,11 @@ import { MooreToolbar } from "./views/mooreDiagram/MooreToolbar.js";
 import { MooreSimView } from "./views/mooreDiagram/MooreSimView.js";
 import { MooreTableView } from "./views/mooreTable/MooreTableView.js";
 import { MooreFormalView } from "./views/mooreFormal/MooreFormalView.js";
+import { PdaDocStore } from "./store/PdaDocStore.js";
+import { PdaContext } from "./commands/PdaContext.js";
+import { PdaDiagramView } from "./views/pdaDiagram/PdaDiagramView.js";
+import { PdaToolbar } from "./views/pdaDiagram/PdaToolbar.js";
+import { PdaSimView } from "./views/pdaDiagram/PdaSimView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -130,11 +135,28 @@ async function main() {
   mooreRightCol.append(moorePanelUpper);
   mooreAppBody.append(mooreCanvasPane, mooreResizer, mooreRightCol);
 
+  // PDA's own app-body — same shape as Mealy/Moore's, a separate document
+  // (`PdaDocStore`), never mounted alongside the others (see the
+  // generalized `switchMode` below).
+  const pdaAppBody = document.createElement("div");
+  pdaAppBody.className = "app-body";
+  const pdaCanvasPane = document.createElement("div");
+  pdaCanvasPane.className = "canvas-pane";
+  const pdaResizer = document.createElement("div");
+  pdaResizer.className = "resizer";
+  const pdaRightCol = document.createElement("div");
+  pdaRightCol.className = "right-col";
+  const pdaPanelUpper = document.createElement("div");
+  pdaPanelUpper.className = "panel-upper";
+  pdaRightCol.append(pdaPanelUpper);
+  pdaAppBody.append(pdaCanvasPane, pdaResizer, pdaRightCol);
+
   shell.append(menuBarHost, toolbarHost, appBody);
   app.appendChild(shell);
   wireResizer(resizer, appBody, canvasPane);
   wireResizer(mealyResizer, mealyAppBody, mealyCanvasPane);
   wireResizer(mooreResizer, mooreAppBody, mooreCanvasPane);
+  wireResizer(pdaResizer, pdaAppBody, pdaCanvasPane);
 
   const upperTabs = createTabs(panelUpper, [
     { id: "tabla", label: "Tabla de estados" },
@@ -359,15 +381,70 @@ async function main() {
   new MooreFormalView(mooreUpperTabs.panels.get("formal"), mooreDocStore);
   new MooreSimView(mooreUpperTabs.panels.get("simular"), (input) => client.mooreSim(input));
 
+  // --- Pushdown Automaton: a separate document/session, same "isolated,
+  // not a variant" rationale as Mealy/Moore's (docs/decisions.md, the PDA
+  // Tauri IPC entry: transitions are individually addressable, unlike
+  // FA/Mealy/Moore's one-payload-per-edge shape). Table/Definición formal
+  // views are out of scope this round (same as Moore's own first round) —
+  // only "Simular" is mounted below. --------------------------------------
+  const pdaDocStore = new PdaDocStore(client);
+  const pdaCtx = new PdaContext(pdaDocStore, {
+    promptLabel: async (id) => {
+      const state = pdaDocStore.getState(id);
+      return promptModal("Rename state", state?.label ?? "");
+    },
+    // The three fields of a transition, prompted in sequence
+    // (`promptTransitionTriple`, `pdaRegistry.js`) — no single "input/output"
+    // or "input" prompt like Mealy/Moore, a PDA transition needs
+    // `(input, pop, push)`.
+    promptInput: async (existing = "") => promptModal("Símbolo de entrada (vacío = ε)", existing),
+    promptPop: async (existing = "") => promptModal("Símbolos a desapilar (vacío = ε)", existing),
+    promptPush: async (existing = "") => promptModal("Símbolos a apilar (vacío = ε)", existing),
+    // Native JSON only (no `.jff` for PDA, same as Mealy/Moore — see
+    // docs/decisions.md).
+    openFile: async () => {
+      const path = await pickOpenJsonPath();
+      if (!path) return;
+      try {
+        const snapshot = await client.pdaOpen(path);
+        pdaDocStore.loadSnapshot(snapshot);
+        pdaDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo abrir el archivo", message: String(error?.message ?? error) });
+      }
+    },
+    saveFile: async () => {
+      const path = await pickSaveJsonPath();
+      if (!path) return;
+      try {
+        await client.pdaSave(path);
+        pdaDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo guardar el archivo", message: String(error?.message ?? error) });
+      }
+    },
+  });
+  const pdaDiagramView = new PdaDiagramView(pdaCanvasPane, pdaDocStore, pdaCtx);
+  pdaCtx.viewport = pdaDiagramView.viewport;
+  const pdaToolbar = new PdaToolbar(toolbarHost, pdaCtx);
+
+  const pdaUpperTabs = createTabs(pdaPanelUpper, [
+    { id: "tabla", label: "Tabla de estados" },
+    { id: "formal", label: "Definición formal" },
+    { id: "simular", label: "Simular" },
+  ]);
+  new PdaSimView(pdaUpperTabs.panels.get("simular"), (input, acceptBy) => client.pdaSim(input, acceptBy));
+
   // `modes` drives both the "Editor" dropdown's real-mode options and
   // `switchMode` below — a small registry instead of a hardcoded N-way
-  // branch, since Moore is the second mode added after Mealy and PDA/
-  // Turing Machine are next on this project's roadmap (docs/decisions.md).
-  // Real JFLAP's own "New" menu order: Finite Automaton, Mealy, Moore.
+  // branch, since Turing Machine is next on this project's roadmap
+  // (docs/decisions.md). Real JFLAP's own "New" menu order: Finite
+  // Automaton, Mealy, Moore, Pushdown.
   const modes = {
     finite: { label: "Autómata Finito", appBody, toolbar: faToolbar },
     mealy: { label: "Máquina de Mealy", appBody: mealyAppBody, toolbar: mealyToolbar },
     moore: { label: "Máquina de Moore", appBody: mooreAppBody, toolbar: mooreToolbar },
+    pda: { label: "Autómata de Pila", appBody: pdaAppBody, toolbar: pdaToolbar },
   };
 
   const modeSelect = new EditorModeSelect(toolbarHost, ctx, {
@@ -398,8 +475,9 @@ async function main() {
   }
   mealyToolbar.root.hidden = true;
   mooreToolbar.root.hidden = true;
+  pdaToolbar.root.hidden = true;
 
-  await Promise.all([docStore.load(), mealyDocStore.load(), mooreDocStore.load()]);
+  await Promise.all([docStore.load(), mealyDocStore.load(), mooreDocStore.load(), pdaDocStore.load()]);
 }
 
 main();
