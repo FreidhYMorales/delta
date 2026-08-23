@@ -10,6 +10,50 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-23 — Autómata de Pila: capa de IPC de Tauri, transiciones direccionables individualmente vía patches por `TransitionId`
+
+**Dónde**: `src-tauri/src/pda_ipc.rs`, `src-tauri/src/commands/pda.rs`
+(nuevos); `state.rs` (`PdaSession`); `lib.rs`/`commands/mod.rs` (registro);
+`src-tauri/tests/pda_ipc.rs` (7 tests), `pda_resync_invariant.rs` (2 tests).
+
+**La única diferencia estructural real frente a `moore_ipc.rs`**: los edges
+de Moore son un solo payload por par `(from,to)` (`EdgeInputsSet`), pero las
+transiciones de PDA son direccionables individualmente — pueden coexistir
+varias entre el mismo par de estados con distinto `(input,pop,push)`. En vez
+de un patch "reemplazá todo el payload de este edge", hay tres patches por
+`TransitionId`: `TransitionAdded`/`TransitionRemoved`/`TransitionEdited`.
+Esto en la práctica simplifica el diffing de transiciones respecto al de
+Moore: el `TransitionId` solo (estable, nunca se reusa — ver el doc comment
+de `model::pda`) identifica una transición entre snapshots sin necesitar una
+clave compuesta `(from,to)`.
+
+`PdaEditOpDto` excluye `RestoreState`/`RestoreTransition` (undo-only, nunca
+cruzan el borde IPC), mismo criterio que `MooreEditOpDto`.
+
+`pda_sim` difiere de `moore_sim`: la simulación de PDA es genuinamente no
+determinista (`run_pda` devuelve un `Trace` con ramificación completa, no
+una secuencia de salida determinista), y necesita un parámetro `accept_by`
+(`AcceptByDto::{Final,Empty}`, nombrado para calzar con el flag
+`--accept-by` ya existente en `automata-cli`) porque el modo de aceptación
+es una elección de cada corrida, nunca estado del documento.
+`PdaConfigView.stack` se sirve en orden tope-primero (invertido respecto a
+la representación interna de `PdaConfig`, donde el último elemento es el
+tope) — el orden de lectura natural para una UI.
+
+**Verificado**: leí el diff completo de `state.rs`/`lib.rs`/`commands/mod.rs`
+(puramente aditivo) y el contenido de `pda_ipc.rs`/`commands/pda.rs` antes de
+commitear. `cargo build --manifest-path src-tauri/Cargo.toml` compila limpio
+(los macros `#[tauri::command]` a veces esconden errores de tipos que
+`cargo check` sobre la lib no detecta). `cargo test --workspace` 100% verde:
+`automata-core` se mantiene en 185 (esta ronda no toca el backend), suma de
+`pda_ipc`/`pda_resync_invariant` +9 tests, reproducido de forma
+independiente yo mismo, no solo confiado del reporte del agente. Un test
+dedicado cubre el caso genuinamente nuevo de PDA: dos transiciones
+compartiendo `(from,to)` sobreviviendo edit/undo/redo/diffing de forma
+individual sin interferirse.
+
+---
+
 ## 2026-08-19 — Autómata de Pila: backend vía el `Machine` trait genérico, primer uso real de `run_bounded`
 
 **Dónde**: `crates/automata-core/src/model/pda.rs`, `pda_doc.rs`,

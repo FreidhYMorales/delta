@@ -9,4 +9,5 @@ pub mod doc;
 pub mod jff;
 pub mod mealy;
 pub mod moore;
+pub mod pda;
 pub mod sim;
