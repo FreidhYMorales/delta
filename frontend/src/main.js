@@ -50,6 +50,8 @@ import { PdaContext } from "./commands/PdaContext.js";
 import { PdaDiagramView } from "./views/pdaDiagram/PdaDiagramView.js";
 import { PdaToolbar } from "./views/pdaDiagram/PdaToolbar.js";
 import { PdaSimView } from "./views/pdaDiagram/PdaSimView.js";
+import { PdaTableView } from "./views/pdaTable/PdaTableView.js";
+import { PdaFormalView } from "./views/pdaFormal/PdaFormalView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -433,6 +435,8 @@ async function main() {
     { id: "formal", label: "Definición formal" },
     { id: "simular", label: "Simular" },
   ]);
+  new PdaTableView(pdaUpperTabs.panels.get("tabla"), pdaDocStore, pdaCtx);
+  new PdaFormalView(pdaUpperTabs.panels.get("formal"), pdaDocStore);
   new PdaSimView(pdaUpperTabs.panels.get("simular"), (input, acceptBy) => client.pdaSim(input, acceptBy));
 
   // `modes` drives both the "Editor" dropdown's real-mode options and

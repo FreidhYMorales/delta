@@ -10,6 +10,65 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-23 — Autómata de Pila: Tabla de estados (dos tablas, no una grilla) y Definición formal (7-tuple real)
+
+**Dónde**: `frontend/src/views/pdaTable/{PdaTableView,pdaTableLogic}.js`,
+`views/pdaFormal/{PdaFormalView,pdaFormalLogic}.js`, `store/applyPdaModel.js`
+(nuevos, con tests); `main.js` (monta ambas vistas en `pdaUpperTabs`, ya
+creado en la ronda anterior). Cierra el editor de PDA — quedan montadas las
+tres pestañas (Tabla/Formal/Simular).
+
+**Por qué la tabla no es una grilla Q×Σ**: verificado antes de diseñar
+(clases decompiladas de JFLAP) — **JFLAP real no tiene vista de tabla para
+PDA** (no existe ningún `PDA*TableModel`, a diferencia de `TransitionTableModel`
+de FA). Tiene sentido: con transiciones direccionables individualmente, una
+celda `(estado,símbolo)` tendría que sostener un número variable de tripletas
+`(destino,pop,push)`, incómodo de mostrar/editar en una sola celda. Diseño
+propio: "Tabla de estados" queda como **dos tablas apiladas** — **Estados**
+(reutiliza `nameWithMarkers`/`parseNameCell` de `views/table/tableLogic.js`
+tal cual, el marcador combinado `->`/`*` de FA, ya que PDA tiene tanto
+inicial como aceptación, a diferencia de Moore) y **Transiciones** (tabla
+plana, una fila por transición — no por par estado×símbolo — columnas
+Origen/Entrada/Desapilar/Apilar/Destino, editar origen/destino hace
+remove+add ya que los extremos son inmutables en `EditTransition`, editar
+entrada/pop/push usa `EditTransition` directo).
+
+**Definición formal**: 7-tuple real `M = (Q, Σ, Γ, δ, q0, Z0, F)`. `Z0` (el
+símbolo inicial de pila) no vive en el documento — es una constante de
+simulación fija (`"Z"`, ver la entrada del backend) — se muestra como línea
+de comentario informativa, nunca se parsea de vuelta. `F` (aceptación) sí es
+dato real, hace round-trip igual que `q0`. δ es una *relación*, no una
+función (el branching no determinista es normal en PDA) — una línea por
+transición: `delta(from, input, pop) = (to, push)`, con "ε" (el glifo ya
+establecido en este proyecto) para campos vacíos. Pop/push multi-símbolo van
+separados por espacio en esta línea (no por coma, como en el editor de
+diagrama) porque la coma ya es el separador de argumentos dentro de
+`delta(...)`/`(...)` — una lista separada por comas hubiera sido ambigua con
+el regex del parser.
+
+**El problema de sync genuinamente nuevo**: a diferencia de los edges de
+Moore (con clave natural `(from,to)`), una línea de texto parseada no trae
+ningún id — la única información identificadora es la tupla completa
+`(from,input,pop,push,to)`. El sync (`planSyncOps`) diffea por **igualdad de
+tupla completa** en vez de por clave estable: cada transición actual busca
+una entrada deseada aún no emparejada con la misma tupla exacta (usando un
+flag `matched` para no reusar la misma línea dos veces), lo que borrado y
+alta quedan bien definidos incluso cuando dos transiciones distintas
+comparten `(from,to)` — cada una imprime su propia línea y no se colapsan
+entre sí al aplicar el texto editado.
+
+**Verificado**: leí `main.js`'s diff (dos líneas, mismo patrón que el commit
+de Moore) y el archivo completo de `pdaFormalLogic.js` antes de commitear —
+el diffing por tupla con `matched` es correcto y evita reusar la misma línea
+para dos transiciones actuales distintas. `npx vitest run` 100% verde (694
+tests, 58 archivos, +48 nuevos, reproducido de forma independiente). `npx
+vite build` compila limpio (70 módulos). Hay un test dedicado que confirma
+que agregar una segunda transición entre un par ya conectado emite solo el
+`AddTransition` esperado sin tocar la primera, y que el round-trip completo
+(formatear → editar texto → aplicar) no colapsa ni pierde ninguna.
+
+---
+
 ## 2026-08-23 — Autómata de Pila: editor de frontend, arco visible por transición en vez del "arco único + etiquetas huérfanas" de JFLAP real
 
 **Dónde**: `frontend/src/store/PdaDocStore.js`, `commands/PdaContext.js`,
