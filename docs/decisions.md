@@ -10,6 +10,21 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-24 — Máquina de Turing: editor de frontend, un prompt por cinta y selector de cantidad de cintas
+
+**Dónde**: `frontend/src/store/TmDocStore.js`, `commands/TmContext.js`, `commands/tmRegistry.js`, `views/tmDiagram/{TmDiagramView,TmToolbar,TmSimView,tmLogic}.js` (nuevos, con tests), `tauri/client.js` (7 wrappers `tm*`), `main.js` (cuarto app-body, entrada en `modes`), `views/toolbar/EditorModeSelect.js` (Turing deja de ser placeholder deshabilitado).
+
+**Qué**: editor de canvas completo (4 herramientas + Marcar inicial + Alternar aceptación, mismo `pdaRegistry.js`/design D6 que PDA) y panel "Simular" — Tabla de estados y Definición formal quedan para una ronda siguiente, mismo alcance que la primera ronda de PDA/Moore. Dos decisiones reales, ambas verificadas contra JFLAP real (`cfr` sobre `automata/turing/TMTransition.class` y `gui/action/NewAction.class`):
+
+- **Etiqueta de transición**: se reutiliza tal cual el formato real de `TMTransition.getDescription()` — por cinta `"{lee} ; {escribe} , {dirección}"`, cintas unidas con `" | "`. Leer/escribir vacío default a `"□"` (glyph de blanco), igual que `TMTransition.setRead`/`setWrite` reales.
+- **Cantidad de cintas**: JFLAP real tiene dos entradas de menú separadas ("Turing Machine" = 1 cinta fija, "Multi-Tape" = pregunta cuántas, 2 a 5, vía `NewAction`). Como este proyecto no tiene un paso de "nuevo documento" (cada sesión arranca vacía y crece por edits), se tradujo a un selector de 1 a 5 en el toolbar (`ctx.tapeCountChoice`) que se bloquea apenas `TmDoc::tape_count` se fija en el backend con la primera transición — de ahí en más el backend rechaza en silencio cualquier transición con otra cantidad, y la UI ya refleja eso.
+
+Decisión propia (no verificada contra JFLAP, documentada como tal): en vez de repetir el patrón de PDA de 3 prompts por transición, acá se usa **un solo prompt por cinta**, con el mismo formato `"lee ; escribe , dirección"` que la propia etiqueta renderiza — así lo que se ve es lo que se vuelve a escribir al editar. El panel "Simular" muestra un campo de entrada por cinta (`effectiveTapeCount`) y cada configuración viva del trace se renderiza como `#estado T0:[pos=símbolo,...] head@N T1:...`, mismo estilo de corchetes que el stack de PDA.
+
+**Cómo se verificó**: `npx vitest run` → 813/813 (65 archivos). `npx vite build` limpio. Diff de `main.js`/`client.js`/`EditorModeSelect.js` revisado a mano — puramente aditivo salvo el retiro correcto del placeholder de Turing. Leí `tmLogic.js`/`TmToolbar.js`/`TmSimView.js` completos. Verificación visual en navegador no es posible en este entorno (misma limitación que PDA: la IPC de Tauri depende de `window.__TAURI_INTERNALS__`, ausente en una pestaña de Chrome corriendo `vite dev` plano) — queda pendiente para cuando se revise visualmente junto con PDA.
+
+---
+
 ## 2026-08-24 — Máquina de Turing: capa de IPC de Tauri, un solo alfabeto compartido y `tape_count` como dato derivado
 
 **Dónde**: `src-tauri/src/tm_ipc.rs`, `src-tauri/src/commands/tm.rs` (nuevos, mirror estructural de `pda_ipc.rs`/`commands/pda.rs`), `TmSession` en `state.rs`, registrado en `lib.rs`.

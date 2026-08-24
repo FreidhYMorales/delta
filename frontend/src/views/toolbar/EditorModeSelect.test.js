@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 describe("EditorModeSelect", () => {
-  it("renders Autómata Finito, Máquina de Mealy, Máquina de Moore and Autómata de Pila enabled, right after each other, Turing disabled", () => {
+  it("renders Autómata Finito, Máquina de Mealy, Máquina de Moore, Autómata de Pila and Máquina de Turing all enabled, right after each other", () => {
     const { container } = setup();
     const select = container.querySelector("select");
     const options = [...select.querySelectorAll("option")];
@@ -27,11 +27,23 @@ describe("EditorModeSelect", () => {
       "Máquina de Mealy",
       "Máquina de Moore",
       "Autómata de Pila",
-      "Máquina de Turing — próximamente",
+      "Máquina de Turing",
       "Expresión Regular",
       "Gramática Regular",
     ]);
-    expect(options.map((o) => o.disabled)).toEqual([false, false, false, false, true, false, false]);
+    expect(options.map((o) => o.disabled)).toEqual([false, false, false, false, false, false, false]);
+  });
+
+  it("selecting 'Máquina de Turing' calls onSwitchMode('tm') and stays selected (a real mode, not a jump)", () => {
+    const onSwitchMode = vi.fn();
+    const { container } = setup({ onSwitchMode });
+    const select = container.querySelector("select");
+
+    select.value = "tm";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(onSwitchMode).toHaveBeenCalledWith("tm");
+    expect(select.value).toBe("tm");
   });
 
   it("selecting 'Autómata de Pila' calls onSwitchMode('pda') and stays selected (a real mode, not a jump)", () => {

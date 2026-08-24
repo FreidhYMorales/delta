@@ -278,3 +278,58 @@ export function pdaSave(path) {
 export function pdaSim(input, acceptBy, budget) {
   return call("pda_sim", { input, acceptBy, budget });
 }
+
+// --- Turing Machine (src-tauri/src/commands/tm.rs) — a genuinely separate
+// document/session, same "isolated, not a variant" rationale as PDA's
+// (docs/decisions.md). ONE alphabet (not PDA's two), and transitions carry
+// `tapes: {read,write,direction}[]` instead of PDA's single triple —
+// see `tm_ipc.rs`'s own doc comment. ---------------------------------------
+
+/** @returns {Promise<import('../store/TmDocStore.js').TmDocSnapshot>} */
+export function tmSnapshot() {
+  return call("tm_snapshot");
+}
+
+/**
+ * @param {Array<object>} ops TmEditOpDto[]
+ * @returns {Promise<import('../store/TmDocStore.js').TmEditResult>}
+ */
+export function tmApply(ops) {
+  return call("tm_apply", { ops });
+}
+
+/** @returns {Promise<import('../store/TmDocStore.js').TmEditResult|null>} */
+export function tmUndo() {
+  return call("tm_undo");
+}
+
+/** @returns {Promise<import('../store/TmDocStore.js').TmEditResult|null>} */
+export function tmRedo() {
+  return call("tm_redo");
+}
+
+/** @param {string} path @returns {Promise<import('../store/TmDocStore.js').TmDocSnapshot>} */
+export function tmOpen(path) {
+  return call("tm_open", { path });
+}
+
+/** @param {string} path @returns {Promise<void>} */
+export function tmSave(path) {
+  return call("tm_save", { path });
+}
+
+/**
+ * @param {string[][]} inputs one word-array per tape (`run_tm`'s broadcast-
+ *   or-per-tape convention — one array broadcasts to every tape, one array
+ *   per tape gives each its own word — see `engine::tm::run_tm`'s doc
+ *   comment; implemented and tested backend-side, not reimplemented here).
+ * @param {"final"|"halting"} [acceptBy] the accept mode is a per-run choice,
+ *   never document state, same as PDA's — defaults server-side to "final"
+ *   (`commands::tm::AcceptByDto`'s `Default`). No PDA-style "empty" mode: a
+ *   TM has no stack.
+ * @param {{max_steps:number,max_configs:number}} [budget]
+ * @returns {Promise<object>} TmTraceDto ({outcome, steps: Array<Array<{state,tapes}>>}).
+ */
+export function tmSim(inputs, acceptBy, budget) {
+  return call("tm_sim", { inputs, acceptBy, budget });
+}

@@ -52,6 +52,11 @@ import { PdaToolbar } from "./views/pdaDiagram/PdaToolbar.js";
 import { PdaSimView } from "./views/pdaDiagram/PdaSimView.js";
 import { PdaTableView } from "./views/pdaTable/PdaTableView.js";
 import { PdaFormalView } from "./views/pdaFormal/PdaFormalView.js";
+import { TmDocStore } from "./store/TmDocStore.js";
+import { TmContext } from "./commands/TmContext.js";
+import { TmDiagramView } from "./views/tmDiagram/TmDiagramView.js";
+import { TmToolbar } from "./views/tmDiagram/TmToolbar.js";
+import { TmSimView } from "./views/tmDiagram/TmSimView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -153,12 +158,29 @@ async function main() {
   pdaRightCol.append(pdaPanelUpper);
   pdaAppBody.append(pdaCanvasPane, pdaResizer, pdaRightCol);
 
+  // TM's own app-body — same shape as PDA/Mealy/Moore's, a separate
+  // document (`TmDocStore`), never mounted alongside the others (see the
+  // generalized `switchMode` below).
+  const tmAppBody = document.createElement("div");
+  tmAppBody.className = "app-body";
+  const tmCanvasPane = document.createElement("div");
+  tmCanvasPane.className = "canvas-pane";
+  const tmResizer = document.createElement("div");
+  tmResizer.className = "resizer";
+  const tmRightCol = document.createElement("div");
+  tmRightCol.className = "right-col";
+  const tmPanelUpper = document.createElement("div");
+  tmPanelUpper.className = "panel-upper";
+  tmRightCol.append(tmPanelUpper);
+  tmAppBody.append(tmCanvasPane, tmResizer, tmRightCol);
+
   shell.append(menuBarHost, toolbarHost, appBody);
   app.appendChild(shell);
   wireResizer(resizer, appBody, canvasPane);
   wireResizer(mealyResizer, mealyAppBody, mealyCanvasPane);
   wireResizer(mooreResizer, mooreAppBody, mooreCanvasPane);
   wireResizer(pdaResizer, pdaAppBody, pdaCanvasPane);
+  wireResizer(tmResizer, tmAppBody, tmCanvasPane);
 
   const upperTabs = createTabs(panelUpper, [
     { id: "tabla", label: "Tabla de estados" },
@@ -439,16 +461,67 @@ async function main() {
   new PdaFormalView(pdaUpperTabs.panels.get("formal"), pdaDocStore);
   new PdaSimView(pdaUpperTabs.panels.get("simular"), (input, acceptBy) => client.pdaSim(input, acceptBy));
 
+  // --- Turing Machine: a separate document/session, same "isolated, not a
+  // variant" rationale as PDA/Mealy/Moore's (docs/decisions.md, the TM
+  // Tauri IPC entry: ONE shared alphabet, not PDA's two, and a transition
+  // carries `tapes: {read,write,direction}[]` instead of PDA's single
+  // triple). Tabla/Definición formal views are out of scope this round
+  // (same as Moore's and PDA's own first rounds) — only "Simular" is
+  // mounted below. ----------------------------------------------------------
+  const tmDocStore = new TmDocStore(client);
+  const tmCtx = new TmContext(tmDocStore, {
+    promptLabel: async (id) => {
+      const state = tmDocStore.getState(id);
+      return promptModal("Rename state", state?.label ?? "");
+    },
+    // One prompt PER TAPE (`promptTransitionTapes`, `tmRegistry.js`), not a
+    // fixed triple like PDA's — tape count is dynamic (1 to 5). Same
+    // "read ; write , direction" format as the rendered label itself, so
+    // what you see is what you type back to edit.
+    promptTape: async (index, existing = "") =>
+      promptModal(`Cinta ${index + 1} (formato: lee ; escribe , dirección — L/R/S)`, existing),
+    // Native JSON only (no `.jff` for TM, same as PDA/Mealy/Moore — see
+    // docs/decisions.md).
+    openFile: async () => {
+      const path = await pickOpenJsonPath();
+      if (!path) return;
+      try {
+        const snapshot = await client.tmOpen(path);
+        tmDocStore.loadSnapshot(snapshot);
+        tmDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo abrir el archivo", message: String(error?.message ?? error) });
+      }
+    },
+    saveFile: async () => {
+      const path = await pickSaveJsonPath();
+      if (!path) return;
+      try {
+        await client.tmSave(path);
+        tmDocStore.setFilePath(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo guardar el archivo", message: String(error?.message ?? error) });
+      }
+    },
+  });
+  const tmDiagramView = new TmDiagramView(tmCanvasPane, tmDocStore, tmCtx);
+  tmCtx.viewport = tmDiagramView.viewport;
+  const tmToolbar = new TmToolbar(toolbarHost, tmCtx);
+
+  const tmUpperTabs = createTabs(tmPanelUpper, [{ id: "simular", label: "Simular" }]);
+  new TmSimView(tmUpperTabs.panels.get("simular"), tmDocStore, tmCtx, (inputs, acceptBy) => client.tmSim(inputs, acceptBy));
+
   // `modes` drives both the "Editor" dropdown's real-mode options and
   // `switchMode` below — a small registry instead of a hardcoded N-way
-  // branch, since Turing Machine is next on this project's roadmap
-  // (docs/decisions.md). Real JFLAP's own "New" menu order: Finite
-  // Automaton, Mealy, Moore, Pushdown.
+  // branch, in case another editor ever follows (docs/decisions.md). Real
+  // JFLAP's own "New" menu order: Finite Automaton, Mealy, Moore, Pushdown,
+  // Turing.
   const modes = {
     finite: { label: "Autómata Finito", appBody, toolbar: faToolbar },
     mealy: { label: "Máquina de Mealy", appBody: mealyAppBody, toolbar: mealyToolbar },
     moore: { label: "Máquina de Moore", appBody: mooreAppBody, toolbar: mooreToolbar },
     pda: { label: "Autómata de Pila", appBody: pdaAppBody, toolbar: pdaToolbar },
+    tm: { label: "Máquina de Turing", appBody: tmAppBody, toolbar: tmToolbar },
   };
 
   const modeSelect = new EditorModeSelect(toolbarHost, ctx, {
@@ -480,8 +553,15 @@ async function main() {
   mealyToolbar.root.hidden = true;
   mooreToolbar.root.hidden = true;
   pdaToolbar.root.hidden = true;
+  tmToolbar.root.hidden = true;
 
-  await Promise.all([docStore.load(), mealyDocStore.load(), mooreDocStore.load(), pdaDocStore.load()]);
+  await Promise.all([
+    docStore.load(),
+    mealyDocStore.load(),
+    mooreDocStore.load(),
+    pdaDocStore.load(),
+    tmDocStore.load(),
+  ]);
 }
 
 main();
