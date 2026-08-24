@@ -799,6 +799,16 @@ body {
   padding: var(--space-2xs) var(--space-xs);
 }
 
+/* `TmToolbar._render()` disables this select once `TmDoc::tape_count` locks
+ * (first-ever transition added) — without an explicit disabled state it
+ * looked identical to the enabled select, so a locked document's "Cintas"
+ * dropdown silently ignoring clicks looked like a bug instead of the
+ * intended lock. */
+.tm-tape-count-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .table-view {
   flex: 1;
   display: flex;
