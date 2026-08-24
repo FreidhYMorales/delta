@@ -10,6 +10,15 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-24 — Rebranding a "Delta" y CI de instaladores multiplataforma
+
+**Dónde**: `src-tauri/tauri.conf.json` (`productName`, `identifier`, título de ventana), `src-tauri/Cargo.toml` (`description`/`authors`/`license`/`repository`), `frontend/index.html` (`<title>`), `LICENSE` (nuevo), `.github/workflows/release.yml` (nuevo).
+
+**Qué se decidió**: con el roadmap de los 5 tipos de máquina cerrado, el proyecto pasa a compartirse con testers externos — eso implica un nombre propio (no "JFLAP", que es un producto real de Duke University sin afiliación con este repo) y un repo público con licencia explícita. Se descartó mantener "JFLAP" como nombre visible; las referencias a "JFLAP" que quedan en comentarios de código y en el filtro de archivos `.jff` no se tocaron porque documentan con precisión el comportamiento real verificado contra el JFLAP original, no son branding. `identifier` pasa de `com.tauri.dev` (placeholder de plantilla) a `com.freidhymorales.delta`. Licencia MIT (decisión del usuario).
+
+Para dar instaladores nativos de Windows/macOS/Linux sin tener las tres plataformas a mano, se armó `.github/workflows/release.yml` con `tauri-apps/tauri-action`, matriz `macos-latest` (`--target universal-apple-darwin`), `ubuntu-22.04` (versión fija, no `ubuntu-latest`, por compatibilidad con `libwebkit2gtk-4.1-dev`) y `windows-latest`, disparado por tag `v*.*.*` o manualmente. Publica un Release en estado borrador (`releaseDraft: true`) para poder revisar los binarios antes de que un tester los vea.
+
+**Cómo se verificó**: corrí `cargo tauri build` local (Linux) después de los cambios de `tauri.conf.json`/`Cargo.toml` — los bundles `.deb` y `.rpm` salieron limpios con el nombre nuevo (`Delta_0.1.0_amd64.deb`, `Delta-0.1.0-1.x86_64.rpm`), confirmando que el rebranding no rompió el empaquetado. El bundle AppImage falló localmente con `failed to run linuxdeploy` — investigado a mano ejecutando `linuxdeploy` directo: corre y hace trabajo real (copia de libs, `rpath`), la falla ocurre después, en el paso de montaje FUSE del plugin de AppImage — consistente con una limitación del sandbox de esta sesión, no con un problema real de configuración; se deja para que lo confirme el runner real de GitHub Actions (receta estándar de `tauri-action`, usada así en miles de proyectos).
 ## 2026-08-24 — Auditoría de consistencia visual del frontend: CSS faltante, no drift de diseño
 
 **Dónde**: `frontend/src/style.css`, `frontend/src/views/{pdaDiagram/PdaSimView,tmDiagram/TmSimView,testing/TestingView,mealyDiagram/MealySimView,mooreDiagram/MooreSimView}.js`.
