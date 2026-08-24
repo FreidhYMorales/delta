@@ -11,3 +11,4 @@ pub mod mealy;
 pub mod moore;
 pub mod pda;
 pub mod sim;
+pub mod tm;

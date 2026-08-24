@@ -10,6 +10,23 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-24 — Máquina de Turing: capa de IPC de Tauri, un solo alfabeto compartido y `tape_count` como dato derivado
+
+**Dónde**: `src-tauri/src/tm_ipc.rs`, `src-tauri/src/commands/tm.rs` (nuevos, mirror estructural de `pda_ipc.rs`/`commands/pda.rs`), `TmSession` en `state.rs`, registrado en `lib.rs`.
+
+**Qué**: `tm_snapshot/apply/undo/redo/open/save/sim`, transiciones direccionables individualmente por `TransitionId` (igual que PDA), pero cada una carga `tapes: Vec<TapeOpSpec>` — un triple read/write/direction por cinta, no un triple único. Diferencias reales frente a PDA, todas trazables a la forma de `TmDoc`:
+- **Un solo alfabeto** (`TmDoc::alphabet()`) en vez de los dos de PDA (input/stack) — una TM lee y escribe el mismo alfabeto en cualquier cinta.
+- `TmDerived` agrega `tape_count` (`0` hasta la primera transición, nunca se resetea — mismo comportamiento que el modelo). El patch combinado que antes en PDA se llamaba `AlphabetSet` acá es `DerivedSet{alphabet, tape_count}`, porque ahora cubre más que solo el alfabeto.
+- `AcceptByDto::{Final, Halting}` en vez de `{Final, Empty}` de PDA — una TM no tiene pila, así que no hay noción de "pila vacía"; su segundo criterio de aceptación real es "sin más movimientos posibles".
+- `tm_sim` recibe `inputs: Vec<Vec<String>>` (una palabra por cinta) en vez del vector plano de PDA, reflejando las dos convenciones reales de `TMSimulator.getInitialConfigurations` de JFLAP: una sola palabra difundida a todas las cintas, o una palabra explícita por cinta (`engine::tm::run_tm`).
+- `TmConfigView` expone cada cinta como `{cells: BTreeMap<i64,String>, head:i64}` — sparse, solo celdas no-blanco, igual que la representación interna del motor.
+
+**Cómo se verificó**: `cargo test --workspace` → 289/289 (antes 277; +12: 9 en `tests/tm_ipc.rs`, 3 en `tests/tm_resync_invariant.rs`), incluyendo un caso de dos transiciones con distinto payload por cinta entre el mismo par de estados, y el rechazo silencioso (sin patches, sin bump de revisión más allá de la transacción no-op) de una transición con cantidad de cintas equivocada. `cargo build --manifest-path src-tauri/Cargo.toml` limpio. Diff de `state.rs`/`lib.rs`/`commands/mod.rs` revisado a mano — puramente aditivo. `crates/automata-core` no se tocó en esta ronda.
+
+**Nota de proceso**: esta ronda se delegó a un fork con instrucción explícita de no commitear y no tocar `docs/decisions.md` — a diferencia de la ronda anterior (backend de TM), esta vez la instrucción se respetó y el reporte volvió en inglés como handoff técnico, sin dirigirse al usuario directamente.
+
+---
+
 ## 2026-08-23 — Máquina de Turing: backend genuinamente multi-cinta desde el arranque, no single-tape-primero
 
 **Dónde**: `crates/automata-core/src/model/tm.rs`, `tm_doc.rs`, `engine/tm.rs`

@@ -4,9 +4,10 @@ pub mod mealy_ipc;
 pub mod moore_ipc;
 pub mod pda_ipc;
 pub mod state;
+pub mod tm_ipc;
 
-use commands::{convert, doc, jff, mealy, moore, pda, sim};
-use state::{MealySession, MooreSession, PdaSession, Session};
+use commands::{convert, doc, jff, mealy, moore, pda, sim, tm};
+use state::{MealySession, MooreSession, PdaSession, Session, TmSession};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,6 +17,7 @@ pub fn run() {
     .manage(MealySession::new())
     .manage(MooreSession::new())
     .manage(PdaSession::new())
+    .manage(TmSession::new())
     .invoke_handler(tauri::generate_handler![
       doc::doc_snapshot,
       doc::doc_apply,
@@ -54,6 +56,13 @@ pub fn run() {
       pda::pda_open,
       pda::pda_save,
       pda::pda_sim,
+      tm::tm_snapshot,
+      tm::tm_apply,
+      tm::tm_undo,
+      tm::tm_redo,
+      tm::tm_open,
+      tm::tm_save,
+      tm::tm_sim,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

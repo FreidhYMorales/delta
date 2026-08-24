@@ -16,6 +16,7 @@ use automata_core::doc::Document;
 use automata_core::mealy_doc::MealyDocument;
 use automata_core::moore_doc::MooreDocument;
 use automata_core::pda_doc::PdaDocument;
+use automata_core::tm_doc::TmDocument;
 
 pub struct Session(pub Mutex<Document>);
 
@@ -68,6 +69,20 @@ impl PdaSession {
 }
 
 impl Default for PdaSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct TmSession(pub Mutex<TmDocument>);
+
+impl TmSession {
+    pub fn new() -> Self {
+        TmSession(Mutex::new(TmDocument::new()))
+    }
+}
+
+impl Default for TmSession {
     fn default() -> Self {
         Self::new()
     }
