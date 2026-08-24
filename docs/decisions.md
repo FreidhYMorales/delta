@@ -10,6 +10,75 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-23 — Máquina de Turing: backend genuinamente multi-cinta desde el arranque, no single-tape-primero
+
+**Dónde**: `crates/automata-core/src/model/tm.rs`, `tm_doc.rs`, `engine/tm.rs`
+(nuevos); `engine/mod.rs`/`model/mod.rs`/`lib.rs` (registro + doc comments
+actualizados, ya no dicen "future"); `dto.rs` (variante `Tm`); `automata-cli`
+(`tm-inspect`/`tm-sim --accept-by final|halting`, `--input` repetible).
+
+**Verificado contra JFLAP real antes de diseñar** (decompilado con `cfr`:
+`automata/turing/{TuringMachine,TMTransition,TMState,Tape,TMConfiguration,
+TMSimulator,NDTMSimulator,AcceptanceEnum,AcceptByFinalStateFilter,
+AcceptByHaltingFilter}.class`): **`TuringMachine` es multi-cinta desde su
+propio modelo base** — no es que "Máquina de Turing" y "Multi-Tape TM" sean
+dos features separadas en JFLAP real, son la misma clase con un `int tapes`
+distinto (constructor default 1). `TMTransition` se construye con tres
+arrays paralelos (`toRead`/`toWrite`/`direction`), un triple por cinta.
+Dado esto, el backend se construyó genuinamente generalizado sobre N cintas
+desde el arranque en vez de "single-tape ahora, multi-tape después" —
+apenas más trabajo que hardcodear a 1, y es lo que JFLAP realmente hace.
+"TM With Building Blocks" (composición jerárquica de sub-autómatas) sigue
+siendo una feature genuinamente separada y futura, fuera de alcance acá.
+
+**`tape_count` replica exactamente el mecanismo real de JFLAP**: arranca en
+`0` (indeterminado), la *primera* transición agregada lo fija, y nunca se
+resetea después aunque se borren todas las transiciones — igual que
+`TuringMachine.tapes` real. Sin op `SetTapeCount` separado.
+
+**Cada cinta es bi-infinita**, representada como `BTreeMap<i64,SymbolId>`
+disperso (solo celdas no-blanco) + posición de cabezal `i64` — más simple
+que el buffer-con-extensión-manual de JFLAP, y trivialmente `Eq`/`Hash`/
+`Clone` (requerido por `Machine::Config`). Escribir el símbolo blanco sobre
+una celda la borra del mapa en vez de guardarla explícita, para que dos
+cintas con contenido efectivo idéntico comparen siempre iguales
+(importa para el dedup de `run_bounded`).
+
+**Fuera de alcance, deliberado y documentado**: las extensiones de
+wildcard/variable de JFLAP en el símbolo de lectura (`!x` = no-x, `~` =
+cualquiera, `{var}` = captura) — este backend solo hace matching exacto de
+símbolo atómico por cinta, mismo tipo de corte de alcance que
+`PdaDoc::is_deterministic()` ya documenta para sí misma.
+
+**El `Machine::Config` de TM es genuinamente distinto al de PDA/FA**: carga
+la cinta completa en vez de consumir desde un `input` externo vía índice —
+`Machine::start()` no recibe parámetros, así que `run_tm` hornea el
+contenido inicial de cada cinta dentro de `TmEngine` en tiempo de compile y
+llama a `run_bounded` con `input` vacío. `step`/`is_accepting` ignoran esos
+parámetros del todo. Para `AcceptMode::Halting`, `is_accepting` calcula
+"sin más movimientos" llamando a `step` y viendo si viene vacío (JFLAP lo
+trackea aparte en `TMConfiguration.isHalted()`; acá no hace falta tocar
+`run_bounded`).
+
+**Carga de input replica las dos convenciones reales de
+`TMSimulator.getInitialConfigurations`**: un solo string sobre todas las
+cintas, o un array explícito con un string por cinta — `run_tm(doc, inputs,
+accept_by, budget)` con `inputs.len()==1` haciendo broadcast, `--input`
+repetible en el CLI para el caso explícito.
+
+**Verificado**: `cargo test --workspace` 100% verde — `automata-core` pasó
+de 185 a 217 tests (+32: `model::tm` 12, `tm_doc` 8 incl. proptest de 256
+casos escrito a la manera correcta de PDA —sintetiza ops leyendo
+`doc.states()`/`doc.transitions()` en vivo, no un `Vec<StateId>` aparte—,
+`dto::tm` 5 incl. proptest, `engine::tm` 6). Verificación manual por CLI con
+tres fixtures hechas a mano: (1) incremento unario — "111" en una cinta,
+`tm-sim` da `Accepted`, cinta final `"1111"`, cabezal en 4, exactamente lo
+esperado a mano; (2) una máquina que hace halt en un estado no-aceptante —
+`--accept-by final` rechaza, `--accept-by halting` acepta, mismo halt,
+confirma que los dos modos realmente divergen; (3) copiadora de 2 cintas
+(cinta 0 → cinta 1) — con `--input` explícito por cinta ambas cintas
+terminan `"aba"`, confirmando que el wiring multi-cinta funciona de punta a
+punta y no solo en los tests unitarios.
 ## 2026-08-23 — Autómata de Pila: Tabla de estados (dos tablas, no una grilla) y Definición formal (7-tuple real)
 
 **Dónde**: `frontend/src/views/pdaTable/{PdaTableView,pdaTableLogic}.js`,

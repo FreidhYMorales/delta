@@ -4,7 +4,7 @@
 //! `Machine::step` returns a *set* of successors and `run_bounded` keeps a
 //! hash-deduped frontier. FA collapses nondeterminism inside its `Config`
 //! (the whole epsilon-closed subset), so FA's `step` returns exactly one
-//! successor; PDA/TM (future) return 0..n branches that cannot collapse.
+//! successor; PDA/TM return 0..n branches that cannot collapse.
 //! `run_bounded`, budgets, truncation, and trace shape are written once here
 //! and reused by every machine kind.
 
@@ -16,8 +16,11 @@ use smallvec::SmallVec;
 use crate::ids::SymbolId;
 
 /// A steppable machine. `Config` is the per-kind configuration: for FA, a
-/// state set (bitset); for a future PDA, `(StateId, Stack)`; for a future TM,
-/// `(StateId, Tape, i64)`.
+/// state set (bitset); for PDA, `(StateId, Stack)` (`engine::pda::PdaConfig`);
+/// for TM, `(StateId, Vec<TapeState>)` (`engine::tm::TmConfig`) — one full
+/// tape per position, not the `(StateId, Tape, i64)` single-tape shape this
+/// comment originally anticipated, since real JFLAP's own `TuringMachine` is
+/// genuinely multi-tape from its base model (see `model::tm`'s doc comment).
 pub trait Machine {
     type Config: Clone + Eq + Hash;
 
@@ -162,3 +165,4 @@ pub mod fa;
 pub mod mealy;
 pub mod moore;
 pub mod pda;
+pub mod tm;

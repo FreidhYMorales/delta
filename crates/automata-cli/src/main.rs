@@ -10,6 +10,10 @@
 //! `pda-sim`/`pda-inspect` are the same idea for Pushdown Automata — `pda-sim`
 //! also takes `--accept-by final|empty` since that's a genuine per-run
 //! choice in real JFLAP too, never stored on the document (docs/decisions.md).
+//! `tm-sim`/`tm-inspect` are the same idea for Turing Machines — `tm-sim`
+//! takes `--accept-by final|halting` (same "per-run, never stored" reasoning)
+//! and a repeatable `--input` (one per tape; a single `--input`, or none at
+//! all, broadcasts onto every tape — see `engine::tm::run_tm`'s doc comment).
 
 use std::fs;
 use std::process::ExitCode;
@@ -21,6 +25,7 @@ use automata_core::engine::fa::FaEngine;
 use automata_core::engine::mealy::{run_mealy, MealyOutcome};
 use automata_core::engine::moore::{run_moore, MooreOutcome};
 use automata_core::engine::pda::{run_pda, AcceptMode};
+use automata_core::engine::tm::{run_tm, AcceptMode as TmAcceptMode};
 use automata_core::engine::{run_bounded, Budget};
 use automata_core::ids::SymbolId;
 use automata_core::interop::jff::reader;
@@ -28,6 +33,7 @@ use automata_core::model::fa::{Classification, FaDoc};
 use automata_core::model::mealy::MealyDoc;
 use automata_core::model::moore::MooreDoc;
 use automata_core::model::pda::PdaDoc;
+use automata_core::model::tm::TmDoc;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -153,6 +159,32 @@ enum Command {
         #[arg(long, default_value_t = 5_000)]
         max_configs: usize,
     },
+    /// Load a Turing Machine (native JSON only) and print its structure.
+    TmInspect {
+        #[arg(long)]
+        file: String,
+    },
+    /// Load a TM and run one input through it, printing the `Outcome` under
+    /// the chosen accept mode plus the final tape contents.
+    TmSim {
+        #[arg(long)]
+        file: String,
+        /// One per tape (space-separated symbols within), e.g.
+        /// `--input "1 1 1" --input ""`. Zero or one occurrence broadcasts
+        /// that (or the empty) input onto every tape — see
+        /// `engine::tm::run_tm`'s doc comment.
+        #[arg(long)]
+        input: Vec<String>,
+        /// `final` = accept by final state, `halting` = accept by halting
+        /// (no further move available) — a genuine per-run choice in real
+        /// JFLAP too, never stored on the document (see docs/decisions.md).
+        #[arg(value_enum, long, default_value_t = TmAcceptByArg::Final)]
+        accept_by: TmAcceptByArg,
+        #[arg(long, default_value_t = 10_000)]
+        max_steps: usize,
+        #[arg(long, default_value_t = 5_000)]
+        max_configs: usize,
+    },
     /// Synthesize a worst-case-shaped automaton and time compile + simulation.
     Stress {
         #[arg(value_enum, long, default_value_t = Topology::Chain)]
@@ -179,6 +211,21 @@ impl From<AcceptByArg> for AcceptMode {
         match a {
             AcceptByArg::Final => AcceptMode::FinalState,
             AcceptByArg::Empty => AcceptMode::EmptyStack,
+        }
+    }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum TmAcceptByArg {
+    Final,
+    Halting,
+}
+
+impl From<TmAcceptByArg> for TmAcceptMode {
+    fn from(a: TmAcceptByArg) -> Self {
+        match a {
+            TmAcceptByArg::Final => TmAcceptMode::FinalState,
+            TmAcceptByArg::Halting => TmAcceptMode::Halting,
         }
     }
 }
@@ -436,6 +483,52 @@ fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
+        Command::TmInspect { file } => {
+            let doc = load_tm_doc(&file)?;
+            let accepting_count = doc.states().filter(|&s| doc.is_accepting(s)).count();
+            println!("states:            {}", doc.states().count());
+            println!("accepting states:  {accepting_count}");
+            println!("transitions:       {}", doc.transitions().count());
+            println!("tape count:        {}", doc.tape_count());
+            println!("alphabet size:     {}", doc.alphabet().len());
+            println!("initial state set: {}", doc.initial_state().is_some());
+            println!("deterministic:     {}", doc.is_deterministic());
+            Ok(())
+        }
+
+        Command::TmSim { file, input, accept_by, max_steps, max_configs } => {
+            let doc = load_tm_doc(&file)?;
+            let mode: TmAcceptMode = accept_by.into();
+            let budget = Budget { max_steps, max_configs };
+
+            let words: Vec<Vec<String>> = if input.is_empty() { vec![Vec::new()] } else { input.iter().map(|w| split_word(w)).collect() };
+            let word_refs: Vec<Vec<&str>> = words.iter().map(|w| w.iter().map(String::as_str).collect()).collect();
+            let inputs: Vec<&[&str]> = word_refs.iter().map(|w| w.as_slice()).collect();
+
+            let start = Instant::now();
+            let result = run_tm(&doc, &inputs, mode, budget);
+            let elapsed = start.elapsed();
+            println!("{:?}  tapes={}  steps={}  elapsed={:?}", result.outcome, words.len(), result.steps.len(), elapsed);
+            if let Some(last) = result.steps.last() {
+                for (state_idx, (_, tapes)) in last.configs.iter().enumerate() {
+                    for (i, tape) in tapes.iter().enumerate() {
+                        let min = tape.cells.keys().min().copied().unwrap_or(0).min(tape.head);
+                        let max = tape.cells.keys().max().copied().unwrap_or(0).max(tape.head);
+                        let blank = doc.blank_symbol();
+                        let content: String = (min..=max)
+                            .map(|pos| {
+                                let sym = tape.cells.get(&pos).copied().unwrap_or(blank);
+                                doc.symbol_label(sym).unwrap_or("?").to_string()
+                            })
+                            .collect::<Vec<_>>()
+                            .join("");
+                        println!("  config[{state_idx}] tape[{i}]: \"{content}\"  head@{}", tape.head);
+                    }
+                }
+            }
+            Ok(())
+        }
+
         Command::Stress { topology, states, input_len, max_steps, max_configs } => {
             if states < 2 {
                 return Err("stress requires at least 2 states".to_string());
@@ -531,6 +624,13 @@ fn load_moore_doc(path: &str) -> Result<MooreDoc, String> {
 fn load_pda_doc(path: &str) -> Result<PdaDoc, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))?;
     dto::pda_load_from_str(&text).map_err(|e| e.to_string())
+}
+
+/// Native JSON only — no `.jff` for Turing Machines yet, same scope cut as
+/// Mealy/Moore/PDA (see docs/decisions.md).
+fn load_tm_doc(path: &str) -> Result<TmDoc, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("failed to read {path}: {e}"))?;
+    dto::tm_load_from_str(&text).map_err(|e| e.to_string())
 }
 
 fn collect_words(word: Option<String>, words_file: Option<String>) -> Result<Vec<Vec<String>>, String> {

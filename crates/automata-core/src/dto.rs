@@ -18,6 +18,7 @@ use crate::model::fa::FaDoc;
 use crate::model::mealy::MealyDoc;
 use crate::model::moore::MooreDoc;
 use crate::model::pda::PdaDoc;
+use crate::model::tm::TmDoc;
 
 pub const CURRENT_VERSION: u32 = 1;
 
@@ -38,6 +39,7 @@ pub enum MachineDoc {
     Mealy(MealyDto),
     Moore(MooreDto),
     Pda(PdaDto),
+    Tm(TmDto),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -145,6 +147,44 @@ pub struct PdaTransitionDto {
     pub pop: Vec<String>,
     /// Top-to-bottom order — see `model::pda`'s doc comment.
     pub push: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TmDto {
+    pub states: Vec<TmStateDto>,
+    /// A flat list, same "individually addressable" reasoning as
+    /// `PdaDto::transitions` — see `model::tm`'s doc comment.
+    pub transitions: Vec<TmTransitionDto>,
+    pub initial: Option<usize>,
+    /// `0` if no transition has been added yet — see `model::tm`'s doc
+    /// comment on `TmDoc::tape_count`.
+    pub tape_count: usize,
+}
+
+/// Has `accepting`, same as `PdaStateDto` — a TM genuinely has accepting
+/// states (see `model::tm`'s doc comment).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TmStateDto {
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+    pub accepting: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TmTransitionDto {
+    pub from: usize,
+    pub to: usize,
+    pub tapes: Vec<TmTapeOpDto>,
+}
+
+/// `direction` is `"L"`/`"R"`/`"S"` — matches JFLAP's own direction-string
+/// convention exactly, so a saved file's raw text is recognizable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TmTapeOpDto {
+    pub read: String,
+    pub write: String,
+    pub direction: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -258,6 +298,7 @@ pub fn load_from_str(s: &str) -> Result<FaDoc, DtoError> {
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Mealy" }),
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Moore" }),
         MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Pda" }),
+        MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Tm" }),
     }
 }
 
@@ -336,6 +377,7 @@ pub fn mealy_load_from_str(s: &str) -> Result<MealyDoc, DtoError> {
         MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Fa" }),
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Moore" }),
         MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Pda" }),
+        MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Tm" }),
     }
 }
 
@@ -412,6 +454,7 @@ pub fn moore_load_from_str(s: &str) -> Result<MooreDoc, DtoError> {
         MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Fa" }),
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Mealy" }),
         MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Pda" }),
+        MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Tm" }),
     }
 }
 
@@ -495,6 +538,127 @@ pub fn pda_load_from_str(s: &str) -> Result<PdaDoc, DtoError> {
         MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Fa" }),
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Mealy" }),
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Moore" }),
+        MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Tm" }),
+    }
+}
+
+/// Project a `TmDoc` into its serializable DTO — same "positional index,
+/// sorted for reproducibility" rules as `pda_to_dto`: transitions are a flat
+/// list (each individually addressable, see `model::tm`'s doc comment)
+/// sorted by `(from, to, tapes-as-strings)`.
+pub fn tm_to_dto(doc: &TmDoc) -> TmDto {
+    let alive: Vec<StateId> = doc.states().collect();
+    let index_of: HashMap<StateId, usize> = alive.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+
+    let states = alive
+        .iter()
+        .map(|&id| {
+            let meta = doc.state_meta(id).expect("alive state has meta");
+            TmStateDto {
+                label: doc.state_label(id).expect("alive state has label").to_string(),
+                x: meta.x,
+                y: meta.y,
+                accepting: meta.accepting,
+            }
+        })
+        .collect();
+
+    let mut transitions: Vec<TmTransitionDto> = doc
+        .transitions()
+        .map(|(_, t)| {
+            let tapes = t
+                .tapes
+                .iter()
+                .map(|op| TmTapeOpDto {
+                    read: doc.symbol_label(op.read).expect("interned symbol has a label").to_string(),
+                    write: doc.symbol_label(op.write).expect("interned symbol has a label").to_string(),
+                    direction: direction_to_str(op.direction).to_string(),
+                })
+                .collect();
+            TmTransitionDto { from: index_of[&t.from], to: index_of[&t.to], tapes }
+        })
+        .collect();
+    transitions.sort_by(|a, b| {
+        let key = |t: &TmTransitionDto| {
+            (t.from, t.to, t.tapes.iter().map(|op| (op.read.clone(), op.write.clone(), op.direction.clone())).collect::<Vec<_>>())
+        };
+        key(a).cmp(&key(b))
+    });
+
+    let initial = doc.initial_state().map(|id| index_of[&id]);
+
+    TmDto { states, transitions, initial, tape_count: doc.tape_count() }
+}
+
+fn direction_to_str(d: crate::model::tm::Direction) -> &'static str {
+    match d {
+        crate::model::tm::Direction::Left => "L",
+        crate::model::tm::Direction::Right => "R",
+        crate::model::tm::Direction::Stay => "S",
+    }
+}
+
+fn direction_from_str(s: &str) -> crate::model::tm::Direction {
+    match s {
+        "L" => crate::model::tm::Direction::Left,
+        "R" => crate::model::tm::Direction::Right,
+        _ => crate::model::tm::Direction::Stay,
+    }
+}
+
+/// Reconstruct a `TmDoc` from its DTO, allocating fresh `StateId`s in
+/// `states` array order. `tape_count` is not set explicitly — it's already
+/// re-derived identically as a side effect of adding `transitions` in order
+/// (the first one locks it in, same as `TmDoc::add_transition`'s own rule);
+/// an empty-transitions document with a nonzero `dto.tape_count` (impossible
+/// via `tm_to_dto`, but a hand-edited file could claim it) simply reloads as
+/// `tape_count() == 0` again — harmless, since `tape_count` only matters once
+/// a transition exists.
+pub fn tm_from_dto(dto: &TmDto) -> Result<TmDoc, DtoError> {
+    let mut doc = TmDoc::new();
+    let mut ids = Vec::with_capacity(dto.states.len());
+    for s in &dto.states {
+        let id = doc.add_state(&s.label, s.x, s.y).map_err(|_| DtoError::InvalidStateIndex(ids.len()))?;
+        doc.set_accepting(id, s.accepting);
+        ids.push(id);
+    }
+    for t in &dto.transitions {
+        let from = *ids.get(t.from).ok_or(DtoError::InvalidStateIndex(t.from))?;
+        let to = *ids.get(t.to).ok_or(DtoError::InvalidStateIndex(t.to))?;
+        let tapes: Vec<_> = t
+            .tapes
+            .iter()
+            .map(|op| crate::model::tm::TmTapeOp {
+                read: doc.intern_symbol(&op.read),
+                write: doc.intern_symbol(&op.write),
+                direction: direction_from_str(&op.direction),
+            })
+            .collect();
+        doc.add_transition(from, to, tapes);
+    }
+    if let Some(idx) = dto.initial {
+        let id = *ids.get(idx).ok_or(DtoError::InvalidStateIndex(idx))?;
+        doc.set_initial(Some(id));
+    }
+    Ok(doc)
+}
+
+pub fn tm_save_to_string(doc: &TmDoc) -> Result<String, DtoError> {
+    let envelope = Envelope { version: CURRENT_VERSION, document: MachineDoc::Tm(tm_to_dto(doc)) };
+    Ok(serde_json::to_string_pretty(&envelope)?)
+}
+
+pub fn tm_load_from_str(s: &str) -> Result<TmDoc, DtoError> {
+    let envelope: Envelope = serde_json::from_str(s)?;
+    if envelope.version != CURRENT_VERSION {
+        return Err(DtoError::UnsupportedVersion(envelope.version));
+    }
+    match envelope.document {
+        MachineDoc::Tm(dto) => tm_from_dto(&dto),
+        MachineDoc::Fa(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Fa" }),
+        MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Mealy" }),
+        MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Moore" }),
+        MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Pda" }),
     }
 }
 
@@ -855,6 +1019,126 @@ mod tests {
                 let json = pda_save_to_string(&doc).unwrap();
                 let reloaded = pda_load_from_str(&json).unwrap();
                 prop_assert_eq!(pda_to_dto(&doc), pda_to_dto(&reloaded));
+            }
+        }
+    }
+
+    mod tm {
+        use super::*;
+        use crate::model::tm::{Direction, TmDoc, TmTapeOp};
+
+        fn build_tm_doc(
+            num_states: usize,
+            accepting: Vec<bool>,
+            transition_specs: Vec<(usize, usize, Vec<(String, String, Direction)>)>,
+            initial: Option<usize>,
+        ) -> TmDoc {
+            let mut doc = TmDoc::new();
+            let mut ids = Vec::with_capacity(num_states);
+            for i in 0..num_states {
+                let id = doc.add_state(&format!("s{i}"), i as f64, (i * 2) as f64).unwrap();
+                if accepting.get(i).copied().unwrap_or(false) {
+                    doc.set_accepting(id, true);
+                }
+                ids.push(id);
+            }
+            if num_states > 0 {
+                for (from_idx, to_idx, tape_specs) in transition_specs {
+                    if tape_specs.is_empty() {
+                        continue;
+                    }
+                    let from = ids[from_idx % num_states];
+                    let to = ids[to_idx % num_states];
+                    let tapes: Vec<TmTapeOp> = tape_specs
+                        .iter()
+                        .map(|(r, w, d)| TmTapeOp { read: doc.intern_symbol(r), write: doc.intern_symbol(w), direction: *d })
+                        .collect();
+                    // A mismatched arity is legitimately rejected by
+                    // `add_transition` itself (no-op) — this proptest lets
+                    // that happen naturally rather than pre-filtering.
+                    doc.add_transition(from, to, tapes);
+                }
+                if let Some(idx) = initial {
+                    doc.set_initial(Some(ids[idx % num_states]));
+                }
+            }
+            doc
+        }
+
+        fn direction_strategy() -> impl Strategy<Value = Direction> {
+            prop_oneof![Just(Direction::Left), Just(Direction::Right), Just(Direction::Stay)]
+        }
+
+        #[test]
+        fn envelope_carries_the_tm_kind_tag() {
+            let doc = build_tm_doc(1, vec![], vec![], None);
+            let json = tm_save_to_string(&doc).unwrap();
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(value["version"].as_u64(), Some(1));
+            assert_eq!(value["document"]["kind"].as_str(), Some("Tm"));
+        }
+
+        #[test]
+        fn loading_a_fa_document_as_tm_fails_with_a_clear_error() {
+            let fa_json = save_to_string(&build_doc(1, vec![], None)).unwrap();
+            let err = tm_load_from_str(&fa_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Tm", found: "Fa" }));
+        }
+
+        #[test]
+        fn loading_a_tm_document_as_fa_fails_with_a_clear_error() {
+            let tm_json = tm_save_to_string(&build_tm_doc(1, vec![], vec![], None)).unwrap();
+            let err = load_from_str(&tm_json).unwrap_err();
+            assert!(matches!(err, DtoError::WrongKind { expected: "Fa", found: "Tm" }));
+        }
+
+        #[test]
+        fn tape_count_multiple_transitions_and_directions_round_trip() {
+            let doc = build_tm_doc(
+                2,
+                vec![false, true],
+                vec![
+                    (0, 1, vec![("a".into(), "b".into(), Direction::Right)]),
+                    (0, 1, vec![("b".into(), "a".into(), Direction::Left)]),
+                ],
+                Some(0),
+            );
+            assert_eq!(doc.transitions().count(), 2, "both transitions between the same (from,to) must survive");
+            assert_eq!(doc.tape_count(), 1);
+            let json = tm_save_to_string(&doc).unwrap();
+            let reloaded = tm_load_from_str(&json).unwrap();
+            assert_eq!(reloaded.tape_count(), 1);
+            assert_eq!(tm_to_dto(&doc), tm_to_dto(&reloaded));
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            /// Same "save-then-load is an identity" invariant as every other
+            /// machine kind's own round-trip proptest, one level over for
+            /// the Tm DTO/envelope pair. All synthesized transitions use a
+            /// single tape (so none get rejected by the tape-count lock),
+            /// keeping this proptest's focus on the serialization identity
+            /// rather than `TmDoc::add_transition`'s own validation (already
+            /// covered by `model::tm`'s and `tm_doc`'s own unit tests).
+            #[test]
+            fn save_load_round_trip_is_identity(
+                num_states in 0usize..10,
+                accepting in prop::collection::vec(any::<bool>(), 0..10),
+                transition_specs in prop::collection::vec(
+                    (
+                        0usize..10,
+                        0usize..10,
+                        ("[a-b]", "[x-y]", direction_strategy()).prop_map(|(r, w, d)| vec![(r.to_string(), w.to_string(), d)]),
+                    ),
+                    0..10,
+                ),
+                initial in prop::option::of(0usize..10),
+            ) {
+                let doc = build_tm_doc(num_states, accepting, transition_specs, initial);
+                let json = tm_save_to_string(&doc).unwrap();
+                let reloaded = tm_load_from_str(&json).unwrap();
+                prop_assert_eq!(tm_to_dto(&doc), tm_to_dto(&reloaded));
             }
         }
     }
