@@ -85,7 +85,7 @@ export class TestingView {
     this.runButton = document.createElement("button");
     this.runButton.type = "button";
     this.runButton.className = "btn-primary";
-    this.runButton.textContent = "Calcular →";
+    this.runButton.textContent = "Simular →";
     this.runButton.addEventListener("click", () => {
       this._lastRunPromise = this._runSingle();
     });

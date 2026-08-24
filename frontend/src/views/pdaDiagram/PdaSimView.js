@@ -22,6 +22,12 @@ const OUTCOME_LABELS = {
   TruncatedConfigs: "Truncado (demasiadas configuraciones)",
 };
 
+function verdictVariant(outcome) {
+  if (outcome === "Accepted") return "accepted";
+  if (outcome === "TruncatedSteps" || outcome === "TruncatedConfigs") return "truncated";
+  return "rejected";
+}
+
 export class PdaSimView {
   /**
    * @param {HTMLElement} container
@@ -92,7 +98,7 @@ export class PdaSimView {
     this.output.classList.toggle("pda-sim-error", outcome.outcome !== "Accepted");
 
     const verdict = document.createElement("div");
-    verdict.className = "pda-sim-verdict";
+    verdict.className = `pda-sim-verdict ${verdictVariant(outcome.outcome)}`;
     verdict.textContent = `Resultado: ${OUTCOME_LABELS[outcome.outcome] ?? outcome.outcome}`;
     this.output.appendChild(verdict);
 

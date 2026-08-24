@@ -10,6 +10,18 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-24 — Auditoría de consistencia visual del frontend: CSS faltante, no drift de diseño
+
+**Dónde**: `frontend/src/style.css`, `frontend/src/views/{pdaDiagram/PdaSimView,tmDiagram/TmSimView,testing/TestingView,mealyDiagram/MealySimView,mooreDiagram/MooreSimView}.js`.
+
+**Qué se encontró**: con los 5 tipos de máquina completos, se auditó el frontend buscando inconsistencia visual. El diagnóstico real no fue "drift de diseño entre tipos de máquina" — hay un solo `style.css`/`theme.css` compartido, sin fragmentación por tipo — sino clases que el JS ya asignaba y que nunca tuvieron regla CSS (verificado con `rg`, cero coincidencias antes del fix): toda celda editable de cualquier tabla de transiciones (`table-cell-input`/`table-output-input`, las 5 tablas), el panel "Simular" completo de Mealy/Moore/PDA/TM (`*-sim-accept-by`/`*-sim-verdict`/`*-sim-steps`/`*-sim-error`, mientras que el de AFD/AFN sí estaba pulido con `.verdict`/`.trace-row`), y el selector de cantidad de cintas de TM (`tm-tape-count-*`). Además, "Calcular →" (AFD/AFN/Mealy/Moore) vs "Simular →" (PDA/TM) para el mismo botón, sin motivo semántico — 3 de 5 tabs ya se llaman "Simular".
+
+**Qué se decidió**: agregar las reglas CSS faltantes agrupando selectores por las clases *ya existentes* con prefijo por máquina (`.pda-sim-verdict, .tm-sim-verdict { ... }`), en vez de renombrarlas a un vocabulario compartido — la propuesta original de unificar nombres de clase tocaba 4 vistas más sus 4 tests por cero beneficio visual adicional sobre agrupar selectores. El pill de veredicto de PDA/TM sí ganó una variante de color por resultado (`verdictVariant(outcome)`, función local nueva en ambos archivos, mismo split de 3 vías que `TestingView.js`'s `verdictVariant`), reutilizando los `color-mix` ya definidos para `.verdict.accepted/.rejected/.truncated`. El selector de cintas de TM no reutilizó `.mode-select` pese a que la auditoría inicial lo sugería: esa clase tiene `margin-left: auto` pensado para empujarse al borde derecho de una toolbar, y el control de TM vive intercalado entre botones, no al borde — se le escribieron reglas propias en cambio.
+
+**Cómo se verificó**: la auditoría se delegó a un fork de solo lectura que comparó las 5 vistas entre sí y contra `style.css`; cada hallazgo se re-verificó a mano con `rg` antes de aceptar la propuesta (todas las clases señaladas efectivamente sin CSS). La implementación se delegó a un segundo fork con el CSS y los diffs exactos ya redactados (ejecución mecánica, no diseño). Reverifiqué el diff completo a mano y corrí `npx vitest run` (865/865, 70 archivos, sin regresiones) y `npx vite build` (limpio, 82 módulos) por mi cuenta después del fork, no solo confié en su reporte.
+
+---
+
 ## 2026-08-24 — Máquina de Turing: Tabla de estados y Definición formal — cierra el roadmap completo
 
 **Dónde**: `frontend/src/views/tmTable/{TmTableView,tmTableLogic}.js`, `frontend/src/views/tmFormal/{TmFormalView,tmFormalLogic}.js`, `frontend/src/store/applyTmModel.js` (nuevos, con tests), `main.js` (monta ambas vistas en `tmUpperTabs`, que pasa de tener solo "Simular" a `tabla/formal/simular`, mismo orden que PDA).

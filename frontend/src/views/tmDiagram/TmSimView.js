@@ -32,6 +32,12 @@ const OUTCOME_LABELS = {
   TruncatedConfigs: "Truncado (demasiadas configuraciones)",
 };
 
+function verdictVariant(outcome) {
+  if (outcome === "Accepted") return "accepted";
+  if (outcome === "TruncatedSteps" || outcome === "TruncatedConfigs") return "truncated";
+  return "rejected";
+}
+
 export class TmSimView {
   /**
    * @param {HTMLElement} container
@@ -135,7 +141,7 @@ export class TmSimView {
     this.output.classList.toggle("tm-sim-error", outcome.outcome !== "Accepted");
 
     const verdict = document.createElement("div");
-    verdict.className = "tm-sim-verdict";
+    verdict.className = `tm-sim-verdict ${verdictVariant(outcome.outcome)}`;
     verdict.textContent = `Resultado: ${OUTCOME_LABELS[outcome.outcome] ?? outcome.outcome}`;
     this.output.appendChild(verdict);
 
