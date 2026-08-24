@@ -10,6 +10,19 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-24 — Máquina de Turing: Tabla de estados y Definición formal — cierra el roadmap completo
+
+**Dónde**: `frontend/src/views/tmTable/{TmTableView,tmTableLogic}.js`, `frontend/src/views/tmFormal/{TmFormalView,tmFormalLogic}.js`, `frontend/src/store/applyTmModel.js` (nuevos, con tests), `main.js` (monta ambas vistas en `tmUpperTabs`, que pasa de tener solo "Simular" a `tabla/formal/simular`, mismo orden que PDA).
+
+**Qué**: cierra el editor de Turing y con eso el roadmap completo — los 5 tipos de máquina (AFD/AFN, Mealy, Moore, Pushdown, Turing) tienen ahora backend + IPC de Tauri + editor de diagrama + Tabla de estados + Definición formal. Dos diferencias reales frente a PDA, ambas trazables a la forma de `TmDoc`:
+
+- **Tabla de Transiciones con columnas variables**: en vez de las 3 columnas fijas de PDA (Entrada/Desapilar/Apilar), acá hay una columna "Cinta N" por cada `effectiveTapeCount(docStore, ctx)` (`tmDiagram/tmLogic.js`, ya construido) — el encabezado y cada fila se recalculan en cada render porque esa cantidad puede pasar de "no fijada" a fijada apenas se crea la primera transición del documento. Cada celda usa el mismo formato de texto `"lee ; escribe , dirección"` que el prompt y la etiqueta del diagrama. Como `EditTransition` siempre reemplaza el array `tapes` completo (nunca un campo suelto), editar una celda reconstruye el array completo con solo ese índice cambiado (`computeTapeFieldEditOp`).
+- **Definición formal con tupla más simple**: `TmDoc` no separa alfabeto de entrada y de pila como PDA — hay uno solo (`TmDerived.alphabet`), nombrado `Gamma` acá (decisión propia, no verificada contra JFLAP: "alfabeto de cinta" es más honesto que "de entrada" ya que puede incluir el blanco). La línea `delta(from, {tapas}) = to` reutiliza literalmente `formatTransitionLabel` del editor de diagrama, así que el texto de una transición en la definición formal es carácter por carácter el mismo que su etiqueta en el canvas. `# Cintas = N` es comentario informativo igual que el `# Z0` de PDA, pero por una razón distinta: `tape_count` sí es estado real guardado (`TmDerived.tape_count`), solo que derivado/fijado por las transiciones y no algo que la definición formal pueda setear.
+
+**Cómo se verificó**: `npx vitest run` → 865/865 (70 archivos, +52 sobre la ronda anterior). `npx vite build` limpio. Leí `tmTableLogic.js`/`tmFormalLogic.js` completos, incluyendo la regex de la línea delta (`/^(?:delta|δ)\(([^,]+),\s*(.+)\)\s*=\s*(.+)$/`, verificada contra el caso de 2+ cintas donde el bloque de tapas tiene comas y `|` internos). Diff de `main.js` revisado a mano — puramente aditivo.
+
+---
+
 ## 2026-08-24 — Máquina de Turing: editor de frontend, un prompt por cinta y selector de cantidad de cintas
 
 **Dónde**: `frontend/src/store/TmDocStore.js`, `commands/TmContext.js`, `commands/tmRegistry.js`, `views/tmDiagram/{TmDiagramView,TmToolbar,TmSimView,tmLogic}.js` (nuevos, con tests), `tauri/client.js` (7 wrappers `tm*`), `main.js` (cuarto app-body, entrada en `modes`), `views/toolbar/EditorModeSelect.js` (Turing deja de ser placeholder deshabilitado).

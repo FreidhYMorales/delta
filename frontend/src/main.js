@@ -57,6 +57,8 @@ import { TmContext } from "./commands/TmContext.js";
 import { TmDiagramView } from "./views/tmDiagram/TmDiagramView.js";
 import { TmToolbar } from "./views/tmDiagram/TmToolbar.js";
 import { TmSimView } from "./views/tmDiagram/TmSimView.js";
+import { TmTableView } from "./views/tmTable/TmTableView.js";
+import { TmFormalView } from "./views/tmFormal/TmFormalView.js";
 
 /** @returns {Promise<unknown>|undefined} the `docStore.apply` promise, so
  * callers that need to know the layout actually landed (e.g. `ctx.fromRegex`,
@@ -465,9 +467,7 @@ async function main() {
   // variant" rationale as PDA/Mealy/Moore's (docs/decisions.md, the TM
   // Tauri IPC entry: ONE shared alphabet, not PDA's two, and a transition
   // carries `tapes: {read,write,direction}[]` instead of PDA's single
-  // triple). Tabla/Definición formal views are out of scope this round
-  // (same as Moore's and PDA's own first rounds) — only "Simular" is
-  // mounted below. ----------------------------------------------------------
+  // triple). ------------------------------------------------------------
   const tmDocStore = new TmDocStore(client);
   const tmCtx = new TmContext(tmDocStore, {
     promptLabel: async (id) => {
@@ -508,7 +508,13 @@ async function main() {
   tmCtx.viewport = tmDiagramView.viewport;
   const tmToolbar = new TmToolbar(toolbarHost, tmCtx);
 
-  const tmUpperTabs = createTabs(tmPanelUpper, [{ id: "simular", label: "Simular" }]);
+  const tmUpperTabs = createTabs(tmPanelUpper, [
+    { id: "tabla", label: "Tabla de estados" },
+    { id: "formal", label: "Definición formal" },
+    { id: "simular", label: "Simular" },
+  ]);
+  new TmTableView(tmUpperTabs.panels.get("tabla"), tmDocStore, tmCtx);
+  new TmFormalView(tmUpperTabs.panels.get("formal"), tmDocStore);
   new TmSimView(tmUpperTabs.panels.get("simular"), tmDocStore, tmCtx, (inputs, acceptBy) => client.tmSim(inputs, acceptBy));
 
   // `modes` drives both the "Editor" dropdown's real-mode options and
