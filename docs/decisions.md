@@ -79,6 +79,9 @@ confirma que los dos modos realmente divergen; (3) copiadora de 2 cintas
 (cinta 0 → cinta 1) — con `--input` explícito por cinta ambas cintas
 terminan `"aba"`, confirmando que el wiring multi-cinta funciona de punta a
 punta y no solo en los tests unitarios.
+
+---
+
 ## 2026-08-23 — Autómata de Pila: Tabla de estados (dos tablas, no una grilla) y Definición formal (7-tuple real)
 
 **Dónde**: `frontend/src/views/pdaTable/{PdaTableView,pdaTableLogic}.js`,
