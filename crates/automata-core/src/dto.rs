@@ -662,6 +662,42 @@ pub fn tm_load_from_str(s: &str) -> Result<TmDoc, DtoError> {
     }
 }
 
+/// A runtime document of any machine kind, returned by `any_load_from_str`.
+/// This is the runtime-model counterpart of the wire-level `MachineDoc`
+/// boundary enum: same five kinds, but holding the reconstructed `*Doc`
+/// model each per-kind loader already produces, rather than its DTO.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AnyMachineDoc {
+    Fa(crate::model::fa::FaDoc),
+    Mealy(crate::model::mealy::MealyDoc),
+    Moore(crate::model::moore::MooreDoc),
+    Pda(crate::model::pda::PdaDoc),
+    Tm(crate::model::tm::TmDoc),
+}
+
+/// Load a single-document envelope (the existing `{version, document}`
+/// shape) without knowing its kind ahead of time, dispatching to the
+/// matching existing per-kind loader based on the `document.kind` tag.
+/// Used later (legacy `.jflap`/`.json` file detection) to tell a
+/// single-document file apart from a multi-tab project file, per design
+/// decision D5: a legacy envelope has a top-level `document` key, a project
+/// envelope has a top-level `tabs` key — these are disjoint required keys,
+/// so this function fails (rather than panicking) on a project-shaped
+/// input, exactly like `serde_json` failing any other shape mismatch.
+pub fn any_load_from_str(s: &str) -> Result<AnyMachineDoc, DtoError> {
+    let envelope: Envelope = serde_json::from_str(s)?;
+    if envelope.version != CURRENT_VERSION {
+        return Err(DtoError::UnsupportedVersion(envelope.version));
+    }
+    match envelope.document {
+        MachineDoc::Fa(dto) => fa_from_dto(&dto).map(AnyMachineDoc::Fa),
+        MachineDoc::Mealy(dto) => mealy_from_dto(&dto).map(AnyMachineDoc::Mealy),
+        MachineDoc::Moore(dto) => moore_from_dto(&dto).map(AnyMachineDoc::Moore),
+        MachineDoc::Pda(dto) => pda_from_dto(&dto).map(AnyMachineDoc::Pda),
+        MachineDoc::Tm(dto) => tm_from_dto(&dto).map(AnyMachineDoc::Tm),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -713,6 +749,41 @@ mod tests {
         let json = r#"{"version":2,"document":{"kind":"Fa","states":[],"edges":[],"initial":null}}"#;
         let err = load_from_str(json).unwrap_err();
         assert!(matches!(err, DtoError::UnsupportedVersion(2)));
+    }
+
+    mod any_load {
+        use super::*;
+        use crate::model::tm::TmDoc;
+
+        #[test]
+        fn dispatches_a_legacy_fa_envelope_to_the_fa_variant() {
+            let doc = build_doc(1, vec![], None);
+            let json = save_to_string(&doc).unwrap();
+            let loaded = any_load_from_str(&json).unwrap();
+            assert!(matches!(loaded, AnyMachineDoc::Fa(_)));
+        }
+
+        #[test]
+        fn dispatches_a_legacy_tm_envelope_to_the_tm_variant() {
+            let doc = TmDoc::new();
+            let json = tm_save_to_string(&doc).unwrap();
+            let loaded = any_load_from_str(&json).unwrap();
+            assert!(matches!(loaded, AnyMachineDoc::Tm(_)));
+        }
+
+        #[test]
+        fn unsupported_version_fails_with_a_clear_error() {
+            let json = r#"{"version":2,"document":{"kind":"Fa","states":[],"edges":[],"initial":null}}"#;
+            let err = any_load_from_str(json).unwrap_err();
+            assert!(matches!(err, DtoError::UnsupportedVersion(2)));
+        }
+
+        #[test]
+        fn malformed_json_fails_without_panicking() {
+            assert!(any_load_from_str("not json at all").is_err());
+            assert!(any_load_from_str(r#"{"version":1,"document":{"#).is_err());
+            assert!(any_load_from_str(r#"{"version":1,"tabs":[]}"#).is_err());
+        }
     }
 
     proptest! {

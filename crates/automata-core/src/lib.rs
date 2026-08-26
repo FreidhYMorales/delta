@@ -14,5 +14,6 @@ pub mod mealy_doc;
 pub mod model;
 pub mod moore_doc;
 pub mod pda_doc;
+pub mod project;
 pub mod regex;
 pub mod tm_doc;
