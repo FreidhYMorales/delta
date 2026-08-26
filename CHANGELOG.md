@@ -19,6 +19,9 @@ Versionado [semver](https://semver.org/lang/es/).
   pestaña/Renombrar pestaña) ahora muestran un aviso visible cuando fallan
   (archivo borrado, nombre duplicado, etc.) — antes fallaban en silencio,
   sin ningún indicio para el usuario.
+- Cambiar de pestaña ahora le da foco al diagrama — antes había que hacer
+  clic en el canvas una vez antes de que los atajos de teclado (V/S/T/D,
+  Ctrl+Z, etc.) respondieran.
 
 ## [0.2.0] — 2026-08-26
 
