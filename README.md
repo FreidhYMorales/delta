@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/FreidhYMorales/delta/releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/FreidhYMorales/delta?include_prereleases&label=release"></a>
+  <a href="https://github.com/FreidhYMorales/delta/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/FreidhYMorales/delta/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/FreidhYMorales/delta/actions/workflows/release.yml"><img alt="Build de instaladores" src="https://github.com/FreidhYMorales/delta/actions/workflows/release.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="Licencia MIT" src="https://img.shields.io/github/license/FreidhYMorales/delta"></a>
 </p>
@@ -171,6 +172,8 @@ Esto levanta el frontend (`npm run dev` en `frontend/`) y la ventana nativa.
 cargo test --workspace          # core + capa Tauri
 npm test --prefix frontend      # vitest
 ```
+
+`.github/workflows/ci.yml` corre ambos en cada push/PR a `master`.
 
 ## CLI de diagnóstico (`automata-cli`)
 
