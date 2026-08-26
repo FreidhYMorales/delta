@@ -1,8 +1,39 @@
-# JFLAP (Rust + Tauri)
+<p align="center">
+  <img src="src-tauri/icons/icon.png" alt="Delta" width="96" height="96">
+</p>
 
-Editor y simulador de autómatas, pensado como reemplazo de [JFLAP](https://www.jflap.org/)
-(Java/Swing) para la cursada. Core en Rust, UI de escritorio con Tauri 2
-(frontend en JavaScript vanilla + Vite, sin frameworks).
+<h1 align="center">Delta</h1>
+
+<p align="center">
+  Editor y simulador de autómatas de escritorio — de autómatas finitos a
+  máquinas de Turing — con core en Rust y UI nativa vía Tauri.
+</p>
+
+<p align="center">
+  <a href="https://github.com/FreidhYMorales/delta/releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/FreidhYMorales/delta?include_prereleases&label=release"></a>
+  <a href="https://github.com/FreidhYMorales/delta/actions/workflows/release.yml"><img alt="Build de instaladores" src="https://github.com/FreidhYMorales/delta/actions/workflows/release.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="Licencia MIT" src="https://img.shields.io/github/license/FreidhYMorales/delta"></a>
+</p>
+
+Nace como reemplazo de [JFLAP](https://www.jflap.org/) (Java/Swing) para la
+cursada, y hoy se comparte también con testers externos. Core en Rust, UI de
+escritorio con Tauri 2 (frontend en JavaScript vanilla + Vite, sin
+frameworks) — cinco editores (autómatas finitos, Mealy, Moore, pila y
+Turing), cada uno con sus propias vistas sincronizadas, y proyectos
+multi-pestaña para trabajar varios a la vez.
+
+## Índice
+
+- [Por qué existe](#por-qué-existe)
+- [Alcance actual](#alcance-actual)
+- [Instalación](#instalación)
+- [Estructura](#estructura)
+- [Correr en desarrollo](#correr-en-desarrollo)
+- [Tests](#tests)
+- [CLI de diagnóstico (`automata-cli`)](#cli-de-diagnóstico-automata-cli)
+- [Build](#build)
+- [Documentación adicional](#documentación-adicional)
+- [Licencia](#licencia)
 
 ## Por qué existe
 
@@ -189,3 +220,10 @@ cargo tauri build
 detrás de partes del código que no se explican solas leyendo el código) —
 útil tanto para quien retome el proyecto como para asistentes de IA que
 trabajen sobre este repo en sesiones futuras.
+
+## Licencia
+
+[MIT](LICENSE) © FreidhYMorales. `idea/JFLAP7.1.jar` y el material bajo
+`idea/JFLAP7.1-output/` son de [JFLAP](https://www.jflap.org/) (Duke
+University), incluidos solo como referencia de comportamiento — no forman
+parte del build ni están cubiertos por esta licencia.
