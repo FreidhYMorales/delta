@@ -6,13 +6,13 @@
 
 use app_lib::commands::moore;
 use app_lib::moore_ipc::{MooreDocMirror, MooreEditOpDto};
-use app_lib::state::MooreSession;
+use app_lib::state::{MooreSession, SEEDED_TAB_ID};
 
 #[test]
 fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     let session = MooreSession::new();
 
-    let initial_snapshot = moore::snapshot(&session);
+    let initial_snapshot = moore::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror = MooreDocMirror::from_snapshot(&initial_snapshot);
 
     // A representative sequence spanning every MooreDocPatch kind: add,
@@ -33,11 +33,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     ];
 
     for ops in batches {
-        let result = moore::apply(&session, ops).expect("apply must succeed");
+        let result = moore::apply(&session, SEEDED_TAB_ID, ops).expect("apply must succeed");
         mirror.apply(&result.patches);
     }
 
-    let fresh_snapshot = moore::snapshot(&session);
+    let fresh_snapshot = moore::snapshot(&session, SEEDED_TAB_ID).unwrap();
 
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
@@ -55,10 +55,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
 #[test]
 fn replayed_patches_equal_snapshot_after_a_state_removal() {
     let session = MooreSession::new();
-    let mut mirror = MooreDocMirror::from_snapshot(&moore::snapshot(&session));
+    let mut mirror = MooreDocMirror::from_snapshot(&moore::snapshot(&session, SEEDED_TAB_ID).unwrap());
 
     let r1 = moore::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             MooreEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             MooreEditOpDto::AddState { label: "q1".into(), x: 1.0, y: 1.0 },
@@ -67,13 +68,15 @@ fn replayed_patches_equal_snapshot_after_a_state_removal() {
     .unwrap();
     mirror.apply(&r1.patches);
 
-    let r2 = moore::apply(&session, vec![MooreEditOpDto::SetTransitions { from: 0, to: 1, inputs: vec!["a".into()] }]).unwrap();
+    let r2 =
+        moore::apply(&session, SEEDED_TAB_ID, vec![MooreEditOpDto::SetTransitions { from: 0, to: 1, inputs: vec!["a".into()] }])
+            .unwrap();
     mirror.apply(&r2.patches);
 
-    let r3 = moore::apply(&session, vec![MooreEditOpDto::RemoveState { id: 0 }]).unwrap();
+    let r3 = moore::apply(&session, SEEDED_TAB_ID, vec![MooreEditOpDto::RemoveState { id: 0 }]).unwrap();
     mirror.apply(&r3.patches);
 
-    let fresh = moore::snapshot(&session);
+    let fresh = moore::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
     let mut fresh_states = fresh.states.clone();
