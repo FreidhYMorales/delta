@@ -5,13 +5,13 @@
 
 use app_lib::commands::mealy;
 use app_lib::mealy_ipc::{MealyDocMirror, MealyEditOpDto};
-use app_lib::state::MealySession;
+use app_lib::state::{MealySession, SEEDED_TAB_ID};
 
 #[test]
 fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     let session = MealySession::new();
 
-    let initial_snapshot = mealy::snapshot(&session);
+    let initial_snapshot = mealy::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror = MealyDocMirror::from_snapshot(&initial_snapshot);
 
     // A representative sequence spanning every MealyDocPatch kind: add,
@@ -33,11 +33,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     ];
 
     for ops in batches {
-        let result = mealy::apply(&session, ops).expect("apply must succeed");
+        let result = mealy::apply(&session, SEEDED_TAB_ID, ops).expect("apply must succeed");
         mirror.apply(&result.patches);
     }
 
-    let fresh_snapshot = mealy::snapshot(&session);
+    let fresh_snapshot = mealy::snapshot(&session, SEEDED_TAB_ID).unwrap();
 
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
@@ -55,10 +55,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
 #[test]
 fn replayed_patches_equal_snapshot_after_a_state_removal() {
     let session = MealySession::new();
-    let mut mirror = MealyDocMirror::from_snapshot(&mealy::snapshot(&session));
+    let mut mirror = MealyDocMirror::from_snapshot(&mealy::snapshot(&session, SEEDED_TAB_ID).unwrap());
 
     let r1 = mealy::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             MealyEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             MealyEditOpDto::AddState { label: "q1".into(), x: 1.0, y: 1.0 },
@@ -67,14 +68,18 @@ fn replayed_patches_equal_snapshot_after_a_state_removal() {
     .unwrap();
     mirror.apply(&r1.patches);
 
-    let r2 = mealy::apply(&session, vec![MealyEditOpDto::SetTransitions { from: 0, to: 1, entries: vec![("a".into(), "x".into())] }])
-        .unwrap();
+    let r2 = mealy::apply(
+        &session,
+        SEEDED_TAB_ID,
+        vec![MealyEditOpDto::SetTransitions { from: 0, to: 1, entries: vec![("a".into(), "x".into())] }],
+    )
+    .unwrap();
     mirror.apply(&r2.patches);
 
-    let r3 = mealy::apply(&session, vec![MealyEditOpDto::RemoveState { id: 0 }]).unwrap();
+    let r3 = mealy::apply(&session, SEEDED_TAB_ID, vec![MealyEditOpDto::RemoveState { id: 0 }]).unwrap();
     mirror.apply(&r3.patches);
 
-    let fresh = mealy::snapshot(&session);
+    let fresh = mealy::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
     let mut fresh_states = fresh.states.clone();
