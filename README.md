@@ -34,6 +34,7 @@ multi-pestaña para trabajar varios a la vez.
 - [Build](#build)
 - [Documentación adicional](#documentación-adicional)
 - [Licencia](#licencia)
+- [Changelog](CHANGELOG.md)
 
 ## Por qué existe
 
