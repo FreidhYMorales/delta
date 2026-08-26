@@ -9,11 +9,11 @@
 // Same "projection of the command registry" rule as MenuBar.js (design D6):
 // every button just calls `action.run(ctx)` — no behavior lives here.
 //
-// The "Editor" mode `<select>` used to live here too — moved out to
-// `EditorModeSelect.js` once it needed to stay visible (and its selection
-// persist) across whichever tool-button toolbar `main.js` currently shows
-// (this one for the FA editor, `MealyToolbar` for Mealy) — see its own
-// header comment.
+// PR11 (multi-tab-projects): the "Editor" mode `<select>` that used to sit
+// alongside this toolbar is gone — a project can hold several open tabs of
+// different kinds at once now (`ProjectTabStrip`), not one single editor
+// mode you switch between, so there is no longer a single "current mode" for
+// a select like that to represent.
 
 import { TOOL_IDS, findAction } from "../../commands/registry.js";
 
@@ -34,19 +34,19 @@ const TOOL_ICONS = {
   "tool.createState": "◯",
   "tool.createTransition": "→",
   "tool.delete": "✕",
-  "view.circleLayout": "⟲",
+  "view.autoLayout": "⟲",
   "view.fitToWindow": "⤢",
 };
 
 /** Short toolbar-only labels for the two view/layout actions — the Ver menu
- * still shows their full `action.title` ("Disposición circular", "Ajustar a
+ * still shows their full `action.title` ("Organizar automáticamente", "Ajustar a
  * ventana"); the toolbar button is tighter, matching the wireframe exactly. */
 const TOOLBAR_LABELS = {
-  "view.circleLayout": "Círculo",
+  "view.autoLayout": "Organizar",
   "view.fitToWindow": "Ajustar",
 };
 
-const VIEW_TOOLBAR_IDS = ["view.circleLayout", "view.fitToWindow"];
+const VIEW_TOOLBAR_IDS = ["view.autoLayout", "view.fitToWindow"];
 
 export class Toolbar {
   /**

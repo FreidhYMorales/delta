@@ -3,6 +3,7 @@ import {
   findMooreAction,
   findMooreActionByKeybinding,
   keybindingOf,
+  MOORE_MENU_GROUP_TITLES,
   MOORE_TOOL_IDS,
   mooreActions,
 } from "./mooreRegistry.js";
@@ -170,5 +171,11 @@ describe("edit.undo / edit.redo", () => {
     findMooreAction("edit.redo").run(ctx);
     expect(ctx.docStore.undo).toHaveBeenCalled();
     expect(ctx.docStore.redo).toHaveBeenCalled();
+  });
+});
+
+describe("MOORE_MENU_GROUP_TITLES (PR11: main.js composes the shared MenuBar per active tab kind)", () => {
+  it("maps only the edit group to a menu title — no view/testing/interop/convert group yet", () => {
+    expect(MOORE_MENU_GROUP_TITLES).toEqual({ edit: "Editar" });
   });
 });

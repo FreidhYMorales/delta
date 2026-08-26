@@ -177,6 +177,13 @@ export const tmActions = [
 /** The 4 core tools, in registry order — mirrors `pdaRegistry.js`'s own `PDA_TOOL_IDS`. */
 export const TM_TOOL_IDS = tmActions.filter((a) => a.group === "tools").map((a) => a.id);
 
+/** Registry `group` -> menu title — mirrors `pdaRegistry.js`'s own
+ * `PDA_MENU_GROUP_TITLES` (same PR11 rationale: only `edit` is menu-worthy
+ * today). */
+export const TM_MENU_GROUP_TITLES = {
+  edit: "Editar",
+};
+
 const byId = new Map(tmActions.map((a) => [a.id, a]));
 
 /** @param {string} id @returns {object|undefined} */

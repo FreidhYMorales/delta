@@ -130,6 +130,13 @@ export const mooreActions = [
 /** The 4 core tools, in registry order — mirrors `mealyRegistry.js`'s `MEALY_TOOL_IDS`. */
 export const MOORE_TOOL_IDS = mooreActions.filter((a) => a.group === "tools").map((a) => a.id);
 
+/** Registry `group` -> menu title — mirrors `mealyRegistry.js`'s own
+ * `MEALY_MENU_GROUP_TITLES` (same PR11 rationale: only `edit` is menu-worthy
+ * today). */
+export const MOORE_MENU_GROUP_TITLES = {
+  edit: "Editar",
+};
+
 const byId = new Map(mooreActions.map((a) => [a.id, a]));
 
 /** @param {string} id @returns {object|undefined} */

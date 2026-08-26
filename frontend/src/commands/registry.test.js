@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { actions, EDITOR_MODE_IDS, findAction, findByKeybinding, keybindingOf, TOOL_IDS } from "./registry.js";
+import { actions, findAction, findByKeybinding, keybindingOf, TOOL_IDS } from "./registry.js";
 import { MENU_GROUP_TITLES } from "../views/menubar/MenuBar.js";
 
 // The diagram's right-click context menu (`DiagramView._onCanvasContextMenu`)
@@ -29,15 +29,13 @@ function fakeCtx(overrides = {}) {
       derived: { classification: "Dfa", alphabet: [], unreachable: [] },
     },
     viewport: { zoomIn: vi.fn(), zoomOut: vi.fn(), reset: vi.fn(), fitToWindow: vi.fn() },
-    layout: { circle: vi.fn() },
+    layout: { arrange: vi.fn() },
     promptPath: vi.fn().mockResolvedValue("/tmp/x.jff"),
     importJff: vi.fn(),
     exportJff: vi.fn(),
     promptLabel: vi.fn().mockResolvedValue("q9"),
     renameState: vi.fn().mockResolvedValue(true),
     testing: { openSingle: vi.fn(), openBatch: vi.fn() },
-    openRegexTab: vi.fn(),
-    openGrammarTab: vi.fn(),
     convertToDfa: vi.fn(),
     minimizeDfa: vi.fn(),
     ...overrides,
@@ -79,7 +77,7 @@ describe("registry structural guarantees (task 7.2)", () => {
         "view.zoomOut",
         "view.zoomReset",
         "view.fitToWindow",
-        "view.circleLayout",
+        "view.autoLayout",
         "test.singleTrace",
         "test.batch",
         "jff.import",
@@ -212,10 +210,10 @@ describe("action.run behavior", () => {
     expect(ctx.docStore.apply).toHaveBeenCalledWith([{ op: "SetInitial", id: 3 }]);
   });
 
-  it("view.circleLayout delegates to ctx.layout.circle", () => {
+  it("view.autoLayout delegates to ctx.layout.arrange", () => {
     const ctx = fakeCtx();
-    findAction("view.circleLayout").run(ctx);
-    expect(ctx.layout.circle).toHaveBeenCalled();
+    findAction("view.autoLayout").run(ctx);
+    expect(ctx.layout.arrange).toHaveBeenCalled();
   });
 
   it("state.rename prompts for a label and delegates to ctx.renameState (task 7.9)", async () => {
@@ -243,18 +241,6 @@ describe("action.run behavior", () => {
     const ctx = fakeCtx();
     findAction("test.batch").run(ctx);
     expect(ctx.testing.openBatch).toHaveBeenCalled();
-  });
-
-  it("editor.openRegex jumps to the Expresión regular tab", () => {
-    const ctx = fakeCtx();
-    findAction("editor.openRegex").run(ctx);
-    expect(ctx.openRegexTab).toHaveBeenCalled();
-  });
-
-  it("editor.openGrammar jumps to the Gramática regular tab", () => {
-    const ctx = fakeCtx();
-    findAction("editor.openGrammar").run(ctx);
-    expect(ctx.openGrammarTab).toHaveBeenCalled();
   });
 
   it("convert.toDfa calls ctx.convertToDfa", () => {
@@ -303,20 +289,18 @@ describe("action.run behavior", () => {
 
 describe("reachability audit (UI/UX audit pass — no action may end up 100% unreachable)", () => {
   const toolIds = new Set(TOOL_IDS);
-  const editorModeIds = new Set(EDITOR_MODE_IDS);
 
-  it("every action has a real, discoverable trigger: a keybinding, a menu-bar entry, a toolbar button, a context-menu item, or the editor-mode dropdown", () => {
+  it("every action has a real, discoverable trigger: a keybinding, a menu-bar entry, a toolbar button, or a context-menu item", () => {
     for (const action of actions) {
       const reachable =
         action.keybinding != null ||
         Object.prototype.hasOwnProperty.call(MENU_GROUP_TITLES, action.group) ||
         toolIds.has(action.id) ||
-        CONTEXT_MENU_IDS.has(action.id) ||
-        editorModeIds.has(action.id);
+        CONTEXT_MENU_IDS.has(action.id);
       expect(
         reachable,
         `action "${action.id}" (group "${action.group}") has no keybinding and is not ` +
-          `covered by the menu bar, the toolbar, the diagram context menu, or the editor-mode dropdown`,
+          `covered by the menu bar, the toolbar, or the diagram context menu`,
       ).toBe(true);
     }
   });
@@ -337,7 +321,7 @@ describe("reachability audit (UI/UX audit pass — no action may end up 100% unr
       "view.zoomOut",
       "view.zoomReset",
       "view.fitToWindow",
-      "view.circleLayout",
+      "view.autoLayout",
     ]) {
       const action = findAction(id);
       expect(action.keybinding).not.toBeNull();
@@ -351,9 +335,7 @@ describe("reachability audit (UI/UX audit pass — no action may end up 100% unr
     }
   });
 
-  it("every `editor` group action is covered by EDITOR_MODE_IDS (the toolbar's Editor dropdown)", () => {
-    for (const action of actions.filter((a) => a.group === "editor")) {
-      expect(editorModeIds.has(action.id)).toBe(true);
-    }
+  it("has no more `editor` group actions — Expresión/Gramática Regular are reachable only as tabs inside the FA editor, not a fake mode of their own", () => {
+    expect(actions.some((a) => a.group === "editor")).toBe(false);
   });
 });

@@ -62,7 +62,7 @@ describe("ViewContext", () => {
     await expect(ctx.importJff("/x")).resolves.toBeUndefined();
     await expect(ctx.exportJff("/x")).resolves.toBeUndefined();
     expect(() => ctx.viewport.zoomIn()).not.toThrow();
-    expect(() => ctx.layout.circle()).not.toThrow();
+    expect(() => ctx.layout.arrange()).not.toThrow();
   });
 
   it("uses provided hooks over the defaults", () => {
@@ -90,11 +90,6 @@ describe("ViewContext", () => {
     await expect(ctx.fromRegex("a*")).rejects.toThrow();
   });
 
-  it("exposes an openRegexTab hook defaulting to a safe no-op", () => {
-    const ctx = new ViewContext({});
-    expect(() => ctx.openRegexTab()).not.toThrow();
-  });
-
   it("exposes a toGrammar hook defaulting to the empty grammar", async () => {
     const ctx = new ViewContext({});
     expect(await ctx.toGrammar()).toBe("");
@@ -103,11 +98,6 @@ describe("ViewContext", () => {
   it("exposes a fromGrammar hook that fails loudly by default (no safe fallback to generate)", async () => {
     const ctx = new ViewContext({});
     await expect(ctx.fromGrammar("q0 -> a q1")).rejects.toThrow();
-  });
-
-  it("exposes an openGrammarTab hook defaulting to a safe no-op", () => {
-    const ctx = new ViewContext({});
-    expect(() => ctx.openGrammarTab()).not.toThrow();
   });
 
   it("exposes a convertToDfa hook that fails loudly by default (no safe fallback to convert)", async () => {

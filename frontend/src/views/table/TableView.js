@@ -20,6 +20,7 @@
 
 import { nextStateLabel } from "../diagram/geometry.js";
 import { showNotice } from "../../ui/notice.js";
+import { createCopyTableButton } from "../../ui/copyTable.js";
 import {
   EPSILON,
   cellValue,
@@ -102,7 +103,8 @@ export class TableView {
     this.deleteSelectedButton.addEventListener("click", () => {
       this._lastEditPromise = this._deleteSelected();
     });
-    buttonsRow.append(this.addStateButton, this.deleteSelectedButton);
+    this.copyTableButton = createCopyTableButton(() => this.table);
+    buttonsRow.append(this.addStateButton, this.deleteSelectedButton, this.copyTableButton);
 
     this.actionsBar.append(alphabetField, buttonsRow);
 

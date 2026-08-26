@@ -3,6 +3,7 @@ import {
   findPdaAction,
   findPdaActionByKeybinding,
   keybindingOf,
+  PDA_MENU_GROUP_TITLES,
   PDA_TOOL_IDS,
   pdaActions,
   promptTransitionTriple,
@@ -233,5 +234,11 @@ describe("edit.undo / edit.redo", () => {
     findPdaAction("edit.redo").run(ctx);
     expect(ctx.docStore.undo).toHaveBeenCalled();
     expect(ctx.docStore.redo).toHaveBeenCalled();
+  });
+});
+
+describe("PDA_MENU_GROUP_TITLES (PR11: main.js composes the shared MenuBar per active tab kind)", () => {
+  it("maps only the edit group to a menu title — no view/testing/interop/convert group yet", () => {
+    expect(PDA_MENU_GROUP_TITLES).toEqual({ edit: "Editar" });
   });
 });

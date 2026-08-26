@@ -27,8 +27,12 @@ export class TestingView {
    * @param {HTMLElement} container
    * @param {import('../../store/DocStore.js').DocStore} docStore
    * @param {import('../../commands/context.js').ViewContext} ctx
+   * @param {{onCollapsedChange?: (collapsed: boolean) => void}} [options]
+   *   `onCollapsedChange`: forwarded to the internal `createTabs({collapsible:
+   *   true})` — lets `main.js` grow `panel-upper` into the freed space when
+   *   this view's own tab strip collapses (see `ui/tabs.js`).
    */
-  constructor(container, docStore, ctx) {
+  constructor(container, docStore, ctx, { onCollapsedChange } = {}) {
     this.container = container;
     this.docStore = docStore;
     this.ctx = ctx;
@@ -38,6 +42,7 @@ export class TestingView {
     /** Which of the two Resultados sub-views to show: `"single"`, `"batch"`,
      * or `null` before either has run once. */
     this._resultMode = null;
+    this._onCollapsedChange = onCollapsedChange;
 
     this._build();
     docStore.subscribe(() => this._renderBatchRows());
@@ -62,11 +67,15 @@ export class TestingView {
     this.root = document.createElement("div");
     this.root.className = "testing-view";
 
-    const { panels, select } = createTabs(this.root, [
-      { id: "cadena", label: "Cadena" },
-      { id: "lote", label: "Lote" },
-      { id: "resultados", label: "Resultados" },
-    ]);
+    const { panels, select } = createTabs(
+      this.root,
+      [
+        { id: "cadena", label: "Cadena" },
+        { id: "lote", label: "Lote" },
+        { id: "resultados", label: "Resultados" },
+      ],
+      { collapsible: true, onCollapsedChange: this._onCollapsedChange },
+    );
     this._selectTab = select;
 
     // --- Cadena tab: single-string input, runs on Calcular -----------------

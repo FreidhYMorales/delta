@@ -120,6 +120,18 @@ export const mealyActions = [
 /** The 4 core tools, in registry order — mirrors `registry.js`'s `TOOL_IDS`. */
 export const MEALY_TOOL_IDS = mealyActions.filter((a) => a.group === "tools").map((a) => a.id);
 
+/** Registry `group` -> menu title, same shape/rationale as `registry.js`'s
+ * own `MENU_GROUP_TITLES` (PR11: `main.js` composes the shared `MenuBar`'s
+ * sections for whichever tab is currently active from ITS OWN kind's
+ * titles/actions). Only `edit` is menu-worthy today — `tools`/`state` stay
+ * excluded (already reachable via the toolbar/context menu, same rule
+ * `MENU_GROUP_TITLES`'s own doc comment gives), and there is still no view/
+ * testing/interop/convert group for Mealy at all (see this file's own header
+ * comment). */
+export const MEALY_MENU_GROUP_TITLES = {
+  edit: "Editar",
+};
+
 const byId = new Map(mealyActions.map((a) => [a.id, a]));
 
 /** @param {string} id @returns {object|undefined} */

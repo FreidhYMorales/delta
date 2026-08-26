@@ -18,7 +18,7 @@ export class ViewContext {
    * @param {import('../store/DocStore.js').DocStore} docStore
    * @param {{
    *   viewport?: {zoomIn: Function, zoomOut: Function, reset: Function, fitToWindow: Function},
-   *   layout?: {circle: Function},
+   *   layout?: {arrange: Function},
    *   promptPath?: (kind: 'open-jff'|'save-jff') => Promise<string|null>,
    *   promptLabel?: (stateId: number) => Promise<string|null>,
    *   promptSymbol?: () => Promise<string|null>,
@@ -31,8 +31,6 @@ export class ViewContext {
    *   toGrammar?: () => Promise<string>,
    *   fromGrammar?: (text: string) => Promise<import('../store/DocStore.js').DocSnapshot>,
    *   testing?: {openSingle: Function, openBatch: Function},
-   *   openRegexTab?: () => void,
-   *   openGrammarTab?: () => void,
    *   convertToDfa?: () => Promise<void>,
    *   minimizeDfa?: () => Promise<void>,
    *   renameState?: (id: number, label: string) => Promise<boolean>,
@@ -46,7 +44,7 @@ export class ViewContext {
     this._listeners = new Set();
 
     this.viewport = hooks.viewport ?? noopViewport();
-    this.layout = hooks.layout ?? { circle: () => {} };
+    this.layout = hooks.layout ?? { arrange: () => {} };
     this.promptPath = hooks.promptPath ?? (async () => null);
     this.promptLabel = hooks.promptLabel ?? (async () => null);
     this.promptSymbol = hooks.promptSymbol ?? (async () => null);
@@ -79,13 +77,6 @@ export class ViewContext {
     this.fromGrammar =
       hooks.fromGrammar ?? (async () => { throw new Error("No hay conversión gramática→autómata disponible."); });
     this.testing = hooks.testing ?? { openSingle() {}, openBatch() {} };
-    // "Editor" dropdown -> "Expresión Regular" / "Gramática Regular"
-    // (Toolbar.js/editor.openRegex, editor.openGrammar): a menu-style jump
-    // to the tab, wired by the app shell (main.js is the only place with
-    // the upper tab group's `select` in scope) — safe no-op defaults so
-    // this is testable without a real app shell.
-    this.openRegexTab = hooks.openRegexTab ?? (() => {});
-    this.openGrammarTab = hooks.openGrammarTab ?? (() => {});
     // "Convertir" menu (`convert.toDfa`/`convert.minimizeDfa` — a menu
     // group of its own, MenuBar.js's MENU_GROUP_TITLES). Unlike
     // `toRegex`/`toGrammar`, FA->FA conversions are never a whole-document

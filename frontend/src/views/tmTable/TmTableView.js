@@ -20,6 +20,7 @@ import { nameWithMarkers, parseNameCell, rowLabel } from "../table/tableLogic.js
 import { effectiveTapeCount, formatTapeOpForPrompt } from "../tmDiagram/tmLogic.js";
 import { computeAddTransitionOp, computeRetargetOps, computeTapeFieldEditOp } from "./tmTableLogic.js";
 import { nextStateLabel } from "../diagram/geometry.js";
+import { createCopyTableButton } from "../../ui/copyTable.js";
 
 export class TmTableView {
   /**
@@ -72,7 +73,11 @@ export class TmTableView {
     this.deleteSelectedButton.addEventListener("click", () => {
       this._lastEditPromise = this._deleteSelected();
     });
-    this.statesActionsBar.append(this.addStateButton, this.deleteSelectedButton);
+    this.copyStatesTableButton = createCopyTableButton(() => this.statesTable);
+    const statesButtonsRow = document.createElement("div");
+    statesButtonsRow.className = "table-buttons-row";
+    statesButtonsRow.append(this.addStateButton, this.deleteSelectedButton, this.copyStatesTableButton);
+    this.statesActionsBar.append(statesButtonsRow);
 
     this.statesTableScroll = document.createElement("div");
     this.statesTableScroll.className = "table-scroll";

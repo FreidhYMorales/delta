@@ -38,13 +38,13 @@ describe("Toolbar (moved out of DiagramView for wireframe parity: it spans the f
     const { container } = setup();
     const buttons = container.querySelectorAll('[data-group="view"] [data-action]');
     expect([...buttons].map((b) => b.dataset.action)).toEqual([
-      "view.circleLayout",
+      "view.autoLayout",
       "view.fitToWindow",
     ]);
     expect(container.querySelector(".toolbar-sep")).not.toBeNull();
   });
 
-  it("no longer renders the Editor mode <select> (moved to EditorModeSelect.js)", () => {
+  it("does not render an Editor mode <select> (removed in PR11: a project can hold several open tabs of different kinds at once)", () => {
     const { container } = setup();
     expect(container.querySelector(".mode-select")).toBeNull();
   });

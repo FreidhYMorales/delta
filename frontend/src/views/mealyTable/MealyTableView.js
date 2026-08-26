@@ -6,6 +6,7 @@
 // destination list. Lives inside Mealy's own upper tab group (main.js).
 
 import { nextStateLabel } from "../diagram/geometry.js";
+import { createCopyTableButton } from "../../ui/copyTable.js";
 import {
   cellValue,
   computeCellUpdateOps,
@@ -77,7 +78,8 @@ export class MealyTableView {
     this.deleteSelectedButton.addEventListener("click", () => {
       this._lastEditPromise = this._deleteSelected();
     });
-    buttonsRow.append(this.addStateButton, this.deleteSelectedButton);
+    this.copyTableButton = createCopyTableButton(() => this.table);
+    buttonsRow.append(this.addStateButton, this.deleteSelectedButton, this.copyTableButton);
 
     this.actionsBar.append(alphabetField, buttonsRow);
 

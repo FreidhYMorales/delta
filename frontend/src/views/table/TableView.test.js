@@ -304,4 +304,20 @@ describe("TableView rename", () => {
     expect(renameState).not.toHaveBeenCalled();
     expect(client.docApply).not.toHaveBeenCalled();
   });
+
+  it("has a Copiar tabla button that copies the table minus the selection column", async () => {
+    const { container, view } = await setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+
+    const headerCellCount = view.table.rows[0].cells.length;
+    const copyButton = [...container.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Copiar tabla");
+    expect(copyButton).toBeTruthy();
+    copyButton.click();
+    await Promise.resolve();
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const headerLine = writeText.mock.calls[0][0].split("\n")[0];
+    expect(headerLine.split("\t")).toHaveLength(headerCellCount - 1);
+  });
 });

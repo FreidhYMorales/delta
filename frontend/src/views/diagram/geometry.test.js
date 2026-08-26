@@ -3,6 +3,7 @@ import {
   circleLayout,
   curvedEdgePath,
   edgeEndpoints,
+  forceDirectedLayout,
   nextStateLabel,
   preferredLoopAngle,
   selfLoopPath,
@@ -46,6 +47,94 @@ describe("circleLayout", () => {
 
   it("returns an empty array for zero states", () => {
     expect(circleLayout([], { centerX: 0, centerY: 0, radius: 10 })).toEqual([]);
+  });
+});
+
+describe("forceDirectedLayout", () => {
+  it("returns an empty array for zero states", () => {
+    expect(forceDirectedLayout([], [], { centerX: 0, centerY: 0 })).toEqual([]);
+  });
+
+  it("puts a single state at the center", () => {
+    const positions = forceDirectedLayout([{ id: 1 }], [], { centerX: 100, centerY: 50 });
+    expect(positions).toEqual([{ id: 1, x: 100, y: 50 }]);
+  });
+
+  it("never leaves two states closer than minSeparation, even fully connected", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+    const edges = [];
+    for (const a of states) for (const b of states) if (a.id < b.id) edges.push({ from: a.id, to: b.id });
+    const minSeparation = 70;
+    const positions = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200, minSeparation });
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const dx = positions[i].x - positions[j].x;
+        const dy = positions[i].y - positions[j].y;
+        expect(Math.sqrt(dx * dx + dy * dy)).toBeGreaterThanOrEqual(minSeparation - 0.5);
+      }
+    }
+  });
+
+  it("ignores self-loops when pulling states together", () => {
+    const states = [{ id: 1 }, { id: 2 }];
+    const positions = forceDirectedLayout(states, [{ from: 1, to: 1 }], { centerX: 0, centerY: 0 });
+    expect(positions).toHaveLength(2);
+    expect(Number.isFinite(positions[0].x)).toBe(true);
+    expect(Number.isFinite(positions[1].x)).toBe(true);
+  });
+
+  it("pulls a connected pair closer together than two disconnected states given the same state count", () => {
+    // Star graph: state 1 connects to everything else, 4 is only linked
+    // through that hub — the directly-connected pair (1,2) should end up
+    // closer than the two-hop pair (2,4).
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+    const edges = [
+      { from: 1, to: 2 },
+      { from: 1, to: 3 },
+      { from: 1, to: 4 },
+    ];
+    const positions = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
+    const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    const directPairDist = dist(byId.get(1), byId.get(2));
+    const twoHopDist = dist(byId.get(2), byId.get(4));
+    expect(directPairDist).toBeLessThan(twoHopDist);
+  });
+
+  it("is deterministic for the same input", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const edges = [{ from: 1, to: 2 }];
+    const a = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
+    const b = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
+    expect(a).toEqual(b);
+  });
+
+  it("keeps two loosely-linked clusters from drifting apart without bound (regression: a real 58-state NFA rendered as far-flung islands joined by long crossing edges)", () => {
+    // Two 10-state cliques joined by a single bridge edge: repulsion between
+    // the two dense clusters has nothing pulling them back together except
+    // that one bridge, which is exactly the shape that made whole clusters
+    // fly far apart before a centering force was added.
+    const clusterA = Array.from({ length: 10 }, (_, i) => ({ id: i }));
+    const clusterB = Array.from({ length: 10 }, (_, i) => ({ id: 10 + i }));
+    const states = [...clusterA, ...clusterB];
+    const edges = [];
+    for (const a of clusterA) for (const b of clusterA) if (a.id < b.id) edges.push({ from: a.id, to: b.id });
+    for (const a of clusterB) for (const b of clusterB) if (a.id < b.id) edges.push({ from: a.id, to: b.id });
+    edges.push({ from: 0, to: 10 }); // the single bridge
+
+    const positions = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
+    let maxDist = 0;
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const dx = positions[i].x - positions[j].x;
+        const dy = positions[i].y - positions[j].y;
+        maxDist = Math.max(maxDist, Math.sqrt(dx * dx + dy * dy));
+      }
+    }
+    // 20 states at a ~130px ideal edge length should span at most a few
+    // hundred px across, not the thousands a purely repulsive, unbounded
+    // layout would produce.
+    expect(maxDist).toBeLessThan(900);
   });
 });
 

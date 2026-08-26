@@ -49,3 +49,22 @@ export async function pickSaveJsonPath(defaultPath = "mealy.json") {
   const result = await save({ defaultPath, filters: JSON_FILTER });
   return result ?? null;
 }
+
+// Project envelope (`.jflapproj`, PR11) — the whole multi-tab project file
+// (`automata_core::project`), never a single-document `.jff`/`.json` — same
+// "own filter, own pair of pickers" convention as Mealy's JSON pair above.
+const PROJECT_FILTER = [{ name: "Delta project", extensions: ["jflapproj"] }];
+
+/** @returns {Promise<string|null>} the chosen path, or `null` if cancelled */
+export async function pickOpenProjectPath() {
+  const { open } = await getDialog();
+  const result = await open({ multiple: false, directory: false, filters: PROJECT_FILTER });
+  return typeof result === "string" ? result : null;
+}
+
+/** @param {string} [defaultPath] @returns {Promise<string|null>} */
+export async function pickSaveProjectPath(defaultPath = "project.jflapproj") {
+  const { save } = await getDialog();
+  const result = await save({ defaultPath, filters: PROJECT_FILTER });
+  return result ?? null;
+}

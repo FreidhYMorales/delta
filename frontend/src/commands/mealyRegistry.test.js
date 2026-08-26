@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { findMealyAction, findMealyActionByKeybinding, keybindingOf, MEALY_TOOL_IDS, mealyActions } from "./mealyRegistry.js";
+import {
+  findMealyAction,
+  findMealyActionByKeybinding,
+  keybindingOf,
+  MEALY_MENU_GROUP_TITLES,
+  MEALY_TOOL_IDS,
+  mealyActions,
+} from "./mealyRegistry.js";
 
 function fakeCtx(overrides = {}) {
   return {
@@ -117,5 +124,11 @@ describe("action.run behavior", () => {
 describe("keybindingOf (re-exported from the FA registry, nothing Mealy-specific about it)", () => {
   it("normalizes a plain key press", () => {
     expect(keybindingOf({ key: "v", ctrlKey: false, shiftKey: false, metaKey: false })).toBe("v");
+  });
+});
+
+describe("MEALY_MENU_GROUP_TITLES (PR11: main.js composes the shared MenuBar per active tab kind)", () => {
+  it("maps only the edit group to a menu title — no view/testing/interop/convert group yet", () => {
+    expect(MEALY_MENU_GROUP_TITLES).toEqual({ edit: "Editar" });
   });
 });

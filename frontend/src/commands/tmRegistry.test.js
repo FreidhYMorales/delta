@@ -3,6 +3,7 @@ import {
   findTmAction,
   findTmActionByKeybinding,
   keybindingOf,
+  TM_MENU_GROUP_TITLES,
   TM_TOOL_IDS,
   tmActions,
   promptTransitionTapes,
@@ -266,5 +267,11 @@ describe("edit.undo / edit.redo", () => {
     findTmAction("edit.redo").run(ctx);
     expect(ctx.docStore.undo).toHaveBeenCalled();
     expect(ctx.docStore.redo).toHaveBeenCalled();
+  });
+});
+
+describe("TM_MENU_GROUP_TITLES (PR11: main.js composes the shared MenuBar per active tab kind)", () => {
+  it("maps only the edit group to a menu title — no view/testing/interop/convert group yet", () => {
+    expect(TM_MENU_GROUP_TITLES).toEqual({ edit: "Editar" });
   });
 });

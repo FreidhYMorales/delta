@@ -15,7 +15,7 @@ function snapshot() {
   };
 }
 
-async function setup(hooks = {}) {
+async function setup(hooks = {}, options = {}) {
   const snap = snapshot();
   const client = {
     docSnapshot: vi.fn().mockResolvedValue(snap),
@@ -28,7 +28,7 @@ async function setup(hooks = {}) {
   const ctx = new ViewContext(docStore, hooks);
   const container = document.createElement("div");
   document.body.appendChild(container);
-  const view = new TestingView(container, docStore, ctx);
+  const view = new TestingView(container, docStore, ctx, options);
   return { docStore, ctx, container, view };
 }
 
@@ -122,5 +122,18 @@ describe("TestingView (task 7.6)", () => {
     view.controls.openBatch();
     expect(container.querySelector(".tab.active").textContent).toBe("Lote");
     expect(document.activeElement).toBe(container.querySelector(".testing-batch-input"));
+  });
+
+  it("re-clicking the active tab collapses the content and reports it via onCollapsedChange (main.js's panel-upper/panel-lower coordination)", async () => {
+    const onCollapsedChange = vi.fn();
+    const { container } = await setup({}, { onCollapsedChange });
+
+    const activeTab = container.querySelector(".tab.active");
+    activeTab.click();
+    expect(onCollapsedChange).toHaveBeenCalledWith(true);
+    expect(container.querySelector(".testing-view").classList.contains("tabs-collapsed")).toBe(true);
+
+    activeTab.click();
+    expect(onCollapsedChange).toHaveBeenCalledWith(false);
   });
 });

@@ -177,6 +177,14 @@ export const pdaActions = [
 /** The 4 core tools, in registry order — mirrors `mooreRegistry.js`'s `MOORE_TOOL_IDS`. */
 export const PDA_TOOL_IDS = pdaActions.filter((a) => a.group === "tools").map((a) => a.id);
 
+/** Registry `group` -> menu title — mirrors `mealyRegistry.js`'s own
+ * `MEALY_MENU_GROUP_TITLES` (same PR11 rationale: only `edit` is menu-worthy
+ * today; `transition` stays excluded, already reachable via the diagram's
+ * own transition editor). */
+export const PDA_MENU_GROUP_TITLES = {
+  edit: "Editar",
+};
+
 const byId = new Map(pdaActions.map((a) => [a.id, a]));
 
 /** @param {string} id @returns {object|undefined} */

@@ -24,6 +24,7 @@ import { nameWithMarkers, parseNameCell, rowLabel } from "../table/tableLogic.js
 import { formatSymbolListForPrompt } from "../pdaDiagram/pdaLogic.js";
 import { computeAddTransitionOp, computeFieldEditOp, computeRetargetOps } from "./pdaTableLogic.js";
 import { nextStateLabel } from "../diagram/geometry.js";
+import { createCopyTableButton } from "../../ui/copyTable.js";
 
 export class PdaTableView {
   /**
@@ -69,7 +70,11 @@ export class PdaTableView {
     this.deleteSelectedButton.addEventListener("click", () => {
       this._lastEditPromise = this._deleteSelected();
     });
-    this.statesActionsBar.append(this.addStateButton, this.deleteSelectedButton);
+    this.copyStatesTableButton = createCopyTableButton(() => this.statesTable);
+    const statesButtonsRow = document.createElement("div");
+    statesButtonsRow.className = "table-buttons-row";
+    statesButtonsRow.append(this.addStateButton, this.deleteSelectedButton, this.copyStatesTableButton);
+    this.statesActionsBar.append(statesButtonsRow);
 
     this.statesTableScroll = document.createElement("div");
     this.statesTableScroll.className = "table-scroll";

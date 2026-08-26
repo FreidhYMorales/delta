@@ -43,6 +43,190 @@ export function circleLayout(states, { centerX, centerY, radius }) {
 }
 
 /**
+ * Force-directed ("spring embedder", Fruchterman-Reingold-style) layout:
+ * every pair of states repels, and each edge pulls its two endpoints
+ * together, so states with more transitions between them end up close and
+ * unrelated states drift apart — unlike `circleLayout`, which spaces every
+ * state by the same fixed angle regardless of how it connects to anything,
+ * and degrades into a crowded ring as state count grows.
+ * @param {{id:number}[]} states
+ * @param {{from:number, to:number}[]} edges self-loops (`from === to`) are dropped — pulling a state toward itself does nothing but waste an iteration
+ * @param {{centerX:number, centerY:number, minSeparation?:number, idealEdgeLength?:number, iterations?:number}} opts
+ *   `minSeparation`: hard floor between any two states' centers, enforced in
+ *   a cleanup pass after the simulation settles — a small fully-connected
+ *   graph can still converge closer than this on its own.
+ *   `idealEdgeLength`: target spacing for a *connected* pair, held constant
+ *   regardless of state count (deriving it from state count, as an earlier
+ *   version did, made it balloon for larger automatons — a 58-state graph
+ *   would want ~800px between connected states, which is exactly why loosely
+ *   linked clusters used to end up as far-flung islands joined by long
+ *   crossing edges instead of one compact diagram).
+ * @returns {{id:number, x:number, y:number}[]}
+ */
+export function forceDirectedLayout(
+  states,
+  edges,
+  { centerX, centerY, minSeparation = 90, idealEdgeLength = 130, iterations = 300 },
+) {
+  const n = states.length;
+  if (n === 0) return [];
+  if (n === 1) return [{ id: states[0].id, x: centerX, y: centerY }];
+
+  // Seed from `circleLayout` itself: a deterministic, already-spread
+  // starting point (no RNG to make results flaky/hard to test) that never
+  // starts two states on the exact same point — repulsion divides by
+  // distance, and a zero distance would make the first iteration's
+  // direction undefined. This seed radius growing with `n` is fine — it's
+  // only a starting point the simulation immediately reworks — unlike `k`
+  // below, which drives the actual equilibrium spacing.
+  const seedRadius = Math.max(minSeparation, (idealEdgeLength * n) / (2 * Math.PI));
+  const pos = circleLayout(states, { centerX, centerY, radius: seedRadius }).map((p) => ({ ...p }));
+  const index = new Map(pos.map((p, i) => [p.id, i]));
+  const links = edges.filter((e) => e.from !== e.to && index.has(e.from) && index.has(e.to));
+
+  const k = idealEdgeLength;
+  // A gentle, constant pull toward the center for every state, independent
+  // of edges: helps the simulation settle into one cohesive blob rather
+  // than several instead of relying on it alone — the hard guarantee
+  // against far-flung, loosely-linked clusters is `compactToTarget` below,
+  // since gravity's pull can only ever compete with, not reliably beat,
+  // however much repulsion a particular graph shape happens to generate.
+  const gravity = 0.05;
+
+  let temperature = Math.min(seedRadius / 2, idealEdgeLength);
+  for (let iter = 0; iter < iterations; iter++) {
+    const disp = pos.map(() => ({ x: 0, y: 0 }));
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const dx = pos[i].x - pos[j].x;
+        const dy = pos[i].y - pos[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        const force = (k * k) / dist;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        disp[i].x += ux * force;
+        disp[i].y += uy * force;
+        disp[j].x -= ux * force;
+        disp[j].y -= uy * force;
+      }
+    }
+
+    for (const e of links) {
+      const i = index.get(e.from);
+      const j = index.get(e.to);
+      const dx = pos[i].x - pos[j].x;
+      const dy = pos[i].y - pos[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      const force = (dist * dist) / k;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      disp[i].x -= ux * force;
+      disp[i].y -= uy * force;
+      disp[j].x += ux * force;
+      disp[j].y += uy * force;
+    }
+
+    for (let i = 0; i < n; i++) {
+      disp[i].x += (centerX - pos[i].x) * gravity;
+      disp[i].y += (centerY - pos[i].y) * gravity;
+    }
+
+    // Cap each state's move to the current temperature, which cools every
+    // iteration — without this the layout oscillates instead of settling.
+    for (let i = 0; i < n; i++) {
+      const dLen = Math.sqrt(disp[i].x ** 2 + disp[i].y ** 2) || 0.01;
+      const capped = Math.min(dLen, temperature);
+      pos[i].x += (disp[i].x / dLen) * capped;
+      pos[i].y += (disp[i].y / dLen) * capped;
+    }
+    temperature *= 0.95;
+  }
+
+  resolveOverlaps(pos, minSeparation);
+  const centered = recenter(pos, centerX, centerY);
+  return compactToTarget(centered, centerX, centerY, minSeparation, idealEdgeLength);
+}
+
+/** Push apart any pair still closer than `minSeparation` after the spring
+ * simulation settles (its own equilibrium can still land there for a small,
+ * densely-connected graph). A handful of relaxation passes rather than one
+ * shot, since fixing one pair can nudge another back under the floor. */
+function resolveOverlaps(pos, minSeparation) {
+  for (let pass = 0; pass < 10; pass++) {
+    let moved = false;
+    for (let i = 0; i < pos.length; i++) {
+      for (let j = i + 1; j < pos.length; j++) {
+        const dx = pos[j].x - pos[i].x;
+        const dy = pos[j].y - pos[i].y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        if (dist < minSeparation) {
+          const push = (minSeparation - dist) / 2;
+          const ux = dx / dist;
+          const uy = dy / dist;
+          pos[i].x -= ux * push;
+          pos[i].y -= uy * push;
+          pos[j].x += ux * push;
+          pos[j].y += uy * push;
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+}
+
+function recenter(pos, centerX, centerY) {
+  const avgX = pos.reduce((sum, p) => sum + p.x, 0) / pos.length;
+  const avgY = pos.reduce((sum, p) => sum + p.y, 0) / pos.length;
+  return pos.map((p) => ({ id: p.id, x: p.x + (centerX - avgX), y: p.y + (centerY - avgY) }));
+}
+
+/**
+ * Iteratively pulls the whole layout toward `(centerX, centerY)` when it
+ * spread further than a "how big should this diagram reasonably be" budget
+ * — the deterministic guarantee against far-flung, loosely-linked clusters
+ * (the spring simulation's own gravity term helps but, being just another
+ * force competing with however much repulsion a given graph shape happens
+ * to generate, can't promise a bound on its own). A *single* uniform shrink
+ * can't safely close that gap: a tightly-packed clique already sits right
+ * at `minSeparation`, so scaling everything down by the same factor needed
+ * to pull two loose clusters together would just as much crush the clique
+ * below the floor. Shrinking a little at a time and re-running
+ * `resolveOverlaps` after each step fixes that — a clique's pairs bounce
+ * straight back to the floor (net no change there), while genuinely loose
+ * space between clusters, having nothing to bounce back from, keeps
+ * compacting step over step.
+ */
+function compactToTarget(pos, centerX, centerY, minSeparation, idealEdgeLength) {
+  const n = pos.length;
+  if (n < 2) return pos;
+
+  // Same area-budget idea as `circleLayout`'s seed radius: enough room for
+  // `n` states at roughly `idealEdgeLength` spacing, packed into a disk.
+  const targetRadius = Math.max(minSeparation, (idealEdgeLength * Math.sqrt(n)) / 2);
+
+  let current = pos.map((p) => ({ ...p }));
+  for (let pass = 0; pass < 40; pass++) {
+    let maxRadius = 0;
+    for (const p of current) {
+      const dx = p.x - centerX;
+      const dy = p.y - centerY;
+      maxRadius = Math.max(maxRadius, Math.sqrt(dx * dx + dy * dy));
+    }
+    if (maxRadius <= targetRadius) break;
+
+    current = current.map((p) => ({
+      id: p.id,
+      x: centerX + (p.x - centerX) * 0.95,
+      y: centerY + (p.y - centerY) * 0.95,
+    }));
+    resolveOverlaps(current, minSeparation);
+  }
+  return current;
+}
+
+/**
  * Trim a straight edge's endpoints to the boundary of each state's circle
  * (radius `r`), so arrowheads land on the circle edge rather than its
  * center. Returns a self-loop descriptor when `from === to` (same point).
