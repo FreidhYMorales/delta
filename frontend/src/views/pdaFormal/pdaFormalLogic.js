@@ -42,8 +42,8 @@ export function formatFormalText({ states, transitions, derived }) {
 
   const lines = [];
   lines.push(`Q = {${states.map((s) => s.label).join(", ")}}`);
-  lines.push(`Sigma = {${derived.input_alphabet.join(", ")}}`);
-  lines.push(`Gamma = {${derived.stack_alphabet.join(", ")}}`);
+  lines.push(`Σ = {${derived.input_alphabet.join(", ")}}`);
+  lines.push(`Γ = {${derived.stack_alphabet.join(", ")}}`);
   lines.push(`q0 = ${initial ? initial.label : ""}`);
   lines.push(`F = {${accepting.map((s) => s.label).join(", ")}}`);
   lines.push(`# Z0 = "Z" (símbolo inicial de pila, fijo — no se guarda en el documento)`);
@@ -54,7 +54,7 @@ export function formatFormalText({ states, transitions, derived }) {
     const input = t.input ?? EPSILON;
     const pop = formatSymbolListSpaced(t.pop);
     const push = formatSymbolListSpaced(t.push);
-    lines.push(`delta(${fromLabel}, ${input}, ${pop}) = (${toLabel}, ${push})`);
+    lines.push(`δ(${fromLabel}, ${input}, ${pop}) = (${toLabel}, ${push})`);
   }
 
   return lines.join("\n");

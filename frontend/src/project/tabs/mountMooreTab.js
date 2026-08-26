@@ -12,6 +12,7 @@ import { MooreSimView } from "../../views/mooreDiagram/MooreSimView.js";
 import { MooreTableView } from "../../views/mooreTable/MooreTableView.js";
 import { MooreFormalView } from "../../views/mooreFormal/MooreFormalView.js";
 import { promptModal } from "../../ui/promptModal.js";
+import { applyGreekSymbols } from "../../store/greekSymbols.js";
 import { pickOpenJsonPath, pickSaveJsonPath } from "../../ui/nativeDialog.js";
 import { showNotice } from "../../ui/notice.js";
 import { createTabs } from "../../ui/tabs.js";
@@ -23,9 +24,11 @@ import { bindMooreTab } from "../../tauri/tabClient.js";
  * @param {number} tabId
  * @param {{contentHost: HTMLElement, toolbarHost: HTMLElement}} hosts
  * @param {typeof import('../../tauri/client.js')} client
+ * @param {{projectStore?: import('../ProjectStore.js').ProjectStore}} [collaborators]
  */
-export function mountMooreTab(tabId, hosts, client) {
+export function mountMooreTab(tabId, hosts, client, collaborators = {}) {
   const { contentHost, toolbarHost } = hosts;
+  const { projectStore } = collaborators;
   const boundClient = bindMooreTab(client, tabId);
 
   const root = document.createElement("div");
@@ -48,15 +51,23 @@ export function mountMooreTab(tabId, hosts, client) {
   wireSidebarToggle(resizer, canvasPane, rightCol);
 
   const docStore = new MooreDocStore(boundClient);
+  // Threads this tab's own revision back to the project-level store (design
+  // D10) — see `mountFaTab.js`'s identical wiring for why this is needed.
+  docStore.subscribe(() => projectStore?.updateTabRevision?.(tabId, docStore.revision));
+
   const ctx = new MooreContext(docStore, {
     promptLabel: async (id) => {
       const state = docStore.getState(id);
       return promptModal("Rename state", state?.label ?? "");
     },
-    promptInput: async (existing = "") => promptModal("Transición (símbolo de entrada, p.ej. a)", existing),
+    promptInput: async (existing = "") => {
+      const value = await promptModal("Transición (símbolo de entrada, p.ej. a)", existing);
+      return value ? applyGreekSymbols(value) : value;
+    },
     promptOutput: async (id) => {
       const state = docStore.getState(id);
-      return promptModal("Salida del estado", state?.output ?? "");
+      const value = await promptModal("Salida del estado", state?.output ?? "");
+      return value ? applyGreekSymbols(value) : value;
     },
     openFile: async () => {
       const path = await pickOpenJsonPath();

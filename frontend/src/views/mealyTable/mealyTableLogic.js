@@ -9,6 +9,8 @@
 // prompt parses `input/output`; same "x/y" shape, different meaning, so
 // they're NOT the same function despite looking alike).
 
+import { applyGreekSymbols } from "../../store/greekSymbols.js";
+
 /** @param {string} raw comma-separated `target/output` pairs, e.g. "q1/x, q2/y" */
 export function parseCellEntries(raw) {
   const out = [];
@@ -129,7 +131,7 @@ export function parseAlphabetInput(raw) {
   const seen = new Set();
   const out = [];
   for (const part of raw.split(",")) {
-    const symbol = part.trim();
+    const symbol = applyGreekSymbols(part.trim());
     if (!symbol || seen.has(symbol)) continue;
     seen.add(symbol);
     out.push(symbol);

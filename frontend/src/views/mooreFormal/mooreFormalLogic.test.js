@@ -13,12 +13,12 @@ describe("formatFormalText", () => {
     });
 
     expect(text).toContain("Q = {q0, q1}");
-    expect(text).toContain("Sigma = {a}");
-    expect(text).toContain("Delta = {even, odd}");
+    expect(text).toContain("Σ = {a}");
+    expect(text).toContain("Δ = {even, odd}");
     expect(text).toContain("q0 = q0");
-    expect(text).toContain("delta(q0, a) = q1");
-    expect(text).toContain("lambda(q0) = even");
-    expect(text).toContain("lambda(q1) = odd");
+    expect(text).toContain("δ(q0, a) = q1");
+    expect(text).toContain("λ(q0) = even");
+    expect(text).toContain("λ(q1) = odd");
     expect(text).not.toContain("F =");
   });
 
@@ -28,7 +28,7 @@ describe("formatFormalText", () => {
       edges: [],
       derived: { input_alphabet: [], output_alphabet: [] },
     });
-    expect(text).not.toContain("lambda(q0)");
+    expect(text).not.toContain("λ(q0)");
   });
 });
 

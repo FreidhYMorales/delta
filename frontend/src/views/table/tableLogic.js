@@ -9,6 +9,8 @@
 // prefix (`parseNameCell`), the same two characters `rowLabel` already used
 // to *display* them, now doubling as an edit affordance.
 
+import { applyGreekSymbols } from "../../store/greekSymbols.js";
+
 export const EPSILON = "ε";
 
 /** @param {string} raw comma-separated destination labels from a cell */
@@ -154,7 +156,7 @@ export function parseAlphabetInput(raw) {
   const out = [];
   for (const part of raw.split(",")) {
     if (part === "") continue;
-    const trimmed = part.trim();
+    const trimmed = applyGreekSymbols(part.trim());
     const symbol = trimmed === "" ? EPSILON : trimmed;
     if (seen.has(symbol)) continue;
     seen.add(symbol);

@@ -45,8 +45,8 @@ describe("MooreFormalView", () => {
     const { container } = await setup();
     const textarea = container.querySelector("textarea");
     expect(textarea.value).toContain("Q = {q0, q1}");
-    expect(textarea.value).toContain("delta(q0, a) = q1");
-    expect(textarea.value).toContain("lambda(q0) = even");
+    expect(textarea.value).toContain("δ(q0, a) = q1");
+    expect(textarea.value).toContain("λ(q0) = even");
     expect(textarea.value).not.toContain("F =");
   });
 

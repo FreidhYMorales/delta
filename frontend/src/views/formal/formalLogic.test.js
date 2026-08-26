@@ -21,11 +21,11 @@ describe("formatFormalText", () => {
     });
 
     expect(text).toContain("Q = {q0, q1}");
-    expect(text).toContain("Sigma = {a, b}");
+    expect(text).toContain("Σ = {a, b}");
     expect(text).toContain("q0 = q0");
     expect(text).toContain("F = {q1}");
-    expect(text).toContain("delta(q0, a) = q0");
-    expect(text).toContain("delta(q0, b) = q1");
+    expect(text).toContain("δ(q0, a) = q0");
+    expect(text).toContain("δ(q0, b) = q1");
   });
 
   it("groups multiple destinations for the same (state, symbol) with braces", () => {
@@ -41,10 +41,10 @@ describe("formatFormalText", () => {
       ],
       derived: { classification: "Nfa", alphabet: ["a"], unreachable: [] },
     });
-    expect(text).toContain("delta(q0, a) = {q1, q2}");
+    expect(text).toContain("δ(q0, a) = {q1, q2}");
   });
 
-  it("renders epsilon transitions with the epsilon token", () => {
+  it("renders epsilon transitions with the ε glyph", () => {
     const text = formatFormalText({
       states: [
         { id: 1, label: "q0", initial: true, accepting: false },
@@ -53,7 +53,7 @@ describe("formatFormalText", () => {
       edges: [{ from: 1, to: 2, epsilon: true, symbols: [] }],
       derived: { classification: "Nfa", alphabet: [], unreachable: [] },
     });
-    expect(text).toContain("delta(q0, eps) = q1");
+    expect(text).toContain("δ(q0, ε) = q1");
   });
 });
 

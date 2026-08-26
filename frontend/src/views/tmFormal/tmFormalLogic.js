@@ -41,7 +41,7 @@ export function formatFormalText({ states, transitions, derived }) {
 
   const lines = [];
   lines.push(`Q = {${states.map((s) => s.label).join(", ")}}`);
-  lines.push(`Gamma = {${derived.alphabet.join(", ")}}`);
+  lines.push(`Γ = {${derived.alphabet.join(", ")}}`);
   lines.push(`q0 = ${initial ? initial.label : ""}`);
   lines.push(`F = {${accepting.map((s) => s.label).join(", ")}}`);
   lines.push(
@@ -51,7 +51,7 @@ export function formatFormalText({ states, transitions, derived }) {
   for (const t of transitions) {
     const fromLabel = labelOf.get(t.from);
     const toLabel = labelOf.get(t.to);
-    lines.push(`delta(${fromLabel}, ${formatTransitionLabel(t.tapes)}) = ${toLabel}`);
+    lines.push(`δ(${fromLabel}, ${formatTransitionLabel(t.tapes)}) = ${toLabel}`);
   }
 
   return lines.join("\n");

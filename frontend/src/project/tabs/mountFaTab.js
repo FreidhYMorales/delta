@@ -39,6 +39,7 @@ import { createTabs } from "../../ui/tabs.js";
 import { wireResizer } from "../../ui/resizer.js";
 import { wireSidebarToggle } from "../../ui/sidebarToggle.js";
 import { applyAutomatonModel } from "../../store/applyAutomatonModel.js";
+import { applyGreekSymbols } from "../../store/greekSymbols.js";
 import { docSnapshotToModel } from "../../views/formal/formalLogic.js";
 import { bindFaTab } from "../../tauri/tabClient.js";
 import { machineKindLabel } from "../machineKinds.js";
@@ -107,13 +108,22 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
   );
 
   const docStore = new DocStore(boundClient);
+  // Threads this tab's own revision back to the project-level store (design
+  // D10) — without this, `ProjectStore.isDirty` never moves off its initial
+  // clean baseline no matter how much the user actually edits, since a plain
+  // `doc_apply` only bumps the per-kind session's revision on the BACKEND;
+  // nothing pushed it back to the frontend's aggregate before this.
+  docStore.subscribe(() => projectStore?.updateTabRevision?.(tabId, docStore.revision));
 
   const ctx = new ViewContext(docStore, {
     promptLabel: async (id) => {
       const state = docStore.getState(id);
       return promptModal("Rename state", state?.label ?? "");
     },
-    promptSymbol: async () => (await promptModal("Transition symbol (blank = epsilon)")) || null,
+    promptSymbol: async () => {
+      const value = await promptModal("Transition symbol (blank = epsilon)");
+      return value ? applyGreekSymbols(value) : null;
+    },
     promptPath: async (kind) => (kind === "open-jff" ? pickOpenPath() : pickSavePath()),
     // D12 cutover: always creates a brand-new Fa tab and imports into THAT
     // one — never overwrites whichever Fa tab happens to already be open.

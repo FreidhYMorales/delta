@@ -66,6 +66,10 @@ describe("parseAlphabetInput", () => {
   it("returns an empty array for a blank input", () => {
     expect(parseAlphabetInput("")).toEqual([]);
   });
+
+  it("converts typed Greek letter names to their symbols", () => {
+    expect(parseAlphabetInput("delta, sigma, a")).toEqual(["δ", "σ", "a"]);
+  });
 });
 
 describe("nameWithMarkers", () => {

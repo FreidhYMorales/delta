@@ -45,7 +45,7 @@ describe("FormalView (task 7.5)", () => {
     const { container } = await setup();
     const textarea = container.querySelector("textarea");
     expect(textarea.value).toContain("Q = {q0, q1}");
-    expect(textarea.value).toContain("delta(q0, a) = q1");
+    expect(textarea.value).toContain("δ(q0, a) = q1");
   });
 
   it("shows a validation error and does not mutate the document on an invalid edit", async () => {

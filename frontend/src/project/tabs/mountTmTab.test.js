@@ -31,6 +31,32 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+describe("mountTmTab dirty-tracking (design D10: threads docStore.revision back to ProjectStore)", () => {
+  it("calls projectStore.updateTabRevision(tabId, revision) whenever docStore notifies", async () => {
+    const hosts = fakeHosts();
+    const updateTabRevision = vi.fn();
+    const client = fakeClient({
+      tmApply: vi.fn().mockResolvedValue({
+        revision: 1,
+        patches: [],
+        derived: { alphabet: [], tape_count: 0, deterministic: true, unreachable: [] },
+      }),
+    });
+    const mount = mountTmTab(7, hosts, client, { projectStore: { updateTabRevision } });
+    await Promise.resolve();
+    updateTabRevision.mockClear();
+
+    await mount.docStore.apply([{ op: "AddState", label: "q0", x: 0, y: 0 }]);
+
+    expect(updateTabRevision).toHaveBeenCalledWith(7, 1);
+  });
+
+  it("does not throw when no projectStore collaborator is given", async () => {
+    const hosts = fakeHosts();
+    expect(() => mountTmTab(0, hosts, fakeClient())).not.toThrow();
+  });
+});
+
 describe("mountTmTab (design D11)", () => {
   it("mounts a hidden .app-body/.toolbar pair", async () => {
     const hosts = fakeHosts();
@@ -67,5 +93,20 @@ describe("mountTmTab (design D11)", () => {
 
     expect(mount.root.hidden).toBe(true);
     expect(mount.toolbarRoot.hidden).toBe(true);
+  });
+});
+
+describe("mountTmTab ctx.promptTape Greek-letter conversion", () => {
+  it("converts a typed Greek letter name in the tape format string", async () => {
+    const hosts = fakeHosts();
+    const mount = mountTmTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptTape(0);
+    const input = document.querySelector(".prompt-modal-input");
+    input.value = "delta;sigma,R";
+    document.querySelector(".prompt-modal-ok").click();
+
+    expect(await resultPromise).toBe("δ;σ,R");
   });
 });

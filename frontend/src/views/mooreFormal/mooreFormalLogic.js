@@ -17,20 +17,20 @@ export function formatFormalText({ states, edges, derived }) {
 
   const lines = [];
   lines.push(`Q = {${states.map((s) => s.label).join(", ")}}`);
-  lines.push(`Sigma = {${derived.input_alphabet.join(", ")}}`);
-  lines.push(`Delta = {${derived.output_alphabet.join(", ")}}`);
+  lines.push(`Σ = {${derived.input_alphabet.join(", ")}}`);
+  lines.push(`Δ = {${derived.output_alphabet.join(", ")}}`);
   lines.push(`q0 = ${initial ? initial.label : ""}`);
 
   for (const edge of edges) {
     const fromLabel = labelOf.get(edge.from);
     const toLabel = labelOf.get(edge.to);
     for (const input of edge.inputs) {
-      lines.push(`delta(${fromLabel}, ${input}) = ${toLabel}`);
+      lines.push(`δ(${fromLabel}, ${input}) = ${toLabel}`);
     }
   }
 
   for (const state of states) {
-    if (state.output != null) lines.push(`lambda(${state.label}) = ${state.output}`);
+    if (state.output != null) lines.push(`λ(${state.label}) = ${state.output}`);
   }
 
   return lines.join("\n");

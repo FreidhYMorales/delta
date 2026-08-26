@@ -106,4 +106,17 @@ describe("MealyContext.renameState default (same collision-notice rule as ViewCo
     expect(ok).toBe(true);
     expect(docStore.apply).not.toHaveBeenCalled();
   });
+
+  it("converts a typed Greek letter name to its symbol before applying the rename", async () => {
+    const docStore = fakeDocStore({
+      revision: 2,
+      patches: [{ patch: "StateRenamed", id: 1, label: "δ" }],
+      derived: {},
+    });
+    const ctx = new MealyContext(docStore);
+
+    await ctx.renameState(1, "delta");
+
+    expect(docStore.apply).toHaveBeenCalledWith([{ op: "RenameState", id: 1, label: "δ" }]);
+  });
 });

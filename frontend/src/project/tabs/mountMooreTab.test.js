@@ -31,6 +31,32 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+describe("mountMooreTab dirty-tracking (design D10: threads docStore.revision back to ProjectStore)", () => {
+  it("calls projectStore.updateTabRevision(tabId, revision) whenever docStore notifies", async () => {
+    const hosts = fakeHosts();
+    const updateTabRevision = vi.fn();
+    const client = fakeClient({
+      mooreApply: vi.fn().mockResolvedValue({
+        revision: 1,
+        patches: [],
+        derived: { input_alphabet: [], output_alphabet: [], deterministic: true, unreachable: [] },
+      }),
+    });
+    const mount = mountMooreTab(7, hosts, client, { projectStore: { updateTabRevision } });
+    await Promise.resolve();
+    updateTabRevision.mockClear();
+
+    await mount.docStore.apply([{ op: "AddState", label: "q0", x: 0, y: 0 }]);
+
+    expect(updateTabRevision).toHaveBeenCalledWith(7, 1);
+  });
+
+  it("does not throw when no projectStore collaborator is given", async () => {
+    const hosts = fakeHosts();
+    expect(() => mountMooreTab(0, hosts, fakeClient())).not.toThrow();
+  });
+});
+
 describe("mountMooreTab (design D11)", () => {
   it("mounts a hidden .app-body/.toolbar pair", async () => {
     const hosts = fakeHosts();
@@ -67,5 +93,33 @@ describe("mountMooreTab (design D11)", () => {
 
     expect(mount.root.hidden).toBe(true);
     expect(mount.toolbarRoot.hidden).toBe(true);
+  });
+});
+
+describe("mountMooreTab ctx.promptInput / ctx.promptOutput Greek-letter conversion", () => {
+  it("promptInput converts a typed Greek letter name to its symbol", async () => {
+    const hosts = fakeHosts();
+    const mount = mountMooreTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptInput();
+    const input = document.querySelector(".prompt-modal-input");
+    input.value = "sigma";
+    document.querySelector(".prompt-modal-ok").click();
+
+    expect(await resultPromise).toBe("σ");
+  });
+
+  it("promptOutput converts a typed Greek letter name to its symbol", async () => {
+    const hosts = fakeHosts();
+    const mount = mountMooreTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptOutput(0);
+    const input = document.querySelector(".prompt-modal-input");
+    input.value = "delta";
+    document.querySelector(".prompt-modal-ok").click();
+
+    expect(await resultPromise).toBe("δ");
   });
 });

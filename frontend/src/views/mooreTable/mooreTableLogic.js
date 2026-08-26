@@ -5,6 +5,8 @@
 // dedicated "Salida" column with no Mealy equivalent at all. No accepting
 // flag (only `->` marks the initial state, no `*`), no epsilon column.
 
+import { applyGreekSymbols } from "../../store/greekSymbols.js";
+
 /** @param {string} raw comma-separated target-state labels, e.g. "q1, q2" */
 export function parseCellEntries(raw) {
   const out = [];
@@ -120,7 +122,7 @@ export function parseAlphabetInput(raw) {
   const seen = new Set();
   const out = [];
   for (const part of raw.split(",")) {
-    const symbol = part.trim();
+    const symbol = applyGreekSymbols(part.trim());
     if (!symbol || seen.has(symbol)) continue;
     seen.add(symbol);
     out.push(symbol);

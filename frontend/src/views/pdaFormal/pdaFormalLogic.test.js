@@ -13,11 +13,11 @@ describe("formatFormalText", () => {
     });
 
     expect(text).toContain("Q = {q0, q1}");
-    expect(text).toContain("Sigma = {a}");
-    expect(text).toContain("Gamma = {A, Z}");
+    expect(text).toContain("Σ = {a}");
+    expect(text).toContain("Γ = {A, Z}");
     expect(text).toContain("q0 = q0");
     expect(text).toContain("F = {q1}");
-    expect(text).toContain("delta(q0, a, Z) = (q1, A Z)");
+    expect(text).toContain("δ(q0, a, Z) = (q1, A Z)");
     expect(text).toMatch(/#.*Z0.*"Z"/);
   });
 
@@ -30,7 +30,7 @@ describe("formatFormalText", () => {
       transitions: [{ id: 1, from: 1, to: 2, input: null, pop: [], push: [] }],
       derived: { input_alphabet: [], stack_alphabet: [] },
     });
-    expect(text).toContain("delta(q0, ε, ε) = (q1, ε)");
+    expect(text).toContain("δ(q0, ε, ε) = (q1, ε)");
   });
 
   it("renders an empty F when no state is accepting", () => {
@@ -54,8 +54,8 @@ describe("formatFormalText", () => {
       ],
       derived: { input_alphabet: ["a", "b"], stack_alphabet: ["Z"] },
     });
-    expect(text).toContain("delta(q0, a, ε) = (q1, ε)");
-    expect(text).toContain("delta(q0, b, Z) = (q1, ε)");
+    expect(text).toContain("δ(q0, a, ε) = (q1, ε)");
+    expect(text).toContain("δ(q0, b, Z) = (q1, ε)");
   });
 });
 

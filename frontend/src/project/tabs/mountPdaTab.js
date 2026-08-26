@@ -15,6 +15,7 @@ import { PdaSimView } from "../../views/pdaDiagram/PdaSimView.js";
 import { PdaTableView } from "../../views/pdaTable/PdaTableView.js";
 import { PdaFormalView } from "../../views/pdaFormal/PdaFormalView.js";
 import { promptModal } from "../../ui/promptModal.js";
+import { applyGreekSymbols } from "../../store/greekSymbols.js";
 import { pickOpenJsonPath, pickSaveJsonPath } from "../../ui/nativeDialog.js";
 import { showNotice } from "../../ui/notice.js";
 import { createTabs } from "../../ui/tabs.js";
@@ -26,9 +27,11 @@ import { bindPdaTab } from "../../tauri/tabClient.js";
  * @param {number} tabId
  * @param {{contentHost: HTMLElement, toolbarHost: HTMLElement}} hosts
  * @param {typeof import('../../tauri/client.js')} client
+ * @param {{projectStore?: import('../ProjectStore.js').ProjectStore}} [collaborators]
  */
-export function mountPdaTab(tabId, hosts, client) {
+export function mountPdaTab(tabId, hosts, client, collaborators = {}) {
   const { contentHost, toolbarHost } = hosts;
+  const { projectStore } = collaborators;
   const boundClient = bindPdaTab(client, tabId);
 
   const root = document.createElement("div");
@@ -51,14 +54,27 @@ export function mountPdaTab(tabId, hosts, client) {
   wireSidebarToggle(resizer, canvasPane, rightCol);
 
   const docStore = new PdaDocStore(boundClient);
+  // Threads this tab's own revision back to the project-level store (design
+  // D10) — see `mountFaTab.js`'s identical wiring for why this is needed.
+  docStore.subscribe(() => projectStore?.updateTabRevision?.(tabId, docStore.revision));
+
   const ctx = new PdaContext(docStore, {
     promptLabel: async (id) => {
       const state = docStore.getState(id);
       return promptModal("Rename state", state?.label ?? "");
     },
-    promptInput: async (existing = "") => promptModal("Símbolo de entrada (vacío = ε)", existing),
-    promptPop: async (existing = "") => promptModal("Símbolos a desapilar (vacío = ε)", existing),
-    promptPush: async (existing = "") => promptModal("Símbolos a apilar (vacío = ε)", existing),
+    promptInput: async (existing = "") => {
+      const value = await promptModal("Símbolo de entrada (vacío = ε)", existing);
+      return value ? applyGreekSymbols(value) : value;
+    },
+    promptPop: async (existing = "") => {
+      const value = await promptModal("Símbolos a desapilar (vacío = ε)", existing);
+      return value ? applyGreekSymbols(value) : value;
+    },
+    promptPush: async (existing = "") => {
+      const value = await promptModal("Símbolos a apilar (vacío = ε)", existing);
+      return value ? applyGreekSymbols(value) : value;
+    },
     openFile: async () => {
       const path = await pickOpenJsonPath();
       if (!path) return;

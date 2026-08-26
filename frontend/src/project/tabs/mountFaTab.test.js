@@ -74,6 +74,33 @@ describe("mountFaTab (design D11)", () => {
   });
 });
 
+describe("mountFaTab dirty-tracking (design D10: threads docStore.revision back to ProjectStore)", () => {
+  it("calls projectStore.updateTabRevision(tabId, revision) whenever docStore notifies (e.g. after apply)", async () => {
+    const hosts = fakeHosts();
+    const updateTabRevision = vi.fn();
+    const projectStore = { updateTabRevision };
+    const client = fakeClient({
+      docApply: vi.fn().mockResolvedValue({
+        revision: 1,
+        patches: [{ patch: "StateAdded", id: 0, label: "q0", x: 0, y: 0 }],
+        derived: { classification: "Dfa", alphabet: [], unreachable: [] },
+      }),
+    });
+    const mount = mountFaTab(5, hosts, client, { projectStore });
+    await Promise.resolve();
+    updateTabRevision.mockClear();
+
+    await mount.docStore.apply([{ op: "AddState", label: "q0", x: 0, y: 0 }]);
+
+    expect(updateTabRevision).toHaveBeenCalledWith(5, 1);
+  });
+
+  it("does not throw when no projectStore collaborator is given (e.g. a standalone/test mount)", async () => {
+    const hosts = fakeHosts();
+    expect(() => mountFaTab(0, hosts, fakeClient())).not.toThrow();
+  });
+});
+
 describe("mountFaTab .jff import cutover (design D12)", () => {
   function fakeProjectStoreAndTabHost(newTabId) {
     const newlyMountedDocStore = { loadSnapshot: vi.fn(), setFilePath: vi.fn() };
@@ -122,5 +149,31 @@ describe("mountFaTab .jff import cutover (design D12)", () => {
     expect(projectStore.newTab).toHaveBeenCalledWith("Fa", "broken");
     expect(projectStore.closeTab).toHaveBeenCalledWith(1);
     expect(projectStore.setActiveTab).not.toHaveBeenCalled();
+  });
+});
+
+describe("mountFaTab ctx.promptSymbol Greek-letter conversion", () => {
+  it("converts a typed Greek letter name to its symbol", async () => {
+    const hosts = fakeHosts();
+    const mount = mountFaTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptSymbol();
+    const input = document.querySelector(".prompt-modal-input");
+    input.value = "delta";
+    document.querySelector(".prompt-modal-ok").click();
+
+    expect(await resultPromise).toBe("δ");
+  });
+
+  it("passes a cancelled prompt through as null", async () => {
+    const hosts = fakeHosts();
+    const mount = mountFaTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptSymbol();
+    document.querySelector(".prompt-modal-cancel").click();
+
+    expect(await resultPromise).toBeNull();
   });
 });

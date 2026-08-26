@@ -46,7 +46,7 @@ describe("TmFormalView", () => {
     const textarea = container.querySelector("textarea");
     expect(textarea.value).toContain("Q = {q0, q1}");
     expect(textarea.value).toContain("F = {q1}");
-    expect(textarea.value).toContain("delta(q0, a ; b , R) = q1");
+    expect(textarea.value).toContain("δ(q0, a ; b , R) = q1");
   });
 
   it("shows a validation error and does not mutate the document on an invalid edit", async () => {

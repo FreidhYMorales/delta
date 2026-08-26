@@ -45,7 +45,7 @@ describe("MealyFormalView", () => {
     const { container } = await setup();
     const textarea = container.querySelector("textarea");
     expect(textarea.value).toContain("Q = {q0, q1}");
-    expect(textarea.value).toContain("delta(q0, a) = q1/x");
+    expect(textarea.value).toContain("δ(q0, a) = q1/x");
     expect(textarea.value).not.toContain("F =");
   });
 

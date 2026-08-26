@@ -107,4 +107,17 @@ describe("MooreContext.renameState default (same collision-notice rule as MealyC
     expect(ok).toBe(true);
     expect(docStore.apply).not.toHaveBeenCalled();
   });
+
+  it("converts a typed Greek letter name to its symbol before applying the rename", async () => {
+    const docStore = fakeDocStore({
+      revision: 2,
+      patches: [{ patch: "StateRenamed", id: 1, label: "δ" }],
+      derived: {},
+    });
+    const ctx = new MooreContext(docStore);
+
+    await ctx.renameState(1, "delta");
+
+    expect(docStore.apply).toHaveBeenCalledWith([{ op: "RenameState", id: 1, label: "δ" }]);
+  });
 });

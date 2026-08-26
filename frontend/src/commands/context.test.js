@@ -159,4 +159,17 @@ describe("ViewContext.renameState default (task 7.9: rename collisions are never
     expect(renameState).toHaveBeenCalledWith(1, "Z");
     expect(docStore.apply).not.toHaveBeenCalled();
   });
+
+  it("converts a typed Greek letter name to its symbol before applying the rename", async () => {
+    const docStore = fakeDocStore({
+      revision: 2,
+      patches: [{ patch: "StateRenamed", id: 1, label: "δ" }],
+      derived: {},
+    });
+    const ctx = new ViewContext(docStore);
+
+    await ctx.renameState(1, "delta");
+
+    expect(docStore.apply).toHaveBeenCalledWith([{ op: "RenameState", id: 1, label: "δ" }]);
+  });
 });

@@ -13,6 +13,7 @@ import { TmSimView } from "../../views/tmDiagram/TmSimView.js";
 import { TmTableView } from "../../views/tmTable/TmTableView.js";
 import { TmFormalView } from "../../views/tmFormal/TmFormalView.js";
 import { promptModal } from "../../ui/promptModal.js";
+import { applyGreekSymbols } from "../../store/greekSymbols.js";
 import { pickOpenJsonPath, pickSaveJsonPath } from "../../ui/nativeDialog.js";
 import { showNotice } from "../../ui/notice.js";
 import { createTabs } from "../../ui/tabs.js";
@@ -24,9 +25,11 @@ import { bindTmTab } from "../../tauri/tabClient.js";
  * @param {number} tabId
  * @param {{contentHost: HTMLElement, toolbarHost: HTMLElement}} hosts
  * @param {typeof import('../../tauri/client.js')} client
+ * @param {{projectStore?: import('../ProjectStore.js').ProjectStore}} [collaborators]
  */
-export function mountTmTab(tabId, hosts, client) {
+export function mountTmTab(tabId, hosts, client, collaborators = {}) {
   const { contentHost, toolbarHost } = hosts;
+  const { projectStore } = collaborators;
   const boundClient = bindTmTab(client, tabId);
 
   const root = document.createElement("div");
@@ -49,13 +52,19 @@ export function mountTmTab(tabId, hosts, client) {
   wireSidebarToggle(resizer, canvasPane, rightCol);
 
   const docStore = new TmDocStore(boundClient);
+  // Threads this tab's own revision back to the project-level store (design
+  // D10) — see `mountFaTab.js`'s identical wiring for why this is needed.
+  docStore.subscribe(() => projectStore?.updateTabRevision?.(tabId, docStore.revision));
+
   const ctx = new TmContext(docStore, {
     promptLabel: async (id) => {
       const state = docStore.getState(id);
       return promptModal("Rename state", state?.label ?? "");
     },
-    promptTape: async (index, existing = "") =>
-      promptModal(`Cinta ${index + 1} (formato: lee ; escribe , dirección — L/R/S)`, existing),
+    promptTape: async (index, existing = "") => {
+      const value = await promptModal(`Cinta ${index + 1} (formato: lee ; escribe , dirección — L/R/S)`, existing);
+      return value ? applyGreekSymbols(value) : value;
+    },
     openFile: async () => {
       const path = await pickOpenJsonPath();
       if (!path) return;

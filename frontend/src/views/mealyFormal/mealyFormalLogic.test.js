@@ -16,10 +16,10 @@ describe("formatFormalText", () => {
   it("renders the Mealy 6-tuple with no F", () => {
     const text = formatFormalText(doc());
     expect(text).toContain("Q = {q0, q1}");
-    expect(text).toContain("Sigma = {a}");
-    expect(text).toContain("Delta = {x}");
+    expect(text).toContain("Σ = {a}");
+    expect(text).toContain("Δ = {x}");
     expect(text).toContain("q0 = q0");
-    expect(text).toContain("delta(q0, a) = q1/x");
+    expect(text).toContain("δ(q0, a) = q1/x");
     expect(text).not.toContain("F =");
   });
 });

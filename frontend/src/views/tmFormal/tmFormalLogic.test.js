@@ -13,10 +13,10 @@ describe("formatFormalText", () => {
     });
 
     expect(text).toContain("Q = {q0, q1}");
-    expect(text).toContain("Gamma = {a, b}");
+    expect(text).toContain("Γ = {a, b}");
     expect(text).toContain("q0 = q0");
     expect(text).toContain("F = {q1}");
-    expect(text).toContain("delta(q0, a ; b , R) = q1");
+    expect(text).toContain("δ(q0, a ; b , R) = q1");
     expect(text).toMatch(/#.*Cintas.*1/);
   });
 
@@ -39,7 +39,7 @@ describe("formatFormalText", () => {
       ],
       derived: { alphabet: ["a", "b", "c", "d"], tape_count: 2 },
     });
-    expect(text).toContain("delta(q0, a ; b , R | c ; d , L) = q1");
+    expect(text).toContain("δ(q0, a ; b , R | c ; d , L) = q1");
     expect(text).toMatch(/#.*Cintas.*2/);
   });
 

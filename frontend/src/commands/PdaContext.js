@@ -16,6 +16,7 @@
 
 import { wasRenamed } from "./renameState.js";
 import { showNotice } from "../ui/notice.js";
+import { applyGreekSymbols } from "../store/greekSymbols.js";
 
 /**
  * @typedef {{kind:'state', id:number}|{kind:'transition', id:number}|null} PdaSelection
@@ -52,6 +53,7 @@ export class PdaContext {
     this.renameState =
       hooks.renameState ??
       (async (id, label) => {
+        label = label ? applyGreekSymbols(label) : label;
         const before = docStore.getState(id)?.label;
         const result = await docStore.apply([{ op: "RenameState", id, label }]);
         if (wasRenamed(result.patches, id)) return true;

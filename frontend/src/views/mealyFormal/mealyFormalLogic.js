@@ -18,15 +18,15 @@ export function formatFormalText({ states, edges, derived }) {
 
   const lines = [];
   lines.push(`Q = {${states.map((s) => s.label).join(", ")}}`);
-  lines.push(`Sigma = {${derived.input_alphabet.join(", ")}}`);
-  lines.push(`Delta = {${derived.output_alphabet.join(", ")}}`);
+  lines.push(`Σ = {${derived.input_alphabet.join(", ")}}`);
+  lines.push(`Δ = {${derived.output_alphabet.join(", ")}}`);
   lines.push(`q0 = ${initial ? initial.label : ""}`);
 
   for (const edge of edges) {
     const fromLabel = labelOf.get(edge.from);
     const toLabel = labelOf.get(edge.to);
     for (const [input, output] of edge.transitions) {
-      lines.push(`delta(${fromLabel}, ${input}) = ${toLabel}/${output}`);
+      lines.push(`δ(${fromLabel}, ${input}) = ${toLabel}/${output}`);
     }
   }
 
