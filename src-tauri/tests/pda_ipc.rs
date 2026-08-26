@@ -10,7 +10,7 @@
 
 use app_lib::commands::pda;
 use app_lib::pda_ipc::{PdaDocPatch, PdaEditOpDto};
-use app_lib::state::PdaSession;
+use app_lib::state::{PdaSession, SEEDED_TAB_ID};
 
 fn ops(entries: &[PdaEditOpDto]) -> Vec<PdaEditOpDto> {
     entries.to_vec()
@@ -19,7 +19,8 @@ fn ops(entries: &[PdaEditOpDto]) -> Vec<PdaEditOpDto> {
 #[test]
 fn apply_reports_exactly_the_expected_patches_and_bumps_the_revision() {
     let session = PdaSession::new();
-    let result = pda::apply(&session, ops(&[PdaEditOpDto::AddState { label: "q0".into(), x: 1.0, y: 2.0 }])).unwrap();
+    let result =
+        pda::apply(&session, SEEDED_TAB_ID, ops(&[PdaEditOpDto::AddState { label: "q0".into(), x: 1.0, y: 2.0 }])).unwrap();
 
     assert_eq!(result.revision, 1);
     assert_eq!(result.patches.len(), 1);
@@ -32,20 +33,18 @@ fn apply_reports_exactly_the_expected_patches_and_bumps_the_revision() {
 #[test]
 fn snapshot_reflects_states_transitions_accepting_and_derived_facts_after_apply() {
     let session = PdaSession::new();
-    pda::apply(
-        &session,
+    pda::apply(&session, SEEDED_TAB_ID,
         ops(&[
             PdaEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             PdaEditOpDto::AddState { label: "q1".into(), x: 10.0, y: 0.0 },
         ]),
     )
     .unwrap();
-    let snap = pda::snapshot(&session);
+    let snap = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let q0 = snap.states.iter().find(|s| s.label == "q0").unwrap().id;
     let q1 = snap.states.iter().find(|s| s.label == "q1").unwrap().id;
 
-    pda::apply(
-        &session,
+    pda::apply(&session, SEEDED_TAB_ID,
         ops(&[
             PdaEditOpDto::SetInitial { id: Some(q0) },
             PdaEditOpDto::SetAccepting { id: q1, accepting: true },
@@ -60,7 +59,7 @@ fn snapshot_reflects_states_transitions_accepting_and_derived_facts_after_apply(
     )
     .unwrap();
 
-    let snap = pda::snapshot(&session);
+    let snap = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.revision, 2);
     let s0 = snap.states.iter().find(|s| s.id == q0).unwrap();
     assert!(s0.initial);
@@ -84,24 +83,21 @@ fn snapshot_reflects_states_transitions_accepting_and_derived_facts_after_apply(
 #[test]
 fn multiple_transitions_between_the_same_pair_of_states_survive_undo_redo_and_are_individually_addressable() {
     let session = PdaSession::new();
-    pda::apply(
-        &session,
+    pda::apply(&session, SEEDED_TAB_ID,
         ops(&[
             PdaEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             PdaEditOpDto::AddState { label: "q1".into(), x: 10.0, y: 0.0 },
         ]),
     )
     .unwrap();
-    let q0 = pda::snapshot(&session).states.iter().find(|s| s.label == "q0").unwrap().id;
-    let q1 = pda::snapshot(&session).states.iter().find(|s| s.label == "q1").unwrap().id;
+    let q0 = pda::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q0").unwrap().id;
+    let q1 = pda::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q1").unwrap().id;
 
-    let r1 = pda::apply(
-        &session,
+    let r1 = pda::apply(&session, SEEDED_TAB_ID,
         ops(&[PdaEditOpDto::AddTransition { from: q0, to: q1, input: Some("a".into()), pop: vec![], push: vec![] }]),
     )
     .unwrap();
-    let r2 = pda::apply(
-        &session,
+    let r2 = pda::apply(&session, SEEDED_TAB_ID,
         ops(&[PdaEditOpDto::AddTransition { from: q0, to: q1, input: Some("b".into()), pop: vec![], push: vec![] }]),
     )
     .unwrap();
@@ -116,33 +112,32 @@ fn multiple_transitions_between_the_same_pair_of_states_survive_undo_redo_and_ar
     };
     assert_ne!(t1_id, t2_id, "two transitions sharing (from, to) must get distinct ids");
 
-    let snap = pda::snapshot(&session);
+    let snap = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.transitions.len(), 2);
     assert!(snap.transitions.iter().all(|t| t.from == q0 && t.to == q1));
 
     // Editing one must not disturb the other.
-    let r3 = pda::apply(
-        &session,
+    let r3 = pda::apply(&session, SEEDED_TAB_ID,
         ops(&[PdaEditOpDto::EditTransition { id: t1_id, input: Some("c".into()), pop: vec![], push: vec![] }]),
     )
     .unwrap();
     assert!(matches!(&r3.patches[0], PdaDocPatch::TransitionEdited { id, input, .. } if *id == t1_id && input.as_deref() == Some("c")));
-    let snap = pda::snapshot(&session);
+    let snap = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.transitions.iter().find(|t| t.id == t1_id).unwrap().input, Some("c".to_string()));
     assert_eq!(snap.transitions.iter().find(|t| t.id == t2_id).unwrap().input, Some("b".to_string()));
 
     // Undo the edit, then undo both adds, then redo everything back.
-    assert!(pda::undo(&session).is_some());
-    assert_eq!(pda::snapshot(&session).transitions.iter().find(|t| t.id == t1_id).unwrap().input, Some("a".to_string()));
-    assert!(pda::undo(&session).is_some());
-    assert_eq!(pda::snapshot(&session).transitions.len(), 1);
-    assert!(pda::undo(&session).is_some());
-    assert_eq!(pda::snapshot(&session).transitions.len(), 0);
+    assert!(pda::undo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert_eq!(pda::snapshot(&session, SEEDED_TAB_ID).unwrap().transitions.iter().find(|t| t.id == t1_id).unwrap().input, Some("a".to_string()));
+    assert!(pda::undo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert_eq!(pda::snapshot(&session, SEEDED_TAB_ID).unwrap().transitions.len(), 1);
+    assert!(pda::undo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert_eq!(pda::snapshot(&session, SEEDED_TAB_ID).unwrap().transitions.len(), 0);
 
-    assert!(pda::redo(&session).is_some());
-    assert!(pda::redo(&session).is_some());
-    assert!(pda::redo(&session).is_some());
-    let snap = pda::snapshot(&session);
+    assert!(pda::redo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert!(pda::redo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert!(pda::redo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    let snap = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.transitions.len(), 2);
     assert_eq!(snap.transitions.iter().find(|t| t.id == t1_id).unwrap().input, Some("c".to_string()));
     assert_eq!(snap.transitions.iter().find(|t| t.id == t2_id).unwrap().input, Some("b".to_string()));
@@ -151,36 +146,36 @@ fn multiple_transitions_between_the_same_pair_of_states_survive_undo_redo_and_ar
 #[test]
 fn undo_reverses_the_most_recent_apply_and_redo_reapplies_it() {
     let session = PdaSession::new();
-    pda::apply(&session, ops(&[PdaEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }])).unwrap();
-    assert_eq!(pda::snapshot(&session).states.len(), 1);
+    pda::apply(&session, SEEDED_TAB_ID, ops(&[PdaEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }])).unwrap();
+    assert_eq!(pda::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 1);
 
-    let undone = pda::undo(&session).expect("there is a transaction to undo");
+    let undone = pda::undo(&session, SEEDED_TAB_ID).unwrap().expect("there is a transaction to undo");
     assert_eq!(undone.revision, 2);
     assert!(matches!(&undone.patches[0], PdaDocPatch::StateRemoved { .. }));
-    assert_eq!(pda::snapshot(&session).states.len(), 0);
+    assert_eq!(pda::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 0);
 
-    let redone = pda::redo(&session).expect("there is a transaction to redo");
+    let redone = pda::redo(&session, SEEDED_TAB_ID).unwrap().expect("there is a transaction to redo");
     assert_eq!(redone.revision, 3);
-    assert_eq!(pda::snapshot(&session).states.len(), 1);
+    assert_eq!(pda::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 1);
 }
 
 #[test]
 fn undo_on_a_fresh_session_is_none() {
     let session = PdaSession::new();
-    assert!(pda::undo(&session).is_none());
+    assert!(pda::undo(&session, SEEDED_TAB_ID).unwrap().is_none());
 }
 
 #[test]
 fn save_then_open_round_trips_the_document() {
     let session = PdaSession::new();
-    pda::apply(&session, ops(&[PdaEditOpDto::AddState { label: "q0".into(), x: 3.0, y: 4.0 }])).unwrap();
+    pda::apply(&session, SEEDED_TAB_ID, ops(&[PdaEditOpDto::AddState { label: "q0".into(), x: 3.0, y: 4.0 }])).unwrap();
     let path = std::env::temp_dir().join(format!("pda-ipc-test-{}.json", std::process::id()));
     let path_str = path.to_str().unwrap().to_string();
 
-    pda::save(&session, path_str.clone()).unwrap();
+    pda::save(&session, SEEDED_TAB_ID, path_str.clone()).unwrap();
 
     let fresh_session = PdaSession::new();
-    let loaded = pda::open(&fresh_session, path_str).unwrap();
+    let loaded = pda::open(&fresh_session, SEEDED_TAB_ID, path_str).unwrap();
     std::fs::remove_file(&path).ok();
 
     assert_eq!(loaded.states.len(), 1);
@@ -191,18 +186,16 @@ fn save_then_open_round_trips_the_document() {
 #[test]
 fn sim_respects_accept_by_and_defaults_to_final_state() {
     let session = PdaSession::new();
-    pda::apply(
-        &session,
+    pda::apply(&session, SEEDED_TAB_ID,
         ops(&[
             PdaEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             PdaEditOpDto::AddState { label: "q1".into(), x: 10.0, y: 0.0 },
         ]),
     )
     .unwrap();
-    let q0 = pda::snapshot(&session).states.iter().find(|s| s.label == "q0").unwrap().id;
-    let q1 = pda::snapshot(&session).states.iter().find(|s| s.label == "q1").unwrap().id;
-    pda::apply(
-        &session,
+    let q0 = pda::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q0").unwrap().id;
+    let q1 = pda::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q1").unwrap().id;
+    pda::apply(&session, SEEDED_TAB_ID,
         ops(&[
             PdaEditOpDto::SetInitial { id: Some(q0) },
             PdaEditOpDto::SetAccepting { id: q1, accepting: true },
@@ -213,11 +206,11 @@ fn sim_respects_accept_by_and_defaults_to_final_state() {
 
     // Final-state mode (the default): q1 is reached with input exhausted,
     // regardless of the leftover pushed "A" on the stack.
-    let final_trace = pda::sim(&session, vec!["a".to_string()], None, None);
+    let final_trace = pda::sim(&session, SEEDED_TAB_ID, vec!["a".to_string()], None, None).unwrap();
     assert_eq!(final_trace.outcome, "Accepted");
 
     // Empty-stack mode: the leftover "A" (plus the bottom "Z" marker) means
     // the stack is never empty, so this must reject.
-    let empty_trace = pda::sim(&session, vec!["a".to_string()], Some(pda::AcceptByDto::Empty), None);
+    let empty_trace = pda::sim(&session, SEEDED_TAB_ID, vec!["a".to_string()], Some(pda::AcceptByDto::Empty), None).unwrap();
     assert_eq!(empty_trace.outcome, "Rejected");
 }

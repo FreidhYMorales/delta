@@ -5,13 +5,13 @@
 
 use app_lib::commands::pda;
 use app_lib::pda_ipc::{PdaDocMirror, PdaEditOpDto};
-use app_lib::state::PdaSession;
+use app_lib::state::{PdaSession, SEEDED_TAB_ID};
 
 #[test]
 fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     let session = PdaSession::new();
 
-    let initial_snapshot = pda::snapshot(&session);
+    let initial_snapshot = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror = PdaDocMirror::from_snapshot(&initial_snapshot);
 
     // A representative sequence spanning every PdaDocPatch kind: add,
@@ -33,11 +33,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     ];
 
     for ops in batches {
-        let result = pda::apply(&session, ops).expect("apply must succeed");
+        let result = pda::apply(&session, SEEDED_TAB_ID, ops).expect("apply must succeed");
         mirror.apply(&result.patches);
     }
 
-    let fresh_snapshot = pda::snapshot(&session);
+    let fresh_snapshot = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
 
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
@@ -55,10 +55,9 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
 #[test]
 fn replayed_patches_equal_snapshot_after_a_state_removal_cascading_its_transitions() {
     let session = PdaSession::new();
-    let mut mirror = PdaDocMirror::from_snapshot(&pda::snapshot(&session));
+    let mut mirror = PdaDocMirror::from_snapshot(&pda::snapshot(&session, SEEDED_TAB_ID).unwrap());
 
-    let r1 = pda::apply(
-        &session,
+    let r1 = pda::apply(&session, SEEDED_TAB_ID,
         vec![
             PdaEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             PdaEditOpDto::AddState { label: "q1".into(), x: 1.0, y: 1.0 },
@@ -67,17 +66,16 @@ fn replayed_patches_equal_snapshot_after_a_state_removal_cascading_its_transitio
     .unwrap();
     mirror.apply(&r1.patches);
 
-    let r2 = pda::apply(
-        &session,
+    let r2 = pda::apply(&session, SEEDED_TAB_ID,
         vec![PdaEditOpDto::AddTransition { from: 0, to: 1, input: Some("a".into()), pop: vec![], push: vec![] }],
     )
     .unwrap();
     mirror.apply(&r2.patches);
 
-    let r3 = pda::apply(&session, vec![PdaEditOpDto::RemoveState { id: 0 }]).unwrap();
+    let r3 = pda::apply(&session, SEEDED_TAB_ID, vec![PdaEditOpDto::RemoveState { id: 0 }]).unwrap();
     mirror.apply(&r3.patches);
 
-    let fresh = pda::snapshot(&session);
+    let fresh = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
     let mut fresh_states = fresh.states.clone();
