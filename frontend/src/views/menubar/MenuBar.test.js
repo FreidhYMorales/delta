@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DocStore } from "../../store/DocStore.js";
 import { ViewContext } from "../../commands/context.js";
+import { ProjectContext } from "../../commands/ProjectContext.js";
+import { ProjectStore } from "../../project/ProjectStore.js";
+import { actions } from "../../commands/registry.js";
+import { projectActions, PROJECT_MENU_GROUP_TITLES } from "../../commands/projectRegistry.js";
 import { MenuBar, MENU_GROUP_TITLES, formatKeybinding } from "./MenuBar.js";
 
 function emptySnapshot() {
@@ -12,7 +16,7 @@ function emptySnapshot() {
   };
 }
 
-async function setup(hooks = {}) {
+async function setupCtx(hooks = {}) {
   const client = {
     docSnapshot: vi.fn().mockResolvedValue(emptySnapshot()),
     docApply: vi.fn(),
@@ -21,19 +25,42 @@ async function setup(hooks = {}) {
   };
   const docStore = new DocStore(client);
   await docStore.load();
-  const ctx = new ViewContext(docStore, {
+  return new ViewContext(docStore, {
     viewport: { zoomIn: vi.fn(), zoomOut: vi.fn(), reset: vi.fn(), fitToWindow: vi.fn() },
-    layout: { circle: vi.fn() },
+    layout: { arrange: vi.fn() },
     promptPath: vi.fn().mockResolvedValue("/tmp/x.jff"),
     importJff: vi.fn(),
     exportJff: vi.fn(),
     testing: { openSingle: vi.fn(), openBatch: vi.fn() },
     ...hooks,
   });
+}
+
+/** Builds the same 5 menus (Archivo/Editar/Ver/Convertir/Test) the OLD
+ * single-source MenuBar built internally from `registry.js`'s `actions` —
+ * now assembled by the CALLER (design D9), one section per registry group,
+ * each carrying its own `ctx`. This is what lets `MenuBar.test.js`'s
+ * existing per-action assertions keep holding under the new contract. */
+function faMenus(ctx) {
+  return Object.entries(MENU_GROUP_TITLES).map(([group, title]) => ({
+    title,
+    sections: [{ id: group, actions: actions.filter((a) => a.group === group), ctx }],
+  }));
+}
+
+function projectMenus(ctx) {
+  return Object.entries(PROJECT_MENU_GROUP_TITLES).map(([group, title]) => ({
+    title,
+    sections: [{ id: group, actions: projectActions.filter((a) => a.group === group), ctx }],
+  }));
+}
+
+async function setup(hooks = {}) {
+  const ctx = await setupCtx(hooks);
   const container = document.createElement("div");
   document.body.appendChild(container);
-  const menuBar = new MenuBar(container, ctx);
-  return { docStore, ctx, container, menuBar };
+  const menuBar = new MenuBar(container, faMenus(ctx));
+  return { ctx, container, menuBar };
 }
 
 beforeEach(() => {
@@ -147,5 +174,139 @@ describe("MenuBar disabled/gated state (edit.deleteSelection depends on ctx.sele
 
     ctx.clearSelection();
     expect(deleteItem.disabled).toBe(true);
+  });
+});
+
+describe("MenuBar multi-source contract (design D9, PR10)", () => {
+  it("accepts an array of {title, sections} menus, each section carrying its own actions AND its own ctx", async () => {
+    const faCtx = await setupCtx();
+    const projectStore = new ProjectStore({
+      projectNew: vi.fn(),
+      projectManifest: vi.fn(),
+      projectNewTab: vi.fn(),
+      projectCloseTab: vi.fn(),
+      projectRenameTab: vi.fn(),
+      projectOpen: vi.fn(),
+      projectSave: vi.fn(),
+    });
+    const projectCtx = new ProjectContext(projectStore);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    new MenuBar(container, [...projectMenus(projectCtx), ...faMenus(faCtx)]);
+
+    // "Archivo" merges every section sharing that title — here just the
+    // project "file"/"tabs" sections (Fa's own "interop" section is
+    // exercised by the dedicated merge test below).
+    expect(container.querySelector('[data-action="project.new"]')).not.toBeNull();
+    expect(container.querySelector('[data-action="edit.undo"]')).not.toBeNull();
+  });
+
+  it("merges multiple menu entries that share the same title into ONE top-level trigger+dropdown (design D9: Archivo = Fa's interop + project's file/tabs)", async () => {
+    const faCtx = await setupCtx();
+    const projectStore = new ProjectStore({
+      projectNew: vi.fn(),
+      projectManifest: vi.fn(),
+      projectNewTab: vi.fn(),
+      projectCloseTab: vi.fn(),
+      projectRenameTab: vi.fn(),
+      projectOpen: vi.fn(),
+      projectSave: vi.fn(),
+    });
+    const projectCtx = new ProjectContext(projectStore);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    const interopSection = {
+      title: "Archivo",
+      sections: [{ id: "interop", actions: actions.filter((a) => a.group === "interop"), ctx: faCtx }],
+    };
+    new MenuBar(container, [interopSection, ...projectMenus(projectCtx)]);
+
+    const archivoTriggers = [...container.querySelectorAll(".menu-bar-item")].filter(
+      (b) => b.textContent === "Archivo",
+    );
+    expect(archivoTriggers.length).toBe(1);
+    expect(container.querySelector('[data-action="jff.import"]')).not.toBeNull();
+    expect(container.querySelector('[data-action="project.new"]')).not.toBeNull();
+  });
+
+  it("hidden, not disabled: a menus array that omits Convertir/Test entirely (as a non-FA composer would build) renders no trigger and no items for them at all", async () => {
+    const faCtx = await setupCtx();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    // Only "Editar" — as if composed for a kind with no convert/test groups.
+    new MenuBar(container, [
+      { title: "Editar", sections: [{ id: "edit", actions: actions.filter((a) => a.group === "edit"), ctx: faCtx }] },
+    ]);
+
+    const triggers = [...container.querySelectorAll(".menu-bar-item")].map((b) => b.textContent);
+    expect(triggers).toEqual(["Editar"]);
+    expect(container.querySelector('[data-action="convert.toDfa"]')).toBeNull();
+    expect(container.querySelector('[data-action="test.singleTrace"]')).toBeNull();
+    // Not merely disabled-and-hidden-by-CSS: the elements don't exist at all.
+    expect(container.querySelectorAll(".menu-dropdown-item").length).toBe(
+      actions.filter((a) => a.group === "edit").length,
+    );
+  });
+
+  it("re-renders (enables/disables) when EITHER section's own ctx notifies, independently", async () => {
+    const faCtx = await setupCtx();
+    const projectStore = new ProjectStore({
+      projectNew: vi.fn(),
+      projectManifest: vi.fn(),
+      projectNewTab: vi.fn(),
+      projectCloseTab: vi.fn(),
+      projectRenameTab: vi.fn(),
+      projectOpen: vi.fn(),
+      projectSave: vi.fn(),
+    });
+    const projectCtx = new ProjectContext(projectStore);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    new MenuBar(container, [...faMenus(faCtx), ...projectMenus(projectCtx)]);
+
+    const deleteItem = container.querySelector('[data-action="edit.deleteSelection"]');
+    expect(deleteItem.disabled).toBe(true);
+    faCtx.setSelection({ kind: "state", id: 1 });
+    expect(deleteItem.disabled).toBe(false);
+
+    const closeTabItem = container.querySelector('[data-action="project.closeTab"]');
+    expect(closeTabItem.disabled).toBe(true);
+    projectStore.tabs.push({ id: 0, kind: "Fa", name: "A", revision: 0 });
+    projectStore._notify();
+    expect(closeTabItem.disabled).toBe(false);
+  });
+
+  it("a submenu action (Recientes) renders as a trigger whose items are recomputed from ctx on open, without a static `run`", async () => {
+    const projectStore = new ProjectStore({
+      projectNew: vi.fn(),
+      projectManifest: vi.fn(),
+      projectNewTab: vi.fn(),
+      projectCloseTab: vi.fn(),
+      projectRenameTab: vi.fn(),
+      projectOpen: vi.fn(),
+      projectSave: vi.fn(),
+    });
+    const openPath = vi.fn().mockResolvedValue(undefined);
+    projectStore.open = openPath;
+    const recentProjects = { list: () => ["/a.jflapproj", "/b.jflapproj"], add: vi.fn() };
+    const projectCtx = new ProjectContext(projectStore, { recentProjects });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    new MenuBar(container, projectMenus(projectCtx));
+
+    const recentTrigger = container.querySelector('[data-action="project.recent"]');
+    expect(recentTrigger).not.toBeNull();
+    recentTrigger.click();
+
+    const subItems = container.querySelectorAll(".menu-submenu-item");
+    expect([...subItems].map((i) => i.textContent)).toEqual(["/a.jflapproj", "/b.jflapproj"]);
+
+    subItems[0].click();
+    expect(openPath).toHaveBeenCalledWith("/a.jflapproj");
   });
 });

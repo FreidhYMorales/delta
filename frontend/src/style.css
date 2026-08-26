@@ -54,6 +54,14 @@ body {
   min-height: 0;
 }
 
+/* Design D11: every open tab's `.app-body` stays mounted in the DOM
+ * permanently (`TabHost.activate`/`deactivate` just toggles `hidden`) —
+ * same recurring `[hidden]` vs. an AUTHOR `display` rule bug as
+ * `.toolbar[hidden]`/`.menu-bar[hidden]` above (docs/decisions.md). */
+.app-body[hidden] {
+  display: none;
+}
+
 /* Top-level app menu bar (File/Edit/View/Test — MenuBar.js). Sits above the
  * full-width tool `.toolbar` (Toolbar.js), which in turn sits above the
  * canvas/right-col split — same stacking as the wireframe artifact. */
@@ -144,6 +152,15 @@ body {
   white-space: nowrap;
 }
 
+/* Nested popup for the one dynamic `submenu` action (design D8/D9's
+ * "Recientes") — same flat item styling as `.menu-dropdown-item`, just
+ * indented under its trigger instead of positioned as its own dropdown. */
+.menu-submenu {
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--space-md);
+}
+
 /* Canvas / right-column split (layout plan, this session): 60% canvas by
  * default, resizable between 35-70% via `.resizer` (ui/resizer.js) — a
  * large state table needs somewhere to grow into, so it's not a fixed
@@ -178,6 +195,55 @@ body {
   background: var(--accent-strong);
 }
 
+/* Hovering `.sidebar-toggle` still counts as hovering `.resizer` (it's a
+ * descendant), which would otherwise turn the divider's accent bar blue
+ * right behind the button's own border — `ui/sidebarToggle.js` adds
+ * `toggle-hover` for exactly this case, so this needs to out-rank the
+ * `:hover` rule above (3 class-equivalents vs. its 2, so source order
+ * doesn't matter here, but it's kept after it for readability anyway). */
+.resizer.toggle-hover:hover::after {
+  background: var(--border-color);
+}
+
+/* Sidebar collapse handle (ui/sidebarToggle.js) — rides on the resizer so
+ * it's always in the same place whether the sidebar is open or hidden. */
+.sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.sidebar-toggle:hover {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+/* Sidebar fully hidden (ui/sidebarToggle.js): the canvas takes the freed
+ * width, `.sidebar-toggle` (a child of `.resizer`, still in flow) stays as
+ * the only visible affordance to bring it back. */
+.right-col.sidebar-hidden {
+  display: none;
+}
+
+.canvas-pane.canvas-full {
+  flex: 1 1 auto;
+}
+
 .right-col {
   flex: 1;
   min-width: 260px;
@@ -200,6 +266,26 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* Either stacked panel (panel-upper: Tabla de estados/Definición
+ * formal/Expresión regular/Gramática regular; panel-lower: TestingView's own
+ * Cadena/Lote/Resultados) can collapse its own content while keeping its tab
+ * strip pinned in place (`ui/tabs.js`'s `collapsible` option) — see the
+ * `upperTabs`/`testingView` wiring in main.js for why only `panel-upper`
+ * needs the explicit `expand-full` growth class: `panel-lower`'s default
+ * `flex: 1` already absorbs the freed space when `panel-upper` collapses. */
+.tabs-collapsed .tab-panels {
+  display: none;
+}
+
+.panel-upper.expand-full {
+  flex: 1 1 auto;
+}
+
+.panel-upper.tabs-collapsed,
+.panel-lower.tabs-collapsed {
+  flex: 0 0 auto;
 }
 
 /* Generic tab strip (ui/tabs.js) — reused by panel-upper (Tabla de
@@ -260,12 +346,10 @@ body {
  * split, not scoped to either side of it (wireframe parity: the artifact's
  * `.toolbar` sits directly under `.menubar`, spanning the whole app). */
 /* The "bar" chrome (background/padding/border) lives on `.toolbar-row`
- * (`main.js`'s `toolbarHost`) instead of `.toolbar` itself now that a row
- * can hold two swappable tool-button toolbars (FA's `.toolbar`, Mealy's
- * `.toolbar.mealy-toolbar`) plus the always-visible `.mode-select`
- * (`EditorModeSelect.js`) as three separate flex children sharing one bar,
- * instead of `.mode-select` being nested inside a single `.toolbar` the
- * way it used to be. */
+ * (`main.js`'s `toolbarHost`) instead of `.toolbar` itself: design D11
+ * (PR11) mounts one tool-button toolbar PER OPEN TAB (not per kind), all
+ * sharing this one row as flex children — `TabHost`/each `mountXTab`
+ * factory toggles `hidden` on whichever one belongs to the active tab. */
 .toolbar-row {
   display: flex;
   align-items: center;
@@ -842,6 +926,13 @@ body {
   gap: var(--space-xs);
 }
 
+/* Add/delete share the row equally — same width, text centered — instead
+ * of each sizing to its own label's length. */
+.table-buttons-row .btn-secondary {
+  flex: 1 1 0;
+  text-align: center;
+}
+
 .btn-secondary {
   padding: var(--space-2xs) var(--space-sm);
   border: 1px solid var(--border-color-strong);
@@ -864,6 +955,23 @@ body {
 .btn-danger {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+/* Icon-only button (e.g. "Copiar tabla"): sized to just its icon, small and
+ * square, instead of stretching to share the row with add/delete. Declared
+ * after `.table-buttons-row .btn-secondary` so its own `flex`/padding win
+ * despite tying that rule's specificity. */
+.table-buttons-row .btn-icon {
+  flex: 0 0 auto;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
 }
 
 .table-scroll {
@@ -1121,6 +1229,85 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-xs);
+}
+
+.choice-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-bg);
+  z-index: 2000;
+}
+
+.choice-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 18rem;
+  padding: var(--space-md);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.choice-modal-message {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.choice-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+.project-tab-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  overflow-x: auto;
+}
+
+.project-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-xs);
+  background: none;
+  color: var(--text);
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.project-tab.active {
+  border-bottom-color: var(--accent);
+}
+
+.project-tab-kind-badge {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.project-tab-dirty-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.project-tab-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.project-tab-rename-input {
+  font: inherit;
 }
 
 .notice-stack {
