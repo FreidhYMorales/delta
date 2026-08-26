@@ -10,6 +10,36 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-08-26 — Auto-actualización: pospuesta, no descartada
+
+**Qué se decidió**: no implementar auto-actualización todavía. No es
+particularmente difícil — Tauri tiene un plugin oficial
+(`tauri-plugin-updater`/`@tauri-apps/plugin-updater`) y este repo ya usa
+`tauri-apps/tauri-action` en `release.yml`, que genera el manifiesto
+`latest.json` y firma los artefactos de forma nativa sin cambiar de
+herramienta. El trabajo real sería: generar un par de claves de firma
+(`tauri signer generate`), guardar la privada como secret en GitHub
+Actions (`TAURI_SIGNING_PRIVATE_KEY`/`..._PASSWORD`), publicar la pública
+en `tauri.conf.json` (`plugins.updater.pubkey`), y agregar una acción de
+menú ("Buscar actualizaciones") que llame a `check()`/`downloadAndInstall()`
+del plugin.
+
+**Por qué se pospone**: el proyecto se comparte con un grupo chico de
+compañeros que ya se coordinan por mensaje directo cuando hay una versión
+nueva — la fricción real que resolvería el auto-update hoy es baja. Además
+hay un caso real sin resolver: en macOS, sin firma de Apple Developer (ver
+la entrada de rebranding más abajo y la sección de Instalación del
+README), una app que se auto-actualiza a sí misma choca con el mismo
+bloqueo de Gatekeeper que ya afecta la instalación manual — Windows/Linux
+no tienen ese problema. No es una razón para descartarlo, pero sí para no
+priorizarlo mientras el volumen de releases sea bajo.
+
+**Cuándo reconsiderarlo**: si las actualizaciones durante la etapa de
+pruebas se vuelven frecuentes (más fricción real para los testers), vale
+la pena retomarlo — la ruta de implementación ya está mapeada arriba.
+
+---
+
 ## 2026-08-24 — Rebranding a "Delta" y CI de instaladores multiplataforma
 
 **Dónde**: `src-tauri/tauri.conf.json` (`productName`, `identifier`, título de ventana), `src-tauri/Cargo.toml` (`description`/`authors`/`license`/`repository`), `frontend/index.html` (`<title>`), `LICENSE` (nuevo), `.github/workflows/release.yml` (nuevo).
