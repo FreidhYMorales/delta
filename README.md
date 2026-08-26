@@ -22,26 +22,76 @@ estados y una UI simple, no una réplica 1:1 de JFLAP.
 `idea/JFLAP7.1.jar` se mantiene como referencia de comportamiento (formato
 `.jff`, semántica de simulación), no como referencia de arquitectura.
 
-## Alcance actual (v1)
+## Alcance actual
 
-- Autómatas finitos deterministas y no deterministas (AFD/AFN), incluyendo
-  transiciones ε.
-- Cuatro vistas sincronizadas: Diagrama, Tabla de estados, Definición formal,
-  Verificación de cadenas (una cadena con traza paso a paso, o lote).
-- Undo/redo transaccional.
-- Persistencia nativa en JSON y compatibilidad de importación/exportación con
-  el formato `.jff` de JFLAP (con reporte de pérdida cuando corresponde).
+Cinco editores, cada uno con sus propias vistas sincronizadas (Diagrama,
+Tabla de estados, Definición formal, Verificación de cadenas):
+
+- **Autómatas finitos** (AFD/AFN, transiciones ε): conversión AFN→AFD
+  (construcción de subconjuntos), minimización de AFD, AFD/AFN ↔ gramática
+  regular (lineal por la derecha), AFD/AFN ↔ expresión regular (GNFA /
+  construcción de Thompson).
+- **Máquinas de Mealy** y **Máquinas de Moore**.
+- **Autómatas de pila (PDA)**.
+- **Máquinas de Turing** (multi-cinta).
+
+Además:
+
+- **Proyectos multi-pestaña**: varios autómatas abiertos a la vez, de
+  cualquier combinación de tipos, en un mismo proyecto guardable/abrible
+  como un solo archivo. Confirmación de cambios sin guardar antes de crear
+  o abrir otro proyecto.
+- Nombres de estado y símbolos de transición/alfabeto reconocen letras
+  griegas por su nombre en inglés ("delta" → "δ", "Sigma" → "Σ") — la
+  Definición formal también se muestra con esos glifos, no la palabra.
+- Undo/redo transaccional por autómata.
+- Persistencia nativa en JSON y compatibilidad de importación/exportación
+  con el formato `.jff` de JFLAP (con reporte de pérdida cuando corresponde).
 - Diálogos nativos de archivo vía Tauri (sin `window.prompt`).
-- Conversión AFN→AFD (construcción de subconjuntos), incluyendo ε-transiciones.
-- Minimización de AFD (partición de estados / algoritmo de Moore).
-- AFD/AFN → gramática regular (lineal por la derecha), y de vuelta.
-- AFD/AFN → expresión regular (eliminación de estados sobre GNFA), y de
-  vuelta (construcción de Thompson).
 
-Con esto, "Finite Automaton" — el primer editor del menú de JFLAP — está
-completo según el alcance del propio JFLAP. Pendiente (no implementado
-todavía): PDA, máquinas de Turing, Mealy/Moore, gramáticas
-libres de contexto, y el resto del menú.
+Pendiente (no implementado todavía): gramáticas libres de contexto más allá
+de las lineales por la derecha, y el resto del menú de JFLAP no listado
+arriba.
+
+## Instalación
+
+Instaladores prearmados para Windows, macOS y Linux están en la [página de
+Releases](https://github.com/FreidhYMorales/delta/releases) del repo —
+`.msi`/`.exe` (Windows), `.dmg` (macOS), `.deb`/`.rpm`/`.AppImage` (Linux).
+
+### macOS: "Delta está dañado" / "no se puede verificar el desarrollador"
+
+Delta no está firmado con un certificado de Apple Developer (de pago), así
+que el `.dmg` descargado no pasa la verificación de Gatekeeper en versiones
+recientes de macOS. Dos formas de resolverlo:
+
+**Opción rápida — quitar la cuarentena del .app descargado:**
+
+```bash
+xattr -cr /Applications/Delta.app
+```
+
+(Después de arrastrarlo a Aplicaciones. Esto quita el atributo de cuarentena
+que macOS le pone a todo lo descargado del navegador — es lo que dispara el
+bloqueo de Gatekeeper para apps sin firmar, no un problema del build en sí.)
+
+**Opción alternativa — compilar en tu propia máquina:**
+
+Un build hecho localmente nunca queda en cuarentena (esa marca solo la pone
+un navegador/gestor de descargas), así que evita el problema por completo.
+`scripts/build-macos.sh` instala todo lo necesario (Homebrew debe estar
+instalado de antemano) y compila la app:
+
+```bash
+./scripts/build-macos.sh
+```
+
+Esto instala Node vía Homebrew, Rust vía rustup si falta, el CLI de Tauri, las
+dependencias del frontend, y corre `cargo tauri build`. El resultado queda en
+`src-tauri/target/release/bundle/macos/Delta.app` (y su `.dmg` en la carpeta
+`bundle/dmg/`). La primera vez que lo abras, macOS puede todavía pedir
+confirmar con clic derecho → Abrir (una sola vez) — el build tampoco está
+firmado, pero al no estar en cuarentena ya no lo bloquea de entrada.
 
 ## Estructura
 
@@ -57,6 +107,8 @@ idea/                     material de referencia (JFLAP7.1.jar, prototipo
                           kflap-v0.1) — no forma parte del build
 docs/                     decisiones técnicas no obvias (el "por qué"
                           detrás de partes del código) — ver docs/decisions.md
+scripts/                 scripts de build/instalación (build-macos.sh) —
+                          ver "Instalación" más arriba
 ejercicios/               autómatas resueltos de enunciados de cursada,
                           generados por crates/automata-cli/examples/
                           exercises.rs — ver ejercicios/README.md
