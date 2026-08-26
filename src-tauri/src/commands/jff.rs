@@ -10,6 +10,7 @@ use automata_core::interop::jff::{reader, writer, InteropReport, LossItem, Subje
 
 use crate::ipc::{snapshot_of, DocSnapshot};
 use crate::state::Session;
+use crate::tabs::TabId;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -89,28 +90,36 @@ pub struct JffImportResult {
 /// failure (`JffError`) the session is left completely unchanged — the
 /// reader never hands back a partial `FaDoc` (spec "Reject non-FA .jff
 /// content" / "Malformed file"), so there is nothing to roll back here.
-pub fn import(session: &Session, path: String) -> Result<JffImportResult, String> {
+pub fn import(session: &Session, tab: TabId, path: String) -> Result<JffImportResult, String> {
     let xml = fs::read_to_string(&path).map_err(|e| format!("failed to read {path}: {e}"))?;
     let (model, report) = reader::import_str(&xml).map_err(|e| e.to_string())?;
-    let mut doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
-    let next_revision = doc.revision + 1;
-    *doc = Document { model, history: History::new(200), revision: next_revision };
-    Ok(JffImportResult { snapshot: snapshot_of(&doc), report: (&report).into() })
+    session.try_with_mut(tab, |doc| {
+        let next_revision = doc.revision + 1;
+        *doc = Document { model, history: History::new(200), revision: next_revision };
+        JffImportResult { snapshot: snapshot_of(doc), report: (&report).into() }
+    })
 }
 
-pub fn export(session: &Session, path: String) -> Result<InteropReportDto, String> {
-    let doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
-    let (xml, report) = writer::export_to_string(&doc.model);
+pub fn export(session: &Session, tab: TabId, path: String) -> Result<InteropReportDto, String> {
+    let (xml, report) = session.try_with(tab, |doc| writer::export_to_string(&doc.model))?;
     fs::write(&path, xml).map_err(|e| format!("failed to write {path}: {e}"))?;
     Ok((&report).into())
 }
 
 #[tauri::command]
-pub fn jff_import(session: tauri::State<'_, Session>, path: String) -> Result<JffImportResult, String> {
-    import(&session, path)
+pub fn jff_import(
+    session: tauri::State<'_, Session>,
+    tab_id: TabId,
+    path: String,
+) -> Result<JffImportResult, String> {
+    import(&session, tab_id, path)
 }
 
 #[tauri::command]
-pub fn jff_export(session: tauri::State<'_, Session>, path: String) -> Result<InteropReportDto, String> {
-    export(&session, path)
+pub fn jff_export(
+    session: tauri::State<'_, Session>,
+    tab_id: TabId,
+    path: String,
+) -> Result<InteropReportDto, String> {
+    export(&session, tab_id, path)
 }

@@ -12,6 +12,7 @@ use automata_core::ids::SymbolId;
 use automata_core::model::fa::FaDoc;
 
 use crate::state::Session;
+use crate::tabs::TabId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub struct BudgetDto {
@@ -78,43 +79,52 @@ fn trace_of(engine: &FaEngine, input: &[SymbolId], budget: Budget) -> TraceDto {
 /// Plain, directly-testable logic (short name, mirrors `commands::doc`'s
 /// convention: plain fn takes `&Session`, the `#[tauri::command]` wrapper
 /// below owns the literal design-mandated invoke name).
-pub fn trace(session: &Session, word: Vec<String>, budget: Option<BudgetDto>) -> TraceDto {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    let engine = FaEngine::compile(&doc.model);
-    let input = word_to_symbols(&doc.model, &word);
-    trace_of(&engine, &input, budget.map(Into::into).unwrap_or_default())
+pub fn trace(session: &Session, tab: TabId, word: Vec<String>, budget: Option<BudgetDto>) -> Result<TraceDto, String> {
+    session.try_with(tab, |doc| {
+        let engine = FaEngine::compile(&doc.model);
+        let input = word_to_symbols(&doc.model, &word);
+        trace_of(&engine, &input, budget.map(Into::into).unwrap_or_default())
+    })
 }
 
 /// Compiles the engine once and reuses it for every word (design D2: a
 /// compile is cheap — sub-ms at 1000 states — but there is no reason to pay
 /// it per word within a single batch call).
-pub fn batch(session: &Session, words: Vec<Vec<String>>, budget: Option<BudgetDto>) -> Vec<TraceDto> {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    let engine = FaEngine::compile(&doc.model);
-    let b: Budget = budget.map(Into::into).unwrap_or_default();
-    words
-        .into_iter()
-        .map(|word| {
-            let input = word_to_symbols(&doc.model, &word);
-            trace_of(&engine, &input, b)
-        })
-        .collect()
+pub fn batch(
+    session: &Session,
+    tab: TabId,
+    words: Vec<Vec<String>>,
+    budget: Option<BudgetDto>,
+) -> Result<Vec<TraceDto>, String> {
+    session.try_with(tab, |doc| {
+        let engine = FaEngine::compile(&doc.model);
+        let b: Budget = budget.map(Into::into).unwrap_or_default();
+        words
+            .into_iter()
+            .map(|word| {
+                let input = word_to_symbols(&doc.model, &word);
+                trace_of(&engine, &input, b)
+            })
+            .collect()
+    })
 }
 
 #[tauri::command]
 pub fn sim_trace(
     session: tauri::State<'_, Session>,
+    tab_id: TabId,
     word: Vec<String>,
     budget: Option<BudgetDto>,
-) -> TraceDto {
-    trace(&session, word, budget)
+) -> Result<TraceDto, String> {
+    trace(&session, tab_id, word, budget)
 }
 
 #[tauri::command]
 pub fn sim_batch(
     session: tauri::State<'_, Session>,
+    tab_id: TabId,
     words: Vec<Vec<String>>,
     budget: Option<BudgetDto>,
-) -> Vec<TraceDto> {
-    batch(&session, words, budget)
+) -> Result<Vec<TraceDto>, String> {
+    batch(&session, tab_id, words, budget)
 }

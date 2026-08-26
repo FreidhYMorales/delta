@@ -6,13 +6,13 @@
 
 use app_lib::commands::doc;
 use app_lib::ipc::{DocMirror, EditOpDto};
-use app_lib::state::Session;
+use app_lib::state::{Session, SEEDED_TAB_ID};
 
 #[test]
 fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     let session = Session::new();
 
-    let initial_snapshot = doc::snapshot(&session);
+    let initial_snapshot = doc::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror = DocMirror::from_snapshot(&initial_snapshot);
 
     // A representative sequence spanning every DocPatch kind: add, flags,
@@ -30,11 +30,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     ];
 
     for ops in batches {
-        let result = doc::apply(&session, ops).expect("apply must succeed");
+        let result = doc::apply(&session, SEEDED_TAB_ID, ops).expect("apply must succeed");
         mirror.apply(&result.patches);
     }
 
-    let fresh_snapshot = doc::snapshot(&session);
+    let fresh_snapshot = doc::snapshot(&session, SEEDED_TAB_ID).unwrap();
 
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
@@ -52,10 +52,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
 #[test]
 fn replayed_patches_equal_snapshot_after_a_state_removal() {
     let session = Session::new();
-    let mut mirror = DocMirror::from_snapshot(&doc::snapshot(&session));
+    let mut mirror = DocMirror::from_snapshot(&doc::snapshot(&session, SEEDED_TAB_ID).unwrap());
 
     let r1 = doc::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             EditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             EditOpDto::AddState { label: "q1".into(), x: 1.0, y: 1.0 },
@@ -64,14 +65,14 @@ fn replayed_patches_equal_snapshot_after_a_state_removal() {
     .unwrap();
     mirror.apply(&r1.patches);
 
-    let r2 = doc::apply(&session, vec![EditOpDto::SetEdge { from: 0, to: 1, epsilon: false, symbols: vec!["a".into()] }])
+    let r2 = doc::apply(&session, SEEDED_TAB_ID, vec![EditOpDto::SetEdge { from: 0, to: 1, epsilon: false, symbols: vec!["a".into()] }])
         .unwrap();
     mirror.apply(&r2.patches);
 
-    let r3 = doc::apply(&session, vec![EditOpDto::RemoveState { id: 0 }]).unwrap();
+    let r3 = doc::apply(&session, SEEDED_TAB_ID, vec![EditOpDto::RemoveState { id: 0 }]).unwrap();
     mirror.apply(&r3.patches);
 
-    let fresh = doc::snapshot(&session);
+    let fresh = doc::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
     let mut fresh_states = fresh.states.clone();

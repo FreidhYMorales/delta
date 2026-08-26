@@ -4,15 +4,16 @@
 
 use app_lib::commands::doc;
 use app_lib::ipc::{DocPatch, EditOpDto};
-use app_lib::state::Session;
+use app_lib::state::{Session, SEEDED_TAB_ID};
 
 #[test]
 fn apply_add_state_bumps_revision_and_emits_state_added_patch() {
     let session = Session::new();
-    assert_eq!(doc::snapshot(&session).revision, 0);
+    assert_eq!(doc::snapshot(&session, SEEDED_TAB_ID).unwrap().revision, 0);
 
     let result = doc::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![EditOpDto::AddState { label: "q0".into(), x: 1.0, y: 2.0 }],
     )
     .expect("apply must succeed");
@@ -35,6 +36,7 @@ fn apply_sets_initial_and_accepting_flags_and_edge() {
     let session = Session::new();
     let r1 = doc::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             EditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             EditOpDto::AddState { label: "q1".into(), x: 1.0, y: 1.0 },
@@ -55,6 +57,7 @@ fn apply_sets_initial_and_accepting_flags_and_edge() {
 
     let r2 = doc::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             EditOpDto::SetInitial { id: Some(q0) },
             EditOpDto::SetAccepting { id: q1, accepting: true },
@@ -86,8 +89,8 @@ fn apply_sets_initial_and_accepting_flags_and_edge() {
 #[test]
 fn doc_snapshot_reflects_applied_state() {
     let session = Session::new();
-    doc::apply(&session, vec![EditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }]).unwrap();
-    let snap = doc::snapshot(&session);
+    doc::apply(&session, SEEDED_TAB_ID, vec![EditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }]).unwrap();
+    let snap = doc::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.revision, 1);
     assert_eq!(snap.states.len(), 1);
     assert_eq!(snap.states[0].label, "q0");
@@ -96,26 +99,26 @@ fn doc_snapshot_reflects_applied_state() {
 #[test]
 fn undo_reverts_last_apply_and_redo_reapplies_it() {
     let session = Session::new();
-    doc::apply(&session, vec![EditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }]).unwrap();
+    doc::apply(&session, SEEDED_TAB_ID, vec![EditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }]).unwrap();
 
-    let undo_result = doc::undo(&session).expect("there is something to undo");
-    assert_eq!(doc::snapshot(&session).states.len(), 0);
+    let undo_result = doc::undo(&session, SEEDED_TAB_ID).unwrap().expect("there is something to undo");
+    assert_eq!(doc::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 0);
     assert!(undo_result
         .patches
         .iter()
         .any(|p| matches!(p, DocPatch::StateRemoved { .. })));
 
-    let redo_result = doc::redo(&session).expect("there is something to redo");
-    assert_eq!(doc::snapshot(&session).states.len(), 1);
+    let redo_result = doc::redo(&session, SEEDED_TAB_ID).unwrap().expect("there is something to redo");
+    assert_eq!(doc::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 1);
     assert!(redo_result
         .patches
         .iter()
         .any(|p| matches!(p, DocPatch::StateAdded { .. })));
 
-    assert!(doc::undo(&session).is_some());
-    assert!(doc::undo(&session).is_none(), "nothing left to undo");
-    assert!(doc::redo(&session).is_some());
-    assert!(doc::redo(&session).is_none(), "nothing left to redo");
+    assert!(doc::undo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert!(doc::undo(&session, SEEDED_TAB_ID).unwrap().is_none(), "nothing left to undo");
+    assert!(doc::redo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert!(doc::redo(&session, SEEDED_TAB_ID).unwrap().is_none(), "nothing left to redo");
 }
 
 #[test]
@@ -123,6 +126,7 @@ fn save_then_open_round_trips_through_a_real_file() {
     let session = Session::new();
     doc::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             EditOpDto::AddState { label: "q0".into(), x: 3.0, y: 4.0 },
             EditOpDto::SetInitial { id: Some(0) },
@@ -134,10 +138,10 @@ fn save_then_open_round_trips_through_a_real_file() {
     let path = dir.join(format!("jflap-doc-apply-test-{}.json", std::process::id()));
     let path_str = path.to_string_lossy().to_string();
 
-    doc::save(&session, path_str.clone()).expect("save must succeed");
+    doc::save(&session, SEEDED_TAB_ID, path_str.clone()).expect("save must succeed");
 
     let session2 = Session::new();
-    let snap = doc::open(&session2, path_str.clone()).expect("open must succeed");
+    let snap = doc::open(&session2, SEEDED_TAB_ID, path_str.clone()).expect("open must succeed");
     assert_eq!(snap.states.len(), 1);
     assert_eq!(snap.states[0].label, "q0");
     assert!(snap.states[0].initial);

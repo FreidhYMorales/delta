@@ -24,6 +24,7 @@ use automata_core::regex::Regex;
 
 use crate::ipc::{snapshot_of, DocSnapshot};
 use crate::state::Session;
+use crate::tabs::TabId;
 
 /// Wraps a freestanding `FaDoc` (never the session's own model) in a
 /// scratch `Document` purely to reuse `snapshot_of`'s serialization —
@@ -40,9 +41,8 @@ fn preview_snapshot(model: automata_core::model::fa::FaDoc) -> DocSnapshot {
 /// revision to thread through, just the derived string. `fa_to_regex`
 /// itself always succeeds — an empty document or one with no initial state
 /// correctly reduces to `∅`, not an error case this needs to special-case.
-pub fn to_regex(session: &Session) -> String {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    fa_to_regex(&doc.model).to_string()
+pub fn to_regex(session: &Session, tab: TabId) -> Result<String, String> {
+    session.try_with(tab, |doc| fa_to_regex(&doc.model).to_string())
 }
 
 /// Replaces the session's current document with the NFA that `pattern`
@@ -53,13 +53,14 @@ pub fn to_regex(session: &Session) -> String {
 /// with the parser's own (Spanish, user-facing — see `regex/parser.rs`'s
 /// doc comment) error message on invalid syntax, leaving the session
 /// untouched.
-pub fn from_regex(session: &Session, pattern: String) -> Result<DocSnapshot, String> {
+pub fn from_regex(session: &Session, tab: TabId, pattern: String) -> Result<DocSnapshot, String> {
     let regex: Regex = pattern.parse().map_err(|e: automata_core::regex::ParseError| e.to_string())?;
     let model = regex_to_nfa(&regex);
-    let mut doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
-    let next_revision = doc.revision + 1;
-    *doc = Document { model, history: History::new(200), revision: next_revision };
-    Ok(snapshot_of(&doc))
+    session.try_with_mut(tab, |doc| {
+        let next_revision = doc.revision + 1;
+        *doc = Document { model, history: History::new(200), revision: next_revision };
+        snapshot_of(doc)
+    })
 }
 
 /// Same read-only shape as `to_regex`, for the "Gramática regular
@@ -69,50 +70,57 @@ pub fn from_regex(session: &Session, pattern: String) -> Result<DocSnapshot, Str
 /// so what's shown here is always copy-paste-able straight back into the
 /// "Generar autómata" box below it (see `grammar/parser.rs`'s doc comment
 /// for exactly why the two renderings differ).
-pub fn to_grammar(session: &Session) -> String {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    automata_core::grammar::format(&fa_to_regular_grammar(&doc.model))
+pub fn to_grammar(session: &Session, tab: TabId) -> Result<String, String> {
+    session.try_with(tab, |doc| automata_core::grammar::format(&fa_to_regular_grammar(&doc.model)))
 }
 
 /// Same "whole-document replacement" shape as `from_regex`, for a typed
 /// right-linear grammar instead of a regex.
-pub fn from_grammar(session: &Session, text: String) -> Result<DocSnapshot, String> {
+pub fn from_grammar(session: &Session, tab: TabId, text: String) -> Result<DocSnapshot, String> {
     let grammar: RegularGrammar =
         text.parse().map_err(|e: automata_core::grammar::ParseError| e.to_string())?;
     let model = regular_grammar_to_nfa(&grammar);
-    let mut doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
-    let next_revision = doc.revision + 1;
-    *doc = Document { model, history: History::new(200), revision: next_revision };
-    Ok(snapshot_of(&doc))
+    session.try_with_mut(tab, |doc| {
+        let next_revision = doc.revision + 1;
+        *doc = Document { model, history: History::new(200), revision: next_revision };
+        snapshot_of(doc)
+    })
 }
 
 #[tauri::command]
-pub fn conv_to_regex(session: tauri::State<'_, Session>) -> String {
-    to_regex(&session)
+pub fn conv_to_regex(session: tauri::State<'_, Session>, tab_id: TabId) -> Result<String, String> {
+    to_regex(&session, tab_id)
 }
 
 #[tauri::command]
-pub fn conv_from_regex(session: tauri::State<'_, Session>, pattern: String) -> Result<DocSnapshot, String> {
-    from_regex(&session, pattern)
+pub fn conv_from_regex(
+    session: tauri::State<'_, Session>,
+    tab_id: TabId,
+    pattern: String,
+) -> Result<DocSnapshot, String> {
+    from_regex(&session, tab_id, pattern)
 }
 
 #[tauri::command]
-pub fn conv_to_grammar(session: tauri::State<'_, Session>) -> String {
-    to_grammar(&session)
+pub fn conv_to_grammar(session: tauri::State<'_, Session>, tab_id: TabId) -> Result<String, String> {
+    to_grammar(&session, tab_id)
 }
 
 #[tauri::command]
-pub fn conv_from_grammar(session: tauri::State<'_, Session>, text: String) -> Result<DocSnapshot, String> {
-    from_grammar(&session, text)
+pub fn conv_from_grammar(
+    session: tauri::State<'_, Session>,
+    tab_id: TabId,
+    text: String,
+) -> Result<DocSnapshot, String> {
+    from_grammar(&session, tab_id, text)
 }
 
 /// Preview of the equivalent DFA (subset construction) — never mutates the
 /// session. `nfa_to_dfa` always succeeds: a document with no initial state
 /// previews as the empty automaton (zero states), same "no special-casing
 /// needed" shape as `fa_to_regex`'s `∅`.
-pub fn nfa_to_dfa_preview(session: &Session) -> DocSnapshot {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    preview_snapshot(nfa_to_dfa(&doc.model))
+pub fn nfa_to_dfa_preview(session: &Session, tab: TabId) -> Result<DocSnapshot, String> {
+    session.try_with(tab, |doc| preview_snapshot(nfa_to_dfa(&doc.model)))
 }
 
 /// Preview of the minimized DFA (Moore partition refinement) — never
@@ -122,18 +130,16 @@ pub fn nfa_to_dfa_preview(session: &Session) -> DocSnapshot {
 /// current document isn't already deterministic; the frontend action is
 /// gated on `derived.classification === "Dfa"` so this is normally
 /// unreachable, not the primary way a user finds out.
-pub fn minimize_dfa_preview(session: &Session) -> Result<DocSnapshot, String> {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    let target = minimize_dfa(&doc.model).map_err(|e| e.to_string())?;
-    Ok(preview_snapshot(target))
+pub fn minimize_dfa_preview(session: &Session, tab: TabId) -> Result<DocSnapshot, String> {
+    session.try_with(tab, |doc| minimize_dfa(&doc.model).map_err(|e| e.to_string()).map(preview_snapshot))?
 }
 
 #[tauri::command]
-pub fn conv_nfa_to_dfa(session: tauri::State<'_, Session>) -> DocSnapshot {
-    nfa_to_dfa_preview(&session)
+pub fn conv_nfa_to_dfa(session: tauri::State<'_, Session>, tab_id: TabId) -> Result<DocSnapshot, String> {
+    nfa_to_dfa_preview(&session, tab_id)
 }
 
 #[tauri::command]
-pub fn conv_minimize_dfa(session: tauri::State<'_, Session>) -> Result<DocSnapshot, String> {
-    minimize_dfa_preview(&session)
+pub fn conv_minimize_dfa(session: tauri::State<'_, Session>, tab_id: TabId) -> Result<DocSnapshot, String> {
+    minimize_dfa_preview(&session, tab_id)
 }
