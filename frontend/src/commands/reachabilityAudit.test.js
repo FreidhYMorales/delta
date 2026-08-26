@@ -140,14 +140,14 @@ describe("project actions reachability (design D8/D9 — Archivo menu, no FA lea
     }
   });
 
-  it("one project.newTab.<kind> action exists per MACHINE_KINDS and is reachable", () => {
-    for (const kind of MACHINE_KINDS) {
-      const action = projectActions.find((a) => a.id === `project.newTab.${kind.id}`);
-      expect(action).toBeDefined();
-      expect(
-        Object.prototype.hasOwnProperty.call(PROJECT_MENU_GROUP_TITLES, action.group),
-      ).toBe(true);
-    }
+  it("exactly one project.newTab action exists (picks its own kind via a modal) and is reachable", () => {
+    const matches = projectActions.filter((a) => a.id === "project.newTab");
+    expect(matches).toHaveLength(1);
+    const [action] = matches;
+    expect(action.keybinding).not.toBeNull();
+    expect(
+      Object.prototype.hasOwnProperty.call(PROJECT_MENU_GROUP_TITLES, action.group),
+    ).toBe(true);
   });
 
   it("stays a registry fully separate from Fa's own `actions` (design D8: never folded together)", () => {

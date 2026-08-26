@@ -48,6 +48,18 @@ body {
   height: 100vh;
 }
 
+/* Holds every open tab's own `.app-body` (design D11, PR11) — needs to be
+ * a flex container itself, filling the remaining `.app-shell` height, or
+ * `.app-body`'s own `flex: 1` below has no flex-parent to size against and
+ * silently falls back to its content's natural height instead of the
+ * window's, forcing the whole app to scroll instead of fitting the
+ * viewport. */
+.tab-content-host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .app-body {
   display: flex;
   flex: 1;
@@ -1259,6 +1271,52 @@ body {
 }
 
 .choice-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+.new-tab-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-bg);
+  z-index: 2000;
+}
+
+.new-tab-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 18rem;
+  padding: var(--space-md);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.new-tab-modal-title {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.new-tab-modal-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  font-size: var(--font-size-sm);
+}
+
+.new-tab-modal-kind,
+.new-tab-modal-name {
+  padding: var(--space-xs) var(--space-xs);
+  font: inherit;
+}
+
+.new-tab-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-xs);

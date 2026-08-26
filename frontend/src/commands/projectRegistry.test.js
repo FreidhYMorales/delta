@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { projectActions } from "./projectRegistry.js";
 import { ProjectContext } from "./ProjectContext.js";
 import { ProjectStore } from "../project/ProjectStore.js";
-import { MACHINE_KINDS } from "../project/machineKinds.js";
 
 function fakeCtx(overrides = {}) {
   const projectStore = new ProjectStore({
@@ -17,6 +16,7 @@ function fakeCtx(overrides = {}) {
   const ctx = new ProjectContext(projectStore, {
     promptPath: vi.fn().mockResolvedValue("/x.jflapproj"),
     promptTabName: vi.fn().mockResolvedValue("New tab"),
+    promptNewTab: vi.fn().mockResolvedValue({ kind: "Mealy", name: "New tab" }),
     ...overrides,
   });
   return ctx;
@@ -43,14 +43,12 @@ describe("projectActions structural shape (design D8, mirrors registry.js's own 
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("includes project.new, project.open, project.save and one project.newTab per machine kind", () => {
+  it("includes project.new, project.open, project.save and exactly one project.newTab action", () => {
     const ids = projectActions.map((a) => a.id);
     expect(ids).toContain("project.new");
     expect(ids).toContain("project.open");
     expect(ids).toContain("project.save");
-    for (const kind of MACHINE_KINDS) {
-      expect(ids).toContain(`project.newTab.${kind.id}`);
-    }
+    expect(ids.filter((id) => id === "project.newTab")).toHaveLength(1);
   });
 });
 
@@ -117,12 +115,21 @@ describe("reachability without any FA-specific context field (design D8)", () =>
     expect(add).toHaveBeenCalledWith("/x.jflapproj");
   });
 
-  it("project.newTab.<kind>'s run prompts a name and creates a tab of that kind", async () => {
+  it("project.newTab's run prompts a kind+name and creates a tab of that kind", async () => {
     const ctx = fakeCtx();
-    const action = projectActions.find((a) => a.id === "project.newTab.Mealy");
+    const action = projectActions.find((a) => a.id === "project.newTab");
 
     await action.run(ctx);
 
     expect(ctx.projectStore.client.projectNewTab).toHaveBeenCalledWith("Mealy", "New tab");
+  });
+
+  it("project.newTab's run does nothing when the modal is cancelled", async () => {
+    const ctx = fakeCtx({ promptNewTab: vi.fn().mockResolvedValue(null) });
+    const action = projectActions.find((a) => a.id === "project.newTab");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectNewTab).not.toHaveBeenCalled();
   });
 });

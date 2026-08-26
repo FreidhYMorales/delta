@@ -10,8 +10,6 @@
 // opened file paths is inherently dynamic, so instead of `run` it carries a
 // `submenu: { items(ctx) }` returning a dynamic list of sub-actions.
 
-import { MACHINE_KINDS } from "../project/machineKinds.js";
-
 /** Registry `group` -> menu title (mirrors `MenuBar.js`'s own
  * `MENU_GROUP_TITLES`, same "single source of truth for the reachability
  * audit" rationale — `commands/reachabilityAudit.test.js`). Both `file` and
@@ -28,21 +26,6 @@ export const PROJECT_MENU_GROUP_TITLES = {
 
 const alwaysOn = () => true;
 
-/** @param {(kind: string) => string} idOf */
-function newTabActionFor(kind) {
-  return {
-    id: `project.newTab.${kind.id}`,
-    title: `Nuevo: ${kind.label}`,
-    group: "tabs",
-    keybinding: null,
-    when: alwaysOn,
-    run: async (ctx) => {
-      const name = await ctx.promptTabName(kind.id);
-      if (name) await ctx.projectStore.newTab(kind.id, name);
-    },
-  };
-}
-
 export const projectActions = [
   {
     id: "project.new",
@@ -53,7 +36,22 @@ export const projectActions = [
     run: (ctx) => ctx.projectStore.newProject(),
   },
 
-  ...MACHINE_KINDS.map(newTabActionFor),
+  // A single "Nueva pestaña" entry (design D8 rework) — `promptNewTab`
+  // opens a modal to pick BOTH the kind and the name at once, replacing the
+  // old one-menu-entry-per-`MACHINE_KINDS` design ("Nuevo: Autómata Finito",
+  // "Nuevo: Mealy", ...), which didn't scale well in the Archivo menu and
+  // had no keybinding of its own (5 competing entries can't share one).
+  {
+    id: "project.newTab",
+    title: "Nueva pestaña",
+    group: "tabs",
+    keybinding: "ctrl+n",
+    when: alwaysOn,
+    run: async (ctx) => {
+      const result = await ctx.promptNewTab();
+      if (result) await ctx.projectStore.newTab(result.kind, result.name);
+    },
+  },
 
   {
     id: "project.closeTab",

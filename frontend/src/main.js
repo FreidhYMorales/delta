@@ -38,8 +38,9 @@ import { projectActions, PROJECT_MENU_GROUP_TITLES } from "./commands/projectReg
 import { ProjectTabStrip } from "./views/projectTabs/ProjectTabStrip.js";
 import { TabHost } from "./project/TabHost.js";
 import { RecentProjects } from "./project/recentProjects.js";
-import { machineKindLabel } from "./project/machineKinds.js";
+import { MACHINE_KINDS, machineKindLabel } from "./project/machineKinds.js";
 import { promptModal } from "./ui/promptModal.js";
+import { newTabModal } from "./ui/newTabModal.js";
 import { pickOpenProjectPath, pickSaveProjectPath } from "./ui/nativeDialog.js";
 
 /** Registry `{actions, titles}` PER KIND — a plain DISPATCH lookup (which
@@ -65,6 +66,7 @@ async function main() {
   const toolbarHost = document.createElement("div");
   toolbarHost.className = "toolbar-row";
   const tabContentHost = document.createElement("div");
+  tabContentHost.className = "tab-content-host";
 
   shell.append(menuBarHost, tabStripHost, toolbarHost, tabContentHost);
   app.appendChild(shell);
@@ -75,6 +77,7 @@ async function main() {
     promptPath: async (kind) => (kind === "open-project" ? pickOpenProjectPath() : pickSaveProjectPath()),
     promptTabName: async (kind) =>
       promptModal(`Nombre para la nueva pestaña (${machineKindLabel(kind) ?? kind})`),
+    promptNewTab: () => newTabModal(MACHINE_KINDS),
     recentProjects,
   });
 

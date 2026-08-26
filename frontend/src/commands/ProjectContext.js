@@ -12,6 +12,7 @@ export class ProjectContext {
    * @param {{
    *   promptPath?: (kind: 'open-project'|'save-project') => Promise<string|null>,
    *   promptTabName?: (kind: string) => Promise<string|null>,
+   *   promptNewTab?: () => Promise<{kind: string, name: string}|null>,
    *   recentProjects?: import('../project/recentProjects.js').RecentProjects|null,
    * }} [hooks]
    */
@@ -19,6 +20,12 @@ export class ProjectContext {
     this.projectStore = projectStore;
     this.promptPath = hooks.promptPath ?? (async () => null);
     this.promptTabName = hooks.promptTabName ?? (async () => null);
+    // Backs the single "Nueva pestaña" action (`projectRegistry.js`,
+    // design D8 rework) — picks BOTH the kind and the name in one modal,
+    // replacing the old per-kind "Nuevo: <kind>" entries that only ever
+    // needed `promptTabName` (still used by `project.renameTab`, which
+    // never touches kind).
+    this.promptNewTab = hooks.promptNewTab ?? (async () => null);
     // No safe default recents list exists (unlike `promptPath`'s null
     // no-op) — `null` means "no recents wired", which `projectRegistry.js`'s
     // "Recientes" submenu already treats as an empty list rather than
