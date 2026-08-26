@@ -13,6 +13,7 @@ export class ProjectContext {
    *   promptPath?: (kind: 'open-project'|'save-project') => Promise<string|null>,
    *   promptTabName?: (kind: string) => Promise<string|null>,
    *   promptNewTab?: () => Promise<{kind: string, name: string}|null>,
+   *   confirmDiscard?: () => Promise<"save"|"discard"|"cancel">,
    *   recentProjects?: import('../project/recentProjects.js').RecentProjects|null,
    * }} [hooks]
    */
@@ -20,6 +21,12 @@ export class ProjectContext {
     this.projectStore = projectStore;
     this.promptPath = hooks.promptPath ?? (async () => null);
     this.promptTabName = hooks.promptTabName ?? (async () => null);
+    // Backs `project.new`/`project.open`'s unsaved-changes guard
+    // (`projectRegistry.js`'s `confirmDiscardIfDirty`) — only ever called
+    // when `projectStore.isDirty`, so the safest possible default (no hook
+    // wired) is "cancel": never silently discard or save on the user's
+    // behalf.
+    this.confirmDiscard = hooks.confirmDiscard ?? (async () => "cancel");
     // Backs the single "Nueva pestaña" action (`projectRegistry.js`,
     // design D8 rework) — picks BOTH the kind and the name in one modal,
     // replacing the old per-kind "Nuevo: <kind>" entries that only ever

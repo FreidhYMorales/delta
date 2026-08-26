@@ -27,6 +27,11 @@ describe("ProjectContext (design D8)", () => {
     expect(await ctx.promptTabName("Fa")).toBeNull();
   });
 
+  it("defaults confirmDiscard to resolving 'cancel' — never silently discard/save without a real hook", async () => {
+    const ctx = new ProjectContext(fakeProjectStore());
+    expect(await ctx.confirmDiscard()).toBe("cancel");
+  });
+
   it("defaults recentProjects to null (no recents list wired) rather than throwing", () => {
     const ctx = new ProjectContext(fakeProjectStore());
     expect(ctx.recentProjects).toBeNull();

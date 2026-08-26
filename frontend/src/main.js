@@ -41,6 +41,7 @@ import { RecentProjects } from "./project/recentProjects.js";
 import { MACHINE_KINDS, machineKindLabel } from "./project/machineKinds.js";
 import { promptModal } from "./ui/promptModal.js";
 import { newTabModal } from "./ui/newTabModal.js";
+import { choiceModal } from "./ui/choiceModal.js";
 import { pickOpenProjectPath, pickSaveProjectPath } from "./ui/nativeDialog.js";
 
 /** Registry `{actions, titles}` PER KIND — a plain DISPATCH lookup (which
@@ -78,6 +79,8 @@ async function main() {
     promptTabName: async (kind) =>
       promptModal(`Nombre para la nueva pestaña (${machineKindLabel(kind) ?? kind})`),
     promptNewTab: () => newTabModal(MACHINE_KINDS),
+    confirmDiscard: () =>
+      choiceModal("El proyecto actual tiene cambios sin guardar. ¿Querés guardarlos antes de continuar?"),
     recentProjects,
   });
 

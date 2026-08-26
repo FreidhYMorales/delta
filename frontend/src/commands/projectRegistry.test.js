@@ -10,6 +10,7 @@ function fakeCtx(overrides = {}) {
     projectNewTab: vi.fn().mockResolvedValue({ tabs: [{ id: 0, kind: "Fa", name: "A", revision: 0 }], revision: 0 }),
     projectCloseTab: vi.fn().mockResolvedValue({ tabs: [], revision: 0 }),
     projectRenameTab: vi.fn().mockResolvedValue({ tabs: [{ id: 0, kind: "Fa", name: "R", revision: 0 }], revision: 0 }),
+    projectReorderTab: vi.fn(),
     projectOpen: vi.fn().mockResolvedValue({ tabs: [], revision: 0 }),
     projectSave: vi.fn().mockResolvedValue({ tabs: [], revision: 0 }),
   });
@@ -43,12 +44,122 @@ describe("projectActions structural shape (design D8, mirrors registry.js's own 
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("includes project.new, project.open, project.save and exactly one project.newTab action", () => {
+  it("includes project.new, project.open, project.save, project.saveAs and exactly one project.newTab action", () => {
     const ids = projectActions.map((a) => a.id);
     expect(ids).toContain("project.new");
     expect(ids).toContain("project.open");
     expect(ids).toContain("project.save");
+    expect(ids).toContain("project.saveAs");
     expect(ids.filter((id) => id === "project.newTab")).toHaveLength(1);
+  });
+});
+
+describe("project.new / project.open — unsaved-changes guard (confirmDiscardIfDirty)", () => {
+  /** Makes `ctx`'s store report dirty without going through a real
+   * edit/apply round-trip — `ProjectStore.tabs` is a plain public array, so
+   * directly giving it one tab whose own `revision` differs from the
+   * (default 0) `savedRevision` baseline is the most direct way to set this
+   * up for a unit test. */
+  function makeDirty(ctx) {
+    ctx.projectStore.tabs = [{ id: 0, kind: "Fa", name: "A", revision: 1 }];
+  }
+
+  it("project.new proceeds directly, without asking, when the project is clean", async () => {
+    const confirmDiscard = vi.fn();
+    const ctx = fakeCtx({ confirmDiscard });
+    const action = projectActions.find((a) => a.id === "project.new");
+
+    await action.run(ctx);
+
+    expect(confirmDiscard).not.toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectNew).toHaveBeenCalled();
+  });
+
+  it("project.new does not proceed when the project is dirty and the user cancels", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("cancel");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    const action = projectActions.find((a) => a.id === "project.new");
+
+    await action.run(ctx);
+
+    expect(confirmDiscard).toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectNew).not.toHaveBeenCalled();
+  });
+
+  it("project.new proceeds without saving when the project is dirty and the user picks discard", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("discard");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    const action = projectActions.find((a) => a.id === "project.new");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectSave).not.toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectNew).toHaveBeenCalled();
+  });
+
+  it("project.new saves to the already-known filePath (no path prompt) then proceeds when the user picks save", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("save");
+    const promptPath = vi.fn();
+    const ctx = fakeCtx({ confirmDiscard, promptPath });
+    makeDirty(ctx);
+    ctx.projectStore.filePath = "/already-open.jflapproj";
+    const action = projectActions.find((a) => a.id === "project.new");
+
+    await action.run(ctx);
+
+    expect(promptPath).not.toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectSave).toHaveBeenCalledWith("/already-open.jflapproj");
+    expect(ctx.projectStore.client.projectNew).toHaveBeenCalled();
+  });
+
+  it("project.new prompts for a path, saves, then proceeds when picking save on a never-yet-saved project", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("save");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    const action = projectActions.find((a) => a.id === "project.new");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectSave).toHaveBeenCalledWith("/x.jflapproj");
+    expect(ctx.projectStore.client.projectNew).toHaveBeenCalled();
+  });
+
+  it("project.new does not proceed when picking save but then cancelling the path prompt", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("save");
+    const promptPath = vi.fn().mockResolvedValue(null);
+    const ctx = fakeCtx({ confirmDiscard, promptPath });
+    makeDirty(ctx);
+    const action = projectActions.find((a) => a.id === "project.new");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectSave).not.toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectNew).not.toHaveBeenCalled();
+  });
+
+  it("project.open applies the same guard, then still prompts for which project to open", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("discard");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    const action = projectActions.find((a) => a.id === "project.open");
+
+    await action.run(ctx);
+
+    expect(confirmDiscard).toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectOpen).toHaveBeenCalledWith("/x.jflapproj");
+  });
+
+  it("project.open never prompts for which project to open when the guard cancels", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("cancel");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    const action = projectActions.find((a) => a.id === "project.open");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectOpen).not.toHaveBeenCalled();
   });
 });
 
@@ -113,6 +224,49 @@ describe("reachability without any FA-specific context field (design D8)", () =>
 
     expect(ctx.projectStore.client.projectOpen).toHaveBeenCalledWith("/x.jflapproj");
     expect(add).toHaveBeenCalledWith("/x.jflapproj");
+  });
+
+  it("project.save's run prompts for a path on a never-yet-saved project (filePath is null)", async () => {
+    const add = vi.fn();
+    const ctx = fakeCtx({ recentProjects: { list: () => [], add } });
+    expect(ctx.projectStore.filePath).toBeNull();
+    const action = projectActions.find((a) => a.id === "project.save");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectSave).toHaveBeenCalledWith("/x.jflapproj");
+    expect(add).toHaveBeenCalledWith("/x.jflapproj");
+  });
+
+  it("project.save's run silently overwrites the project's known filePath, without prompting again", async () => {
+    const ctx = fakeCtx();
+    ctx.projectStore.filePath = "/already-open.jflapproj";
+    const action = projectActions.find((a) => a.id === "project.save");
+
+    await action.run(ctx);
+
+    expect(ctx.promptPath).not.toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectSave).toHaveBeenCalledWith("/already-open.jflapproj");
+  });
+
+  it("project.saveAs's run always prompts for a path, even when filePath is already known", async () => {
+    const ctx = fakeCtx();
+    ctx.projectStore.filePath = "/already-open.jflapproj";
+    const action = projectActions.find((a) => a.id === "project.saveAs");
+
+    await action.run(ctx);
+
+    expect(ctx.promptPath).toHaveBeenCalledWith("save-project");
+    expect(ctx.projectStore.client.projectSave).toHaveBeenCalledWith("/x.jflapproj");
+  });
+
+  it("project.saveAs's run does nothing when the path prompt is cancelled", async () => {
+    const ctx = fakeCtx({ promptPath: vi.fn().mockResolvedValue(null) });
+    const action = projectActions.find((a) => a.id === "project.saveAs");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectSave).not.toHaveBeenCalled();
   });
 
   it("project.newTab's run prompts a kind+name and creates a tab of that kind", async () => {

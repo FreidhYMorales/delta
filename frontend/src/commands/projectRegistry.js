@@ -26,6 +26,40 @@ export const PROJECT_MENU_GROUP_TITLES = {
 
 const alwaysOn = () => true;
 
+/** Saves to the project's already-known `filePath`, or prompts for one if
+ * it has never been saved — the exact same "Guardar" logic `project.save`'s
+ * own `run` uses below, factored out so `confirmDiscardIfDirty`'s "save"
+ * branch doesn't duplicate it.
+ * @returns {Promise<boolean>} true once the save actually completed; false
+ * if the user cancelled the path prompt (never-yet-saved project). */
+async function saveToKnownOrPromptedPath(ctx) {
+  let path = ctx.projectStore.filePath;
+  if (!path) {
+    path = await ctx.promptPath("save-project");
+    if (!path) return false;
+  }
+  await ctx.projectStore.save(path);
+  ctx.recentProjects?.add(path);
+  return true;
+}
+
+/** Guards `project.new`/`project.open` — both REPLACE the whole project,
+ * discarding any unsaved work in it. When the current project has no
+ * unsaved changes, this is a silent no-op (no dialog). Otherwise it asks
+ * via `ctx.confirmDiscard()` (wired to `ui/choiceModal.js` — Save/Discard/
+ * Cancel) and only lets the replacing action proceed once that's resolved
+ * one way or the other; if the user picks "save" but then cancels the
+ * save-path prompt (a never-yet-saved project), this still refuses to
+ * proceed rather than silently discarding after all.
+ * @returns {Promise<boolean>} true when the caller should proceed. */
+async function confirmDiscardIfDirty(ctx) {
+  if (!ctx.projectStore.isDirty) return true;
+  const choice = await ctx.confirmDiscard();
+  if (choice === "cancel") return false;
+  if (choice === "discard") return true;
+  return saveToKnownOrPromptedPath(ctx);
+}
+
 export const projectActions = [
   {
     id: "project.new",
@@ -33,7 +67,10 @@ export const projectActions = [
     group: "file",
     keybinding: null,
     when: alwaysOn,
-    run: (ctx) => ctx.projectStore.newProject(),
+    run: async (ctx) => {
+      if (!(await confirmDiscardIfDirty(ctx))) return;
+      await ctx.projectStore.newProject();
+    },
   },
 
   // A single "Nueva pestaña" entry (design D8 rework) — `promptNewTab`
@@ -85,17 +122,31 @@ export const projectActions = [
     keybinding: "ctrl+o",
     when: alwaysOn,
     run: async (ctx) => {
+      if (!(await confirmDiscardIfDirty(ctx))) return;
       const path = await ctx.promptPath("open-project");
       if (!path) return;
       await ctx.projectStore.open(path);
       ctx.recentProjects?.add(path);
     },
   },
+  // "Guardar" reuses the path the project was last opened from/saved to
+  // (`ProjectStore.filePath`) and silently overwrites it — only a
+  // never-yet-saved project (`filePath === null`) prompts, same as any
+  // desktop app's first save. "Guardar como…" always prompts, regardless
+  // of `filePath`, to save a separate copy under a different name/path.
   {
     id: "project.save",
-    title: "Guardar proyecto",
+    title: "Guardar",
     group: "file",
     keybinding: "ctrl+s",
+    when: alwaysOn,
+    run: (ctx) => saveToKnownOrPromptedPath(ctx),
+  },
+  {
+    id: "project.saveAs",
+    title: "Guardar como…",
+    group: "file",
+    keybinding: "ctrl+shift+s",
     when: alwaysOn,
     run: async (ctx) => {
       const path = await ctx.promptPath("save-project");
