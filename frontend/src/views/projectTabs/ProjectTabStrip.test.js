@@ -126,6 +126,34 @@ describe("ProjectTabStrip add/close (delegates to ProjectStore, owns no IPC of i
     expect(client.projectCloseTab).toHaveBeenCalledWith(0);
   });
 
+  it("does not close the tab when confirmDiscardTab resolves false (unsaved-changes guard declined)", async () => {
+    const confirmDiscardTab = vi.fn().mockResolvedValue(false);
+    const { container, client } = await setup({ confirmDiscardTab });
+    const closeButton = container.querySelector('[data-tab-id="0"] .project-tab-close');
+
+    closeButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(confirmDiscardTab).toHaveBeenCalledWith(0);
+    expect(client.projectCloseTab).not.toHaveBeenCalled();
+  });
+
+  it("closes the tab when confirmDiscardTab resolves true", async () => {
+    const confirmDiscardTab = vi.fn().mockResolvedValue(true);
+    const { container, client } = await setup(
+      { confirmDiscardTab },
+      { projectCloseTab: vi.fn().mockResolvedValue({ tabs: [], revision: 0 }) },
+    );
+    const closeButton = container.querySelector('[data-tab-id="0"] .project-tab-close');
+
+    closeButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.projectCloseTab).toHaveBeenCalledWith(0);
+  });
+
   it("closing a tab does not also activate it (close click never bubbles into the activate click)", async () => {
     const onActivate = vi.fn();
     const { container } = await setup(

@@ -52,8 +52,27 @@ async function saveToKnownOrPromptedPath(ctx) {
  * save-path prompt (a never-yet-saved project), this still refuses to
  * proceed rather than silently discarding after all.
  * @returns {Promise<boolean>} true when the caller should proceed. */
-async function confirmDiscardIfDirty(ctx) {
+export async function confirmDiscardIfDirty(ctx) {
   if (!ctx.projectStore.isDirty) return true;
+  const choice = await ctx.confirmDiscard();
+  if (choice === "cancel") return false;
+  if (choice === "discard") return true;
+  return saveToKnownOrPromptedPath(ctx);
+}
+
+/** Same guard as `confirmDiscardIfDirty`, but scoped to ONE tab
+ * (`ProjectStore.isTabDirty`) instead of the whole project's aggregate —
+ * closing a single tab only discards that tab's own unsaved work, not
+ * every open tab's, so it shouldn't ask (or block) over changes elsewhere
+ * in the project. "Save" still saves the WHOLE project (there's no
+ * per-tab save on disk, a project is always one file) via the same
+ * known-path-or-prompt logic `project.save` uses.
+ * @param {import('./ProjectContext.js').ProjectContext} ctx
+ * @param {number} tabId
+ * @returns {Promise<boolean>} true when the caller should proceed and
+ * actually close the tab. */
+export async function confirmDiscardTabIfDirty(ctx, tabId) {
+  if (!ctx.projectStore.isTabDirty(tabId)) return true;
   const choice = await ctx.confirmDiscard();
   if (choice === "cancel") return false;
   if (choice === "discard") return true;
@@ -96,9 +115,11 @@ export const projectActions = [
     group: "tabs",
     keybinding: "ctrl+w",
     when: (ctx) => ctx.projectStore.tabs.length > 0,
-    run: (ctx) => {
+    run: async (ctx) => {
       const tabId = ctx.projectStore.activeTabId;
-      if (tabId != null) return ctx.projectStore.closeTab(tabId);
+      if (tabId == null) return;
+      if (!(await confirmDiscardTabIfDirty(ctx, tabId))) return;
+      return ctx.projectStore.closeTab(tabId);
     },
   },
   {

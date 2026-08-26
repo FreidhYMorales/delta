@@ -161,6 +161,60 @@ describe("project.new / project.open — unsaved-changes guard (confirmDiscardIf
 
     expect(ctx.projectStore.client.projectOpen).not.toHaveBeenCalled();
   });
+
+  it("project.closeTab closes directly, without asking, when that tab is clean", async () => {
+    const confirmDiscard = vi.fn();
+    const ctx = fakeCtx({ confirmDiscard });
+    ctx.projectStore.tabs = [{ id: 0, kind: "Fa", name: "A", revision: 0 }];
+    ctx.projectStore._tabSavedRevision.set(0, 0); // baseline matches live revision — clean
+    ctx.projectStore.activeTabId = 0;
+    const action = projectActions.find((a) => a.id === "project.closeTab");
+
+    await action.run(ctx);
+
+    expect(confirmDiscard).not.toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectCloseTab).toHaveBeenCalledWith(0);
+  });
+
+  it("project.closeTab asks and does not close when the active tab is dirty and the user cancels", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("cancel");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    ctx.projectStore.activeTabId = 0;
+    const action = projectActions.find((a) => a.id === "project.closeTab");
+
+    await action.run(ctx);
+
+    expect(confirmDiscard).toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectCloseTab).not.toHaveBeenCalled();
+  });
+
+  it("project.closeTab closes without saving when the user picks discard", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("discard");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    ctx.projectStore.activeTabId = 0;
+    const action = projectActions.find((a) => a.id === "project.closeTab");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectSave).not.toHaveBeenCalled();
+    expect(ctx.projectStore.client.projectCloseTab).toHaveBeenCalledWith(0);
+  });
+
+  it("project.closeTab saves the whole project first, then closes the tab, when the user picks save", async () => {
+    const confirmDiscard = vi.fn().mockResolvedValue("save");
+    const ctx = fakeCtx({ confirmDiscard });
+    makeDirty(ctx);
+    ctx.projectStore.activeTabId = 0;
+    ctx.projectStore.filePath = "/already-open.jflapproj";
+    const action = projectActions.find((a) => a.id === "project.closeTab");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectSave).toHaveBeenCalledWith("/already-open.jflapproj");
+    expect(ctx.projectStore.client.projectCloseTab).toHaveBeenCalledWith(0);
+  });
 });
 
 describe("'Recientes' — the one dynamic exception (design D8)", () => {

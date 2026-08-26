@@ -9,6 +9,12 @@
 // show a dirty-dot and a kind-badge, and tell a caller which tab became
 // active/inactive — never touching the DOM of any document pane itself.
 //
+// Closing a tab (follow-up fix) asks `confirmDiscardTab(tabId)` first —
+// same unsaved-changes guard `project.new`/`project.open` already use
+// project-wide, scoped here to just the ONE tab being closed
+// (`ProjectStore.isTabDirty`) so closing a clean tab is still a silent,
+// instant no-dialog action even with unsaved work open elsewhere.
+//
 // Rename validation mirrors the backend's own `project_rename_tab`
 // rejection (empty name / a name already used by a sibling tab): on either
 // case this "silently reverts" — no alert, no notice, just redraw with the
@@ -60,6 +66,7 @@ export class ProjectTabStrip {
    * @param {{
    *   onActivate?: (tabId: number) => void,
    *   onDeactivate?: (tabId: number) => void,
+   *   confirmDiscardTab?: (tabId: number) => Promise<boolean>,
    * }} [hooks]
    */
   constructor(container, projectStore, hooks = {}) {
@@ -67,6 +74,11 @@ export class ProjectTabStrip {
     this.projectStore = projectStore;
     this.onActivate = hooks.onActivate ?? (() => {});
     this.onDeactivate = hooks.onDeactivate ?? (() => {});
+    // Backs the close button's unsaved-changes guard — defaults to "always
+    // proceed" (never blocks), same safe-no-op-by-default convention as
+    // `onActivate`/`onDeactivate` above; a real dialog is wired by the
+    // caller (main.js), same as `ProjectContext.confirmDiscard` itself.
+    this.confirmDiscardTab = hooks.confirmDiscardTab ?? (async () => true);
     /** @type {number|null} tracked only to detect an activation change on
      * re-render — this widget never decides activation itself. */
     this._lastActiveTabId = projectStore.activeTabId;
@@ -313,9 +325,9 @@ export class ProjectTabStrip {
     closeButton.type = "button";
     closeButton.className = "project-tab-close";
     closeButton.textContent = "×";
-    closeButton.addEventListener("click", (event) => {
+    closeButton.addEventListener("click", async (event) => {
       event.stopPropagation();
-      this.projectStore.closeTab(tab.id);
+      if (await this.confirmDiscardTab(tab.id)) this.projectStore.closeTab(tab.id);
     });
     button.appendChild(closeButton);
 

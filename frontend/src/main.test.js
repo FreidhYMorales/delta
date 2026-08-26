@@ -10,6 +10,21 @@ function emptyFaSnapshot() {
   return { revision: 0, states: [], edges: [], derived: { classification: "Dfa", alphabet: [], unreachable: [] } };
 }
 
+// Quit-guard test only: `getCurrentWindow().onCloseRequested` throws outside
+// a real Tauri webview (see main.js's own try/catch around it), so proving
+// the guard is actually WIRED needs both this and `ui/choiceModal.js`
+// mocked here — `vi.hoisted` because `vi.mock` factories are hoisted above
+// normal `const`/`let` declarations, so a plain closed-over variable
+// wouldn't exist yet when the factory itself runs.
+const { onCloseRequested, choiceModal } = vi.hoisted(() => ({
+  onCloseRequested: vi.fn(),
+  choiceModal: vi.fn(),
+}));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ onCloseRequested }),
+}));
+vi.mock("./ui/choiceModal.js", () => ({ choiceModal }));
+
 vi.mock("./tauri/client.js", () => ({
   docSnapshot: vi.fn().mockResolvedValue(emptyFaSnapshot()),
   docApply: vi.fn(),
@@ -42,6 +57,8 @@ vi.mock("./tauri/client.js", () => ({
 beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
   vi.resetModules();
+  onCloseRequested.mockClear();
+  choiceModal.mockClear();
 });
 
 describe("main.js app boot (PR11: project_new -> project_new_tab('Fa', ...) -> mount -> activate)", () => {
@@ -65,5 +82,26 @@ describe("main.js app boot (PR11: project_new -> project_new_tab('Fa', ...) -> m
 
     const menuTriggers = [...app.querySelectorAll(".menu-bar-item")].map((b) => b.textContent);
     expect(menuTriggers).toEqual(["Archivo", "Editar", "Ver", "Convertir", "Test"]);
+  });
+});
+
+describe("main.js quit guard (window close discards unsaved work the same way Nuevo/Abrir would)", () => {
+  it("registers a close-requested handler that lets a clean project close without prompting", async () => {
+    await import("./main.js");
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onCloseRequested).toHaveBeenCalledTimes(1);
+    const handler = onCloseRequested.mock.calls[0][0];
+
+    const event = { preventDefault: vi.fn() };
+    await handler(event);
+
+    // The freshly booted project has exactly one clean tab — nothing to
+    // confirm, so the close proceeds without ever showing a dialog.
+    expect(choiceModal).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
   });
 });

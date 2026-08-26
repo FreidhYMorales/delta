@@ -34,7 +34,12 @@ import { PDA_MENU_GROUP_TITLES, pdaActions } from "./commands/pdaRegistry.js";
 import { TM_MENU_GROUP_TITLES, tmActions } from "./commands/tmRegistry.js";
 import { ProjectStore } from "./project/ProjectStore.js";
 import { ProjectContext } from "./commands/ProjectContext.js";
-import { projectActions, PROJECT_MENU_GROUP_TITLES } from "./commands/projectRegistry.js";
+import {
+  projectActions,
+  PROJECT_MENU_GROUP_TITLES,
+  confirmDiscardIfDirty,
+  confirmDiscardTabIfDirty,
+} from "./commands/projectRegistry.js";
 import { ProjectTabStrip } from "./views/projectTabs/ProjectTabStrip.js";
 import { TabHost } from "./project/TabHost.js";
 import { RecentProjects } from "./project/recentProjects.js";
@@ -43,6 +48,7 @@ import { promptModal } from "./ui/promptModal.js";
 import { newTabModal } from "./ui/newTabModal.js";
 import { choiceModal } from "./ui/choiceModal.js";
 import { pickOpenProjectPath, pickSaveProjectPath } from "./ui/nativeDialog.js";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /** Registry `{actions, titles}` PER KIND — a plain DISPATCH lookup (which
  * registry to read from for a given active tab's `kind`), never a shared
@@ -121,6 +127,7 @@ async function main() {
     onDeactivate: (tabId) => {
       tabHost.deactivate(tabId);
     },
+    confirmDiscardTab: (tabId) => confirmDiscardTabIfDirty(projectCtx, tabId),
   });
 
   // App boot (PR11): a fresh, empty project with exactly one empty Fa tab,
@@ -136,6 +143,20 @@ async function main() {
     rebuildMenuBar(tabHost.getMount(initialTabId));
   } else {
     rebuildMenuBar(undefined);
+  }
+
+  // Quitting the app (window close, not a menu action) discards the whole
+  // project the same way "Nuevo proyecto"/"Abrir proyecto" would, so it
+  // gets the exact same guard. `getCurrentWindow()` throws outside a real
+  // Tauri webview (e.g. under Vitest's jsdom, where `main.test.js` boots
+  // this whole module with nothing else mocked) — skipped harmlessly there,
+  // there's no real window to guard in that context anyway.
+  try {
+    getCurrentWindow().onCloseRequested(async (event) => {
+      if (!(await confirmDiscardIfDirty(projectCtx))) event.preventDefault();
+    });
+  } catch {
+    // Not running in a Tauri webview.
   }
 
   // Keep references reachable for the app's lifetime (avoids "unused"
