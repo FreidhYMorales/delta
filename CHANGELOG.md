@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Versionado [semver](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Agregado
+
+- CI (`ci.yml`) corriendo `cargo test --workspace` y `npm test` en cada
+  push/PR a `master` — antes solo `release.yml`, disparado por tag.
+- La confirmación de cambios sin guardar ahora también cubre cerrar una
+  pestaña individual (botón `×`, `Ctrl+W`) y salir de la app (cerrar la
+  ventana) — antes solo protegía "Nuevo proyecto"/"Abrir proyecto".
+
 ## [0.2.0] — 2026-08-26
 
 ### Agregado
