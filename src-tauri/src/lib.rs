@@ -4,9 +4,11 @@ pub mod mealy_ipc;
 pub mod moore_ipc;
 pub mod pda_ipc;
 pub mod state;
+pub mod tabs;
 pub mod tm_ipc;
 
-use commands::{convert, doc, jff, mealy, moore, pda, sim, tm};
+use commands::{convert, doc, jff, mealy, moore, pda, project, sim, tm};
+use commands::project::ProjectState;
 use state::{MealySession, MooreSession, PdaSession, Session, TmSession};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,6 +20,7 @@ pub fn run() {
     .manage(MooreSession::new())
     .manage(PdaSession::new())
     .manage(TmSession::new())
+    .manage(ProjectState::new())
     .invoke_handler(tauri::generate_handler![
       doc::doc_snapshot,
       doc::doc_apply,
@@ -63,6 +66,13 @@ pub fn run() {
       tm::tm_open,
       tm::tm_save,
       tm::tm_sim,
+      project::project_new,
+      project::project_manifest,
+      project::project_new_tab,
+      project::project_close_tab,
+      project::project_rename_tab,
+      project::project_open,
+      project::project_save,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
