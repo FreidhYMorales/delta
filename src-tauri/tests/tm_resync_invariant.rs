@@ -4,7 +4,7 @@
 //! `tm_snapshot` again fresh after the same edits.
 
 use app_lib::commands::tm;
-use app_lib::state::TmSession;
+use app_lib::state::{SEEDED_TAB_ID, TmSession};
 use app_lib::tm_ipc::{TmDocMirror, TmEditOpDto};
 use automata_core::dto::TmTapeOpDto;
 
@@ -16,7 +16,7 @@ fn tape_op(read: &str, write: &str, direction: &str) -> TmTapeOpDto {
 fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     let session = TmSession::new();
 
-    let initial_snapshot = tm::snapshot(&session);
+    let initial_snapshot = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror = TmDocMirror::from_snapshot(&initial_snapshot);
 
     // A representative sequence spanning every TmDocPatch kind: add,
@@ -38,11 +38,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
     ];
 
     for ops in batches {
-        let result = tm::apply(&session, ops).expect("apply must succeed");
+        let result = tm::apply(&session, SEEDED_TAB_ID, ops).expect("apply must succeed");
         mirror.apply(&result.patches);
     }
 
-    let fresh_snapshot = tm::snapshot(&session);
+    let fresh_snapshot = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
 
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
@@ -60,10 +60,11 @@ fn replayed_patches_equal_a_freshly_recomputed_snapshot() {
 #[test]
 fn replayed_patches_equal_snapshot_after_a_state_removal_cascading_its_transitions() {
     let session = TmSession::new();
-    let mut mirror = TmDocMirror::from_snapshot(&tm::snapshot(&session));
+    let mut mirror = TmDocMirror::from_snapshot(&tm::snapshot(&session, SEEDED_TAB_ID).unwrap());
 
     let r1 = tm::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             TmEditOpDto::AddState { label: "q1".into(), x: 1.0, y: 1.0 },
@@ -72,14 +73,14 @@ fn replayed_patches_equal_snapshot_after_a_state_removal_cascading_its_transitio
     .unwrap();
     mirror.apply(&r1.patches);
 
-    let r2 = tm::apply(&session, vec![TmEditOpDto::AddTransition { from: 0, to: 1, tapes: vec![tape_op("a", "a", "R")] }])
+    let r2 = tm::apply(&session, SEEDED_TAB_ID, vec![TmEditOpDto::AddTransition { from: 0, to: 1, tapes: vec![tape_op("a", "a", "R")] }])
         .unwrap();
     mirror.apply(&r2.patches);
 
-    let r3 = tm::apply(&session, vec![TmEditOpDto::RemoveState { id: 0 }]).unwrap();
+    let r3 = tm::apply(&session, SEEDED_TAB_ID, vec![TmEditOpDto::RemoveState { id: 0 }]).unwrap();
     mirror.apply(&r3.patches);
 
-    let fresh = tm::snapshot(&session);
+    let fresh = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror_states = mirror.states_sorted();
     mirror_states.sort_by_key(|s| s.id);
     let mut fresh_states = fresh.states.clone();
@@ -93,10 +94,11 @@ fn replayed_patches_equal_snapshot_after_a_state_removal_cascading_its_transitio
 #[test]
 fn replayed_patches_equal_snapshot_across_a_two_tape_transition_add() {
     let session = TmSession::new();
-    let mut mirror = TmDocMirror::from_snapshot(&tm::snapshot(&session));
+    let mut mirror = TmDocMirror::from_snapshot(&tm::snapshot(&session, SEEDED_TAB_ID).unwrap());
 
     let r1 = tm::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![
             TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             TmEditOpDto::AddState { label: "q1".into(), x: 1.0, y: 1.0 },
@@ -107,6 +109,7 @@ fn replayed_patches_equal_snapshot_across_a_two_tape_transition_add() {
 
     let r2 = tm::apply(
         &session,
+        SEEDED_TAB_ID,
         vec![TmEditOpDto::AddTransition {
             from: 0,
             to: 1,
@@ -116,7 +119,7 @@ fn replayed_patches_equal_snapshot_across_a_two_tape_transition_add() {
     .unwrap();
     mirror.apply(&r2.patches);
 
-    let fresh = tm::snapshot(&session);
+    let fresh = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let mut mirror_transitions = mirror.transitions_sorted();
     mirror_transitions.sort_by_key(|t| t.id);
     let mut fresh_transitions = fresh.transitions.clone();

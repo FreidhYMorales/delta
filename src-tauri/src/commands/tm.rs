@@ -21,56 +21,59 @@ use automata_core::tm_doc::{TmDocument, TmEditOp, TmHistory};
 
 use crate::commands::sim::BudgetDto;
 use crate::state::TmSession;
+use crate::tabs::TabId;
 use crate::tm_ipc::{diff_patches, snapshot_of, TmDocSnapshot, TmEditOpDto, TmEditResult};
 
-pub fn snapshot(session: &TmSession) -> TmDocSnapshot {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    snapshot_of(&doc)
+pub fn snapshot(session: &TmSession, tab: TabId) -> Result<TmDocSnapshot, String> {
+    session.try_with(tab, snapshot_of)
 }
 
-pub fn apply(session: &TmSession, ops: Vec<TmEditOpDto>) -> Result<TmEditResult, String> {
-    let mut doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
-    let before = doc.model.clone();
-    let core_ops: Vec<TmEditOp> = ops.into_iter().map(TmEditOpDto::into_core).collect();
-    doc.apply(core_ops);
-    let patches = diff_patches(&before, &doc.model);
-    Ok(TmEditResult { revision: doc.revision, patches, derived: crate::tm_ipc::derived_of(&doc.model) })
+pub fn apply(session: &TmSession, tab: TabId, ops: Vec<TmEditOpDto>) -> Result<TmEditResult, String> {
+    session.try_with_mut(tab, |doc| {
+        let before = doc.model.clone();
+        let core_ops: Vec<TmEditOp> = ops.into_iter().map(TmEditOpDto::into_core).collect();
+        doc.apply(core_ops);
+        let patches = diff_patches(&before, &doc.model);
+        TmEditResult { revision: doc.revision, patches, derived: crate::tm_ipc::derived_of(&doc.model) }
+    })
 }
 
-pub fn undo(session: &TmSession) -> Option<TmEditResult> {
-    let mut doc = session.0.lock().expect("session mutex poisoned");
-    let before = doc.model.clone();
-    if !doc.undo() {
-        return None;
-    }
-    let patches = diff_patches(&before, &doc.model);
-    Some(TmEditResult { revision: doc.revision, patches, derived: crate::tm_ipc::derived_of(&doc.model) })
+pub fn undo(session: &TmSession, tab: TabId) -> Result<Option<TmEditResult>, String> {
+    session.try_with_mut(tab, |doc| {
+        let before = doc.model.clone();
+        if !doc.undo() {
+            return None;
+        }
+        let patches = diff_patches(&before, &doc.model);
+        Some(TmEditResult { revision: doc.revision, patches, derived: crate::tm_ipc::derived_of(&doc.model) })
+    })
 }
 
-pub fn redo(session: &TmSession) -> Option<TmEditResult> {
-    let mut doc = session.0.lock().expect("session mutex poisoned");
-    let before = doc.model.clone();
-    if !doc.redo() {
-        return None;
-    }
-    let patches = diff_patches(&before, &doc.model);
-    Some(TmEditResult { revision: doc.revision, patches, derived: crate::tm_ipc::derived_of(&doc.model) })
+pub fn redo(session: &TmSession, tab: TabId) -> Result<Option<TmEditResult>, String> {
+    session.try_with_mut(tab, |doc| {
+        let before = doc.model.clone();
+        if !doc.redo() {
+            return None;
+        }
+        let patches = diff_patches(&before, &doc.model);
+        Some(TmEditResult { revision: doc.revision, patches, derived: crate::tm_ipc::derived_of(&doc.model) })
+    })
 }
 
 /// Native JSON only — same scope note as `commands::pda::open`: no `.jff`
 /// for Turing Machines yet.
-pub fn open(session: &TmSession, path: String) -> Result<TmDocSnapshot, String> {
+pub fn open(session: &TmSession, tab: TabId, path: String) -> Result<TmDocSnapshot, String> {
     let text = fs::read_to_string(&path).map_err(|e| format!("failed to read {path}: {e}"))?;
     let model = dto::tm_load_from_str(&text).map_err(|e| e.to_string())?;
-    let mut doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
-    let next_revision = doc.revision + 1;
-    *doc = TmDocument { model, history: TmHistory::new(200), revision: next_revision };
-    Ok(snapshot_of(&doc))
+    session.try_with_mut(tab, |doc| {
+        let next_revision = doc.revision + 1;
+        *doc = TmDocument { model, history: TmHistory::new(200), revision: next_revision };
+        snapshot_of(doc)
+    })
 }
 
-pub fn save(session: &TmSession, path: String) -> Result<(), String> {
-    let doc = session.0.lock().map_err(|_| "session mutex poisoned".to_string())?;
-    let json = dto::tm_save_to_string(&doc.model).map_err(|e| e.to_string())?;
+pub fn save(session: &TmSession, tab: TabId, path: String) -> Result<(), String> {
+    let json = session.try_with(tab, |doc| dto::tm_save_to_string(&doc.model))?.map_err(|e| e.to_string())?;
     fs::write(&path, json).map_err(|e| format!("failed to write {path}: {e}"))
 }
 
@@ -150,67 +153,83 @@ fn outcome_str(outcome: Outcome) -> &'static str {
 
 pub fn sim(
     session: &TmSession,
+    tab: TabId,
     inputs: Vec<Vec<String>>,
     accept_by: Option<AcceptByDto>,
     budget: Option<BudgetDto>,
-) -> TmTraceDto {
-    let doc = session.0.lock().expect("session mutex poisoned");
-    let mode: AcceptMode = accept_by.unwrap_or_default().into();
-    let b: Budget = budget.map(Into::into).unwrap_or_default();
+) -> Result<TmTraceDto, String> {
+    session.try_with(tab, |doc| {
+        let mode: AcceptMode = accept_by.unwrap_or_default().into();
+        let b: Budget = budget.map(Into::into).unwrap_or_default();
 
-    // Build the `&[&[&str]]` view `run_tm` expects: an owned `Vec<Vec<&str>>`
-    // borrowing from `inputs` first (must outlive the `Vec<&[&str]>` view
-    // built from it), then one more level of slicing on top.
-    let owned: Vec<Vec<&str>> = inputs.iter().map(|word| word.iter().map(String::as_str).collect()).collect();
-    let words: Vec<&[&str]> = owned.iter().map(Vec::as_slice).collect();
+        // Build the `&[&[&str]]` view `run_tm` expects: an owned
+        // `Vec<Vec<&str>>` borrowing from `inputs` first (must outlive the
+        // `Vec<&[&str]>` view built from it), then one more level of
+        // slicing on top.
+        let owned: Vec<Vec<&str>> = inputs.iter().map(|word| word.iter().map(String::as_str).collect()).collect();
+        let words: Vec<&[&str]> = owned.iter().map(Vec::as_slice).collect();
 
-    let trace = run_tm(&doc.model, &words, mode, b);
-    TmTraceDto {
-        outcome: outcome_str(trace.outcome).to_string(),
-        steps: trace
-            .steps
-            .into_iter()
-            .map(|step| step.configs.iter().map(|cfg| config_view(&doc.model, cfg)).collect())
-            .collect(),
-    }
+        let trace = run_tm(&doc.model, &words, mode, b);
+        TmTraceDto {
+            outcome: outcome_str(trace.outcome).to_string(),
+            steps: trace
+                .steps
+                .into_iter()
+                .map(|step| step.configs.iter().map(|cfg| config_view(&doc.model, cfg)).collect())
+                .collect(),
+        }
+    })
+}
+
+/// `tab_id` is a required `TabId` (PR11 cutover): every command wrapper
+/// addresses exactly the tab the frontend names, with no default — every
+/// caller must send an explicit `tab_id` now that the frontend mounts one
+/// client per open tab.
+#[tauri::command]
+pub fn tm_snapshot(session: tauri::State<'_, TmSession>, tab_id: TabId) -> Result<TmDocSnapshot, String> {
+    snapshot(&session, tab_id)
 }
 
 #[tauri::command]
-pub fn tm_snapshot(session: tauri::State<'_, TmSession>) -> TmDocSnapshot {
-    snapshot(&session)
+pub fn tm_apply(
+    session: tauri::State<'_, TmSession>,
+    tab_id: TabId,
+    ops: Vec<TmEditOpDto>,
+) -> Result<TmEditResult, String> {
+    apply(&session, tab_id, ops)
 }
 
 #[tauri::command]
-pub fn tm_apply(session: tauri::State<'_, TmSession>, ops: Vec<TmEditOpDto>) -> Result<TmEditResult, String> {
-    apply(&session, ops)
+pub fn tm_undo(session: tauri::State<'_, TmSession>, tab_id: TabId) -> Result<Option<TmEditResult>, String> {
+    undo(&session, tab_id)
 }
 
 #[tauri::command]
-pub fn tm_undo(session: tauri::State<'_, TmSession>) -> Option<TmEditResult> {
-    undo(&session)
+pub fn tm_redo(session: tauri::State<'_, TmSession>, tab_id: TabId) -> Result<Option<TmEditResult>, String> {
+    redo(&session, tab_id)
 }
 
 #[tauri::command]
-pub fn tm_redo(session: tauri::State<'_, TmSession>) -> Option<TmEditResult> {
-    redo(&session)
+pub fn tm_open(
+    session: tauri::State<'_, TmSession>,
+    tab_id: TabId,
+    path: String,
+) -> Result<TmDocSnapshot, String> {
+    open(&session, tab_id, path)
 }
 
 #[tauri::command]
-pub fn tm_open(session: tauri::State<'_, TmSession>, path: String) -> Result<TmDocSnapshot, String> {
-    open(&session, path)
-}
-
-#[tauri::command]
-pub fn tm_save(session: tauri::State<'_, TmSession>, path: String) -> Result<(), String> {
-    save(&session, path)
+pub fn tm_save(session: tauri::State<'_, TmSession>, tab_id: TabId, path: String) -> Result<(), String> {
+    save(&session, tab_id, path)
 }
 
 #[tauri::command]
 pub fn tm_sim(
     session: tauri::State<'_, TmSession>,
+    tab_id: TabId,
     inputs: Vec<Vec<String>>,
     accept_by: Option<AcceptByDto>,
     budget: Option<BudgetDto>,
-) -> TmTraceDto {
-    sim(&session, inputs, accept_by, budget)
+) -> Result<TmTraceDto, String> {
+    sim(&session, tab_id, inputs, accept_by, budget)
 }

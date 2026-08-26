@@ -8,7 +8,7 @@
 //! per-tape `tapes: Vec<...>` payload PDA's single-tape shape didn't have.
 
 use app_lib::commands::tm;
-use app_lib::state::TmSession;
+use app_lib::state::{SEEDED_TAB_ID, TmSession};
 use app_lib::tm_ipc::{TmDocPatch, TmEditOpDto};
 use automata_core::dto::TmTapeOpDto;
 
@@ -23,7 +23,7 @@ fn tape_op(read: &str, write: &str, direction: &str) -> TmTapeOpDto {
 #[test]
 fn apply_reports_exactly_the_expected_patches_and_bumps_the_revision() {
     let session = TmSession::new();
-    let result = tm::apply(&session, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 1.0, y: 2.0 }])).unwrap();
+    let result = tm::apply(&session, SEEDED_TAB_ID, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 1.0, y: 2.0 }])).unwrap();
 
     assert_eq!(result.revision, 1);
     assert_eq!(result.patches.len(), 1);
@@ -38,18 +38,20 @@ fn snapshot_reflects_states_transitions_accepting_and_derived_facts_after_apply(
     let session = TmSession::new();
     tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[
             TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             TmEditOpDto::AddState { label: "q1".into(), x: 10.0, y: 0.0 },
         ]),
     )
     .unwrap();
-    let snap = tm::snapshot(&session);
+    let snap = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     let q0 = snap.states.iter().find(|s| s.label == "q0").unwrap().id;
     let q1 = snap.states.iter().find(|s| s.label == "q1").unwrap().id;
 
     tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[
             TmEditOpDto::SetInitial { id: Some(q0) },
             TmEditOpDto::SetAccepting { id: q1, accepting: true },
@@ -58,7 +60,7 @@ fn snapshot_reflects_states_transitions_accepting_and_derived_facts_after_apply(
     )
     .unwrap();
 
-    let snap = tm::snapshot(&session);
+    let snap = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.revision, 2);
     let s0 = snap.states.iter().find(|s| s.id == q0).unwrap();
     assert!(s0.initial);
@@ -85,22 +87,25 @@ fn multiple_transitions_between_the_same_pair_of_states_survive_undo_redo_and_ar
     let session = TmSession::new();
     tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[
             TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             TmEditOpDto::AddState { label: "q1".into(), x: 10.0, y: 0.0 },
         ]),
     )
     .unwrap();
-    let q0 = tm::snapshot(&session).states.iter().find(|s| s.label == "q0").unwrap().id;
-    let q1 = tm::snapshot(&session).states.iter().find(|s| s.label == "q1").unwrap().id;
+    let q0 = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q0").unwrap().id;
+    let q1 = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q1").unwrap().id;
 
     let r1 = tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[TmEditOpDto::AddTransition { from: q0, to: q1, tapes: vec![tape_op("a", "a", "R")] }]),
     )
     .unwrap();
     let r2 = tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[TmEditOpDto::AddTransition { from: q0, to: q1, tapes: vec![tape_op("b", "b", "L")] }]),
     )
     .unwrap();
@@ -115,30 +120,30 @@ fn multiple_transitions_between_the_same_pair_of_states_survive_undo_redo_and_ar
     };
     assert_ne!(t1_id, t2_id, "two transitions sharing (from, to) must get distinct ids");
 
-    let snap = tm::snapshot(&session);
+    let snap = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.transitions.len(), 2);
     assert!(snap.transitions.iter().all(|t| t.from == q0 && t.to == q1));
 
     // Editing one must not disturb the other.
-    let r3 = tm::apply(&session, ops(&[TmEditOpDto::EditTransition { id: t1_id, tapes: vec![tape_op("c", "c", "S")] }]))
+    let r3 = tm::apply(&session, SEEDED_TAB_ID, ops(&[TmEditOpDto::EditTransition { id: t1_id, tapes: vec![tape_op("c", "c", "S")] }]))
         .unwrap();
     assert!(matches!(&r3.patches[0], TmDocPatch::TransitionEdited { id, tapes, .. } if *id == t1_id && tapes[0].read == "c"));
-    let snap = tm::snapshot(&session);
+    let snap = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.transitions.iter().find(|t| t.id == t1_id).unwrap().tapes[0].read, "c");
     assert_eq!(snap.transitions.iter().find(|t| t.id == t2_id).unwrap().tapes[0].read, "b");
 
     // Undo the edit, then undo both adds, then redo everything back.
-    assert!(tm::undo(&session).is_some());
-    assert_eq!(tm::snapshot(&session).transitions.iter().find(|t| t.id == t1_id).unwrap().tapes[0].read, "a");
-    assert!(tm::undo(&session).is_some());
-    assert_eq!(tm::snapshot(&session).transitions.len(), 1);
-    assert!(tm::undo(&session).is_some());
-    assert_eq!(tm::snapshot(&session).transitions.len(), 0);
+    assert!(tm::undo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert_eq!(tm::snapshot(&session, SEEDED_TAB_ID).unwrap().transitions.iter().find(|t| t.id == t1_id).unwrap().tapes[0].read, "a");
+    assert!(tm::undo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert_eq!(tm::snapshot(&session, SEEDED_TAB_ID).unwrap().transitions.len(), 1);
+    assert!(tm::undo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert_eq!(tm::snapshot(&session, SEEDED_TAB_ID).unwrap().transitions.len(), 0);
 
-    assert!(tm::redo(&session).is_some());
-    assert!(tm::redo(&session).is_some());
-    assert!(tm::redo(&session).is_some());
-    let snap = tm::snapshot(&session);
+    assert!(tm::redo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert!(tm::redo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    assert!(tm::redo(&session, SEEDED_TAB_ID).unwrap().is_some());
+    let snap = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.transitions.len(), 2);
     assert_eq!(snap.transitions.iter().find(|t| t.id == t1_id).unwrap().tapes[0].read, "c");
     assert_eq!(snap.transitions.iter().find(|t| t.id == t2_id).unwrap().tapes[0].read, "b");
@@ -147,36 +152,36 @@ fn multiple_transitions_between_the_same_pair_of_states_survive_undo_redo_and_ar
 #[test]
 fn undo_reverses_the_most_recent_apply_and_redo_reapplies_it() {
     let session = TmSession::new();
-    tm::apply(&session, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }])).unwrap();
-    assert_eq!(tm::snapshot(&session).states.len(), 1);
+    tm::apply(&session, SEEDED_TAB_ID, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }])).unwrap();
+    assert_eq!(tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 1);
 
-    let undone = tm::undo(&session).expect("there is a transaction to undo");
+    let undone = tm::undo(&session, SEEDED_TAB_ID).unwrap().expect("there is a transaction to undo");
     assert_eq!(undone.revision, 2);
     assert!(matches!(&undone.patches[0], TmDocPatch::StateRemoved { .. }));
-    assert_eq!(tm::snapshot(&session).states.len(), 0);
+    assert_eq!(tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 0);
 
-    let redone = tm::redo(&session).expect("there is a transaction to redo");
+    let redone = tm::redo(&session, SEEDED_TAB_ID).unwrap().expect("there is a transaction to redo");
     assert_eq!(redone.revision, 3);
-    assert_eq!(tm::snapshot(&session).states.len(), 1);
+    assert_eq!(tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.len(), 1);
 }
 
 #[test]
 fn undo_on_a_fresh_session_is_none() {
     let session = TmSession::new();
-    assert!(tm::undo(&session).is_none());
+    assert!(tm::undo(&session, SEEDED_TAB_ID).unwrap().is_none());
 }
 
 #[test]
 fn save_then_open_round_trips_the_document() {
     let session = TmSession::new();
-    tm::apply(&session, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 3.0, y: 4.0 }])).unwrap();
+    tm::apply(&session, SEEDED_TAB_ID, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 3.0, y: 4.0 }])).unwrap();
     let path = std::env::temp_dir().join(format!("tm-ipc-test-{}.json", std::process::id()));
     let path_str = path.to_str().unwrap().to_string();
 
-    tm::save(&session, path_str.clone()).unwrap();
+    tm::save(&session, SEEDED_TAB_ID, path_str.clone()).unwrap();
 
     let fresh_session = TmSession::new();
-    let loaded = tm::open(&fresh_session, path_str).unwrap();
+    let loaded = tm::open(&fresh_session, SEEDED_TAB_ID, path_str).unwrap();
     std::fs::remove_file(&path).ok();
 
     assert_eq!(loaded.states.len(), 1);
@@ -189,17 +194,19 @@ fn two_tape_transition_is_addable_and_tape_count_shows_up_in_derived() {
     let session = TmSession::new();
     tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[
             TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 },
             TmEditOpDto::AddState { label: "q1".into(), x: 10.0, y: 0.0 },
         ]),
     )
     .unwrap();
-    let q0 = tm::snapshot(&session).states.iter().find(|s| s.label == "q0").unwrap().id;
-    let q1 = tm::snapshot(&session).states.iter().find(|s| s.label == "q1").unwrap().id;
+    let q0 = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q0").unwrap().id;
+    let q1 = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q1").unwrap().id;
 
     let r = tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[TmEditOpDto::AddTransition {
             from: q0,
             to: q1,
@@ -209,7 +216,7 @@ fn two_tape_transition_is_addable_and_tape_count_shows_up_in_derived() {
     .unwrap();
 
     assert_eq!(r.derived.tape_count, 2);
-    let snap = tm::snapshot(&session);
+    let snap = tm::snapshot(&session, SEEDED_TAB_ID).unwrap();
     assert_eq!(snap.transitions.len(), 1);
     assert_eq!(snap.transitions[0].tapes.len(), 2);
 
@@ -217,15 +224,16 @@ fn two_tape_transition_is_addable_and_tape_count_shows_up_in_derived() {
     // like the core layer does: no patches, and the revision still bumps
     // for the no-op transaction (matching `TmDocument::apply`'s documented
     // behavior), but no new transition appears.
-    let before_revision = tm::snapshot(&session).revision;
+    let before_revision = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().revision;
     let rejected = tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[TmEditOpDto::AddTransition { from: q0, to: q1, tapes: vec![tape_op("c", "c", "S")] }]),
     )
     .unwrap();
     assert!(rejected.patches.is_empty(), "wrong tape count must produce no patches");
     assert_eq!(rejected.revision, before_revision + 1);
-    assert_eq!(tm::snapshot(&session).transitions.len(), 1, "the rejected transition must not appear");
+    assert_eq!(tm::snapshot(&session, SEEDED_TAB_ID).unwrap().transitions.len(), 1, "the rejected transition must not appear");
 }
 
 #[test]
@@ -235,16 +243,18 @@ fn sim_respects_accept_by_and_defaults_to_final_state() {
     let session = TmSession::new();
     tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[
             TmEditOpDto::AddState { label: "scan".into(), x: 0.0, y: 0.0 },
             TmEditOpDto::AddState { label: "done".into(), x: 10.0, y: 0.0 },
         ]),
     )
     .unwrap();
-    let scan = tm::snapshot(&session).states.iter().find(|s| s.label == "scan").unwrap().id;
-    let done = tm::snapshot(&session).states.iter().find(|s| s.label == "done").unwrap().id;
+    let scan = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "scan").unwrap().id;
+    let done = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "done").unwrap().id;
     tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[
             TmEditOpDto::SetInitial { id: Some(scan) },
             TmEditOpDto::SetAccepting { id: done, accepting: true },
@@ -254,7 +264,8 @@ fn sim_respects_accept_by_and_defaults_to_final_state() {
     )
     .unwrap();
 
-    let final_trace = tm::sim(&session, vec![vec!["1".to_string(), "1".to_string(), "1".to_string()]], None, None);
+    let final_trace =
+        tm::sim(&session, SEEDED_TAB_ID, vec![vec!["1".to_string(), "1".to_string(), "1".to_string()]], None, None).unwrap();
     assert_eq!(final_trace.outcome, "Accepted");
     let last = final_trace.steps.last().unwrap();
     let cfg = &last[0];
@@ -262,20 +273,23 @@ fn sim_respects_accept_by_and_defaults_to_final_state() {
 
     let halting_trace = tm::sim(
         &session,
+        SEEDED_TAB_ID,
         vec![vec!["1".to_string(), "1".to_string()]],
         Some(tm::AcceptByDto::Halting),
         None,
-    );
+    )
+    .unwrap();
     assert_eq!(halting_trace.outcome, "Accepted");
 }
 
 #[test]
 fn sim_distinguishes_halting_from_final_state_when_the_machine_halts_outside_an_accepting_state() {
     let session = TmSession::new();
-    tm::apply(&session, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }])).unwrap();
-    let q0 = tm::snapshot(&session).states.iter().find(|s| s.label == "q0").unwrap().id;
+    tm::apply(&session, SEEDED_TAB_ID, ops(&[TmEditOpDto::AddState { label: "q0".into(), x: 0.0, y: 0.0 }])).unwrap();
+    let q0 = tm::snapshot(&session, SEEDED_TAB_ID).unwrap().states.iter().find(|s| s.label == "q0").unwrap().id;
     tm::apply(
         &session,
+        SEEDED_TAB_ID,
         ops(&[
             TmEditOpDto::SetInitial { id: Some(q0) },
             TmEditOpDto::AddTransition { from: q0, to: q0, tapes: vec![tape_op("1", "1", "R")] },
@@ -283,9 +297,13 @@ fn sim_distinguishes_halting_from_final_state_when_the_machine_halts_outside_an_
     )
     .unwrap();
 
-    let halting = tm::sim(&session, vec![vec!["1".to_string(), "1".to_string()]], Some(tm::AcceptByDto::Halting), None);
+    let halting =
+        tm::sim(&session, SEEDED_TAB_ID, vec![vec!["1".to_string(), "1".to_string()]], Some(tm::AcceptByDto::Halting), None)
+            .unwrap();
     assert_eq!(halting.outcome, "Accepted");
 
-    let final_state = tm::sim(&session, vec![vec!["1".to_string(), "1".to_string()]], Some(tm::AcceptByDto::Final), None);
+    let final_state =
+        tm::sim(&session, SEEDED_TAB_ID, vec![vec!["1".to_string(), "1".to_string()]], Some(tm::AcceptByDto::Final), None)
+            .unwrap();
     assert_eq!(final_state.outcome, "Rejected");
 }
