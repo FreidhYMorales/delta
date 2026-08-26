@@ -9,6 +9,21 @@
 // projections over a static action list" (design D8): a list of recently
 // opened file paths is inherently dynamic, so instead of `run` it carries a
 // `submenu: { items(ctx) }` returning a dynamic list of sub-actions.
+//
+// Error handling (follow-up fix): every action here that touches disk or
+// the backend (Abrir/Guardar/Guardar como/Recientes, Nueva/Renombrar
+// pestaña) now wraps the call in try/catch + `showNotice` on failure —
+// before this, a rejected promise here (a Recientes entry pointing at a
+// since-deleted file; a "Nueva pestaña"/rename colliding with a name
+// already used) surfaced nowhere: `MenuBar.js`'s own item click handler
+// never awaits or catches `action.run(ctx)`, so it just became an
+// unhandled rejection, and the click looked like it silently did nothing.
+// Every FA/Mealy/Moore/Pda/Tm-specific action already followed this same
+// try/catch + `showNotice` convention (e.g. `mountFaTab.js`'s
+// `importJff`/`exportJff`) — this only extends it to the project-level
+// actions, which had never gotten it.
+
+import { showNotice } from "../ui/notice.js";
 
 /** Registry `group` -> menu title (mirrors `MenuBar.js`'s own
  * `MENU_GROUP_TITLES`, same "single source of truth for the reachability
@@ -38,7 +53,12 @@ async function saveToKnownOrPromptedPath(ctx) {
     path = await ctx.promptPath("save-project");
     if (!path) return false;
   }
-  await ctx.projectStore.save(path);
+  try {
+    await ctx.projectStore.save(path);
+  } catch (error) {
+    showNotice({ kind: "error", title: "No se pudo guardar el proyecto", message: String(error?.message ?? error) });
+    return false;
+  }
   ctx.recentProjects?.add(path);
   return true;
 }
@@ -105,7 +125,12 @@ export const projectActions = [
     when: alwaysOn,
     run: async (ctx) => {
       const result = await ctx.promptNewTab();
-      if (result) await ctx.projectStore.newTab(result.kind, result.name);
+      if (!result) return;
+      try {
+        await ctx.projectStore.newTab(result.kind, result.name);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo crear la pestaña", message: String(error?.message ?? error) });
+      }
     },
   },
 
@@ -132,7 +157,12 @@ export const projectActions = [
       const tabId = ctx.projectStore.activeTabId;
       if (tabId == null) return;
       const name = await ctx.promptTabName();
-      if (name) await ctx.projectStore.renameTab(tabId, name);
+      if (!name) return;
+      try {
+        await ctx.projectStore.renameTab(tabId, name);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo renombrar la pestaña", message: String(error?.message ?? error) });
+      }
     },
   },
 
@@ -146,7 +176,12 @@ export const projectActions = [
       if (!(await confirmDiscardIfDirty(ctx))) return;
       const path = await ctx.promptPath("open-project");
       if (!path) return;
-      await ctx.projectStore.open(path);
+      try {
+        await ctx.projectStore.open(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo abrir el proyecto", message: String(error?.message ?? error) });
+        return;
+      }
       ctx.recentProjects?.add(path);
     },
   },
@@ -172,7 +207,12 @@ export const projectActions = [
     run: async (ctx) => {
       const path = await ctx.promptPath("save-project");
       if (!path) return;
-      await ctx.projectStore.save(path);
+      try {
+        await ctx.projectStore.save(path);
+      } catch (error) {
+        showNotice({ kind: "error", title: "No se pudo guardar el proyecto", message: String(error?.message ?? error) });
+        return;
+      }
       ctx.recentProjects?.add(path);
     },
   },
@@ -192,7 +232,12 @@ export const projectActions = [
           id: `project.recent:${path}`,
           title: path,
           run: async (c) => {
-            await c.projectStore.open(path);
+            try {
+              await c.projectStore.open(path);
+            } catch (error) {
+              showNotice({ kind: "error", title: "No se pudo abrir el proyecto", message: String(error?.message ?? error) });
+              return;
+            }
             c.recentProjects?.add(path);
           },
         })),

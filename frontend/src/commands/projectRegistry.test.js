@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { projectActions } from "./projectRegistry.js";
 import { ProjectContext } from "./ProjectContext.js";
 import { ProjectStore } from "../project/ProjectStore.js";
+
+beforeEach(() => {
+  document.body.innerHTML = "";
+});
 
 function fakeCtx(overrides = {}) {
   const projectStore = new ProjectStore({
@@ -339,5 +343,90 @@ describe("reachability without any FA-specific context field (design D8)", () =>
     await action.run(ctx);
 
     expect(ctx.projectStore.client.projectNewTab).not.toHaveBeenCalled();
+  });
+});
+
+describe("project actions surface backend failures as a visible notice (follow-up fix)", () => {
+  // Tauri's Err(String) rejects the JS promise with a plain string, not an
+  // Error instance — asserting against a plain-string rejection (not
+  // `new Error(...)`) matches that real failure shape.
+
+  it("project.open shows a notice and does not add the path to Recientes when it fails", async () => {
+    const add = vi.fn();
+    const ctx = fakeCtx({ recentProjects: { list: () => [], add } });
+    ctx.projectStore.client.projectOpen = vi.fn().mockRejectedValue("failed to read /x.jflapproj: not found");
+    const action = projectActions.find((a) => a.id === "project.open");
+
+    await action.run(ctx);
+
+    const notice = document.querySelector(".notice");
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain("not found");
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it("project.recent's submenu entry shows a notice when the stored path no longer opens", async () => {
+    const ctx = fakeCtx({ recentProjects: { list: () => ["/gone.jflapproj"], add: vi.fn() } });
+    ctx.projectStore.client.projectOpen = vi.fn().mockRejectedValue("failed to read /gone.jflapproj: not found");
+    const recent = projectActions.find((a) => a.id === "project.recent");
+    const [item] = recent.submenu.items(ctx);
+
+    await item.run(ctx);
+
+    const notice = document.querySelector(".notice");
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain("not found");
+  });
+
+  it("project.save (via Guardar) shows a notice and stays dirty when the write fails", async () => {
+    const ctx = fakeCtx();
+    ctx.projectStore.client.projectSave = vi.fn().mockRejectedValue("permission denied");
+    ctx.projectStore.filePath = "/already-open.jflapproj";
+    const action = projectActions.find((a) => a.id === "project.save");
+
+    const result = await action.run(ctx);
+
+    expect(result).toBe(false);
+    const notice = document.querySelector(".notice");
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain("permission denied");
+  });
+
+  it("project.saveAs shows a notice when the write fails", async () => {
+    const ctx = fakeCtx();
+    ctx.projectStore.client.projectSave = vi.fn().mockRejectedValue("disk full");
+    const action = projectActions.find((a) => a.id === "project.saveAs");
+
+    await action.run(ctx);
+
+    const notice = document.querySelector(".notice");
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain("disk full");
+  });
+
+  it("project.newTab shows a notice when the backend rejects a duplicate/empty name", async () => {
+    const ctx = fakeCtx();
+    ctx.projectStore.client.projectNewTab = vi.fn().mockRejectedValue('a tab named "A" already exists');
+    const action = projectActions.find((a) => a.id === "project.newTab");
+
+    await action.run(ctx);
+
+    const notice = document.querySelector(".notice");
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain("already exists");
+  });
+
+  it("project.renameTab shows a notice when the backend rejects a duplicate/empty name", async () => {
+    const ctx = fakeCtx();
+    ctx.projectStore.client.projectRenameTab = vi.fn().mockRejectedValue('a tab named "B" already exists');
+    ctx.projectStore.tabs = [{ id: 0, kind: "Fa", name: "A", revision: 0 }];
+    ctx.projectStore.activeTabId = 0;
+    const action = projectActions.find((a) => a.id === "project.renameTab");
+
+    await action.run(ctx);
+
+    const notice = document.querySelector(".notice");
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain("already exists");
   });
 });
