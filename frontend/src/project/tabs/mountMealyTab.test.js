@@ -83,6 +83,19 @@ describe("mountMealyTab (design D11)", () => {
     expect(fitToWindow).toHaveBeenCalledTimes(1);
   });
 
+  it("activate() also focuses the diagram's SVG, so keyboard shortcuts work right after switching tabs", async () => {
+    const hosts = fakeHosts();
+    const mount = mountMealyTab(0, hosts, fakeClient());
+    await Promise.resolve();
+    const svg = mount.root.querySelector("svg");
+    const focus = vi.fn();
+    svg.focus = focus;
+
+    mount.activate();
+
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
   it("deactivate() re-hides root/toolbar", async () => {
     const hosts = fakeHosts();
     const mount = mountMealyTab(0, hosts, fakeClient());

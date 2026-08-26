@@ -118,6 +118,7 @@ export function mountMooreTab(tabId, hosts, client, collaborators = {}) {
       root.hidden = false;
       toolbar.root.hidden = false;
       ctx.viewport.fitToWindow();
+      diagramView.svg.focus();
     },
     deactivate() {
       root.hidden = true;
