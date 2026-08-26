@@ -36,6 +36,12 @@ export class ProjectStore {
     /** @type {number|null} */
     this.activeTabId = null;
     this.savedRevision = 0;
+    // The path this project was last opened from or saved to — `null` for
+    // a brand-new, never-saved project. `project.save`'s action
+    // (`projectRegistry.js`) reads this to decide whether "Guardar" can
+    // silently overwrite it or must prompt first (the "Guardar como…"
+    // action always prompts, regardless of this).
+    this.filePath = null;
     // Per-tab dirty baseline (PR10's `ProjectTabStrip` dirty-dot), additive
     // to the aggregate `isDirty` above — same "no extra IPC" rule: a tab's
     // baseline is only ever moved forward by a manifest load that counts as
@@ -128,6 +134,7 @@ export class ProjectStore {
   /** @returns {Promise<ProjectManifest>} resets to a fresh, empty project — clean. */
   async newProject() {
     const manifest = await this.client.projectNew();
+    this.filePath = null;
     this._loadManifest(manifest, { markSaved: true });
     return manifest;
   }
@@ -161,9 +168,18 @@ export class ProjectStore {
     return manifest;
   }
 
+  /** @param {number} tabId @param {number} toIndex @returns {Promise<ProjectManifest>}
+   * moves `tabId` to position `toIndex` (drag-to-reorder, `ProjectTabStrip`). */
+  async reorderTab(tabId, toIndex) {
+    const manifest = await this.client.projectReorderTab(tabId, toIndex);
+    this._loadManifest(manifest, { markSaved: false });
+    return manifest;
+  }
+
   /** @param {string} path @returns {Promise<ProjectManifest>} */
   async open(path) {
     const manifest = await this.client.projectOpen(path);
+    this.filePath = path;
     this._loadManifest(manifest, { markSaved: true });
     return manifest;
   }
@@ -171,6 +187,7 @@ export class ProjectStore {
   /** @param {string} path @returns {Promise<ProjectManifest>} */
   async save(path) {
     const manifest = await this.client.projectSave(path);
+    this.filePath = path;
     this._loadManifest(manifest, { markSaved: true });
     return manifest;
   }

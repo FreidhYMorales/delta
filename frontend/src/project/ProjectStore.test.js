@@ -8,6 +8,7 @@ function fakeClient(overrides = {}) {
     projectNewTab: vi.fn(),
     projectCloseTab: vi.fn(),
     projectRenameTab: vi.fn(),
+    projectReorderTab: vi.fn(),
     projectOpen: vi.fn(),
     projectSave: vi.fn(),
     ...overrides,
@@ -89,6 +90,53 @@ describe("ProjectStore dirty-flag math (design D10)", () => {
     void store.isDirty;
 
     expect(client.projectManifest).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProjectStore.filePath (backs project.save's overwrite-vs-prompt decision)", () => {
+  it("is null for a brand-new project that was never opened or saved", async () => {
+    const client = fakeClient({ projectNew: vi.fn().mockResolvedValue(manifestA) });
+    const store = new ProjectStore(client);
+
+    await store.newProject();
+
+    expect(store.filePath).toBeNull();
+  });
+
+  it("is set to the path a project was opened from", async () => {
+    const client = fakeClient({ projectOpen: vi.fn().mockResolvedValue(manifestA) });
+    const store = new ProjectStore(client);
+
+    await store.open("/opened.jflapproj");
+
+    expect(store.filePath).toBe("/opened.jflapproj");
+  });
+
+  it("is set to the path a project was saved to", async () => {
+    const client = fakeClient({
+      projectNew: vi.fn().mockResolvedValue(manifestA),
+      projectSave: vi.fn().mockResolvedValue(manifestA),
+    });
+    const store = new ProjectStore(client);
+    await store.newProject();
+
+    await store.save("/saved.jflapproj");
+
+    expect(store.filePath).toBe("/saved.jflapproj");
+  });
+
+  it("resets to null when newProject() starts a fresh project", async () => {
+    const client = fakeClient({
+      projectOpen: vi.fn().mockResolvedValue(manifestA),
+      projectNew: vi.fn().mockResolvedValue({ tabs: [], revision: 0 }),
+    });
+    const store = new ProjectStore(client);
+    await store.open("/opened.jflapproj");
+    expect(store.filePath).toBe("/opened.jflapproj");
+
+    await store.newProject();
+
+    expect(store.filePath).toBeNull();
   });
 });
 
@@ -174,6 +222,33 @@ describe("ProjectStore tab list ordering", () => {
 
     expect(store.tabs.map((t) => t.id)).toEqual([0, 1]);
     expect(store.tabs.map((t) => t.name)).toEqual(["A", "B"]);
+  });
+
+  it("reflects the manifest's new order after reorderTab()", async () => {
+    const reordered = {
+      tabs: [
+        { id: 1, kind: "Mealy", name: "B", revision: 0 },
+        { id: 0, kind: "Fa", name: "A", revision: 0 },
+      ],
+      revision: 0,
+    };
+    const client = fakeClient({
+      projectNew: vi.fn().mockResolvedValue({
+        tabs: [
+          { id: 0, kind: "Fa", name: "A", revision: 0 },
+          { id: 1, kind: "Mealy", name: "B", revision: 0 },
+        ],
+        revision: 0,
+      }),
+      projectReorderTab: vi.fn().mockResolvedValue(reordered),
+    });
+    const store = new ProjectStore(client);
+    await store.newProject();
+
+    await store.reorderTab(0, 1);
+
+    expect(store.tabs.map((t) => t.id)).toEqual([1, 0]);
+    expect(client.projectReorderTab).toHaveBeenCalledWith(0, 1);
   });
 
   it("removes a tab from the list after closeTab()", async () => {

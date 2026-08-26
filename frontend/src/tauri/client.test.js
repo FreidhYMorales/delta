@@ -40,6 +40,11 @@ describe("client.js project command wrappers (PR9, design D8/D14)", () => {
     expect(invoke).toHaveBeenCalledWith("project_rename_tab", { tabId: 3, newName: "Renamed" });
   });
 
+  it("projectReorderTab(tabId, toIndex) calls invoke with project_reorder_tab and {tabId, toIndex}", async () => {
+    await client.projectReorderTab(3, 1);
+    expect(invoke).toHaveBeenCalledWith("project_reorder_tab", { tabId: 3, toIndex: 1 });
+  });
+
   it("projectOpen(path) calls invoke with project_open and {path}", async () => {
     await client.projectOpen("/tmp/project.jflapproj");
     expect(invoke).toHaveBeenCalledWith("project_open", { path: "/tmp/project.jflapproj" });

@@ -402,6 +402,17 @@ export function projectRenameTab(tabId, newName) {
   return call("project_rename_tab", { tabId, newName });
 }
 
+/**
+ * @param {number} tabId
+ * @param {number} toIndex clamped to the last valid position rather than a
+ *   no-op if it's past the end (a drag-and-drop of `tabId` to right of the
+ *   last tab) — see `project_reorder_tab`'s own doc comment.
+ * @returns {Promise<import('../project/ProjectStore.js').ProjectManifest>}
+ */
+export function projectReorderTab(tabId, toIndex) {
+  return call("project_reorder_tab", { tabId, toIndex });
+}
+
 /** @param {string} path @returns {Promise<import('../project/ProjectStore.js').ProjectManifest>}
  * replaces the current project entirely with the one read from `path`. */
 export function projectOpen(path) {

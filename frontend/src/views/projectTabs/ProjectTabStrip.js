@@ -14,8 +14,44 @@
 // case this "silently reverts" — no alert, no notice, just redraw with the
 // previous name — exactly like `ui/promptModal.js`'s Escape/backdrop-cancel
 // convention resolves quietly instead of surfacing an error.
+//
+// Many-tabs overflow (follow-up fix): tab buttons never shrink
+// (`.project-tab { flex-shrink: 0 }` — see style.css) so names/badges stay
+// readable instead of squishing down as more tabs open. The tab list itself
+// lives in its own scrollable `.project-tab-strip-scroll` sub-element
+// (`this.scrollArea`), separate from `this.root`, so the two nav buttons
+// (`this.nav`) can stay docked at the right edge, outside the scrolling
+// area, instead of scrolling away with the tabs. Plain wheel scroll
+// (deltaY, no deltaX — most mice have no horizontal wheel) and a
+// click-and-drag pan are both wired onto `scrollArea` as swipe-like
+// affordances; a real trackpad's horizontal swipe (deltaX != 0) is left
+// alone entirely, since the browser already scrolls an `overflow-x: auto`
+// element for that natively.
+
+// Drag-to-reorder (follow-up feature): click-and-hold a TAB itself (not
+// empty strip background) and move left/right to reposition it —
+// `_wireReorderDrag`. A tab button's own mousedown calls
+// `stopPropagation()` so `_wireDragPan`'s strip-panning never also engages
+// for the same gesture: pressing a tab reorders it, pressing anywhere else
+// on the strip pans it. The dragged button just follows the pointer via a
+// `transform: translateX(...)` (no live sibling reflow — keeps this simple
+// and avoids fighting the still-running `_render()` on every store
+// change); the actual `project_reorder_tab` call, computed from which
+// sibling's midpoint the pointer ended up past, only fires once, on
+// mouseup, exactly like `_wireDragPan`'s own one-shot click suppression.
 
 import { machineKindLabel } from "../../project/machineKinds.js";
+
+/** Pixels the nav buttons pan per click — roughly 2-3 tabs' width, enough
+ * to feel like a deliberate step without needing a "page" calculation. */
+const NAV_SCROLL_STEP = 160;
+
+/** Below this many pixels of horizontal mouse movement, a mousedown/mouseup
+ * pair is still just a click (opening/renaming a tab), not a drag-to-pan —
+ * without a threshold, EVERY normal click would register as a zero-distance
+ * "drag" and get its own click event wrongly suppressed (see `_wireDragToPan`
+ * below). */
+const DRAG_THRESHOLD_PX = 4;
 
 export class ProjectTabStrip {
   /**
@@ -37,15 +73,189 @@ export class ProjectTabStrip {
 
     this.root = document.createElement("div");
     this.root.className = "project-tab-strip";
+
+    this.scrollArea = document.createElement("div");
+    this.scrollArea.className = "project-tab-strip-scroll";
+
+    this.nav = document.createElement("div");
+    this.nav.className = "project-tab-strip-nav";
+    const scrollLeftButton = this._buildNavButton("◂", "Desplazar pestañas a la izquierda", -NAV_SCROLL_STEP);
+    const scrollRightButton = this._buildNavButton("▸", "Desplazar pestañas a la derecha", NAV_SCROLL_STEP);
+    this.nav.append(scrollLeftButton, scrollRightButton);
+
+    this.root.append(this.scrollArea, this.nav);
     this.container.appendChild(this.root);
+
+    this._wireWheelPan();
+    this._wireDragPan();
+    this._wireReorderDrag();
 
     this._unsubscribe = projectStore.subscribe(() => this._render());
     this._render();
   }
 
-  /** Unsubscribes from the store. Call when the strip itself is torn down. */
+  /** Unsubscribes from the store and removes the document-level drag
+   * listeners. Call when the strip itself is torn down. */
   destroy() {
     this._unsubscribe?.();
+    this._unwireDragPan?.();
+    this._unwireReorderDrag?.();
+  }
+
+  /** @param {string} glyph @param {string} label @param {number} delta */
+  _buildNavButton(glyph, label, delta) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "project-tab-strip-nav-btn";
+    button.textContent = glyph;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.addEventListener("click", () => {
+      this.scrollArea.scrollLeft += delta;
+    });
+    return button;
+  }
+
+  /** Converts a plain vertical wheel scroll (deltaY, no deltaX) into
+   * horizontal panning. A real trackpad's horizontal swipe already reports
+   * deltaX and needs no help — `overflow-x: auto` scrolls it natively. */
+  _wireWheelPan() {
+    this.scrollArea.addEventListener("wheel", (event) => {
+      if (event.deltaX !== 0) return;
+      event.preventDefault();
+      this.scrollArea.scrollLeft += event.deltaY;
+    });
+  }
+
+  /** Click-and-drag panning (a desktop "swipe" stand-in — this app has no
+   * touchscreen target). Below `DRAG_THRESHOLD_PX` of movement, a
+   * mousedown/mouseup pair is left alone as a plain click (open/rename a
+   * tab); past it, the resulting click is suppressed for exactly one event
+   * so a drag-release never also fires whichever tab the pointer ended up
+   * over. */
+  _wireDragPan() {
+    let dragging = false;
+    let dragged = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+
+    const onMouseDown = (event) => {
+      if (event.button !== 0) return;
+      dragging = true;
+      dragged = false;
+      startX = event.clientX;
+      startScrollLeft = this.scrollArea.scrollLeft;
+    };
+
+    const onMouseMove = (event) => {
+      if (!dragging) return;
+      const delta = event.clientX - startX;
+      if (!dragged && Math.abs(delta) > DRAG_THRESHOLD_PX) {
+        dragged = true;
+        this.scrollArea.classList.add("dragging");
+      }
+      if (dragged) this.scrollArea.scrollLeft = startScrollLeft - delta;
+    };
+
+    const suppressNextClick = (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      this.scrollArea.removeEventListener("click", suppressNextClick, true);
+    };
+
+    const onMouseUp = () => {
+      if (dragging && dragged) {
+        this.scrollArea.addEventListener("click", suppressNextClick, true);
+      }
+      this.scrollArea.classList.remove("dragging");
+      dragging = false;
+      dragged = false;
+    };
+
+    this.scrollArea.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+
+    this._unwireDragPan = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }
+
+  /** Starts a reorder-candidate for `tab`/`button` on the button's own
+   * mousedown, unless it originated on the close button or an in-progress
+   * rename input (both can be descendants of the tab button — neither
+   * should ever start a drag). Always stops propagation FIRST, regardless
+   * of that check, so `_wireDragPan`'s strip-panning never engages for a
+   * press that started on ANY part of a tab (close button included) — only
+   * a press on genuinely empty strip background should pan it. */
+  _maybeStartReorder(tab, button, event) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    if (event.target.closest(".project-tab-close, .project-tab-rename-input")) return;
+    this._reorderCandidate = { tab, button, startX: event.clientX, dragging: false };
+  }
+
+  /** @param {number} clientX @param {HTMLElement} excludeButton
+   * @returns {number} how many of the OTHER tab buttons' midpoints `clientX`
+   * has moved past — exactly the index `ProjectSession::reorder`/
+   * `project_reorder_tab` expects (computed against the list with the
+   * dragged tab already removed, same as the backend's own `Vec::insert`
+   * semantics). */
+  _dropIndexFor(clientX, excludeButton) {
+    const siblings = [...this.scrollArea.children].filter((el) => el !== excludeButton);
+    for (let i = 0; i < siblings.length; i++) {
+      const rect = siblings[i].getBoundingClientRect();
+      if (clientX < rect.left + rect.width / 2) return i;
+    }
+    return siblings.length;
+  }
+
+  /** Click-and-hold a tab, then move left/right to reposition it in the
+   * strip. Below `DRAG_THRESHOLD_PX`, a mousedown/mouseup pair on a tab is
+   * left alone as its normal click (activate/open) — same threshold
+   * discipline as `_wireDragPan`. */
+  _wireReorderDrag() {
+    const onMouseMove = (event) => {
+      const state = this._reorderCandidate;
+      if (!state) return;
+      const delta = event.clientX - state.startX;
+      if (!state.dragging && Math.abs(delta) > DRAG_THRESHOLD_PX) {
+        state.dragging = true;
+        state.button.classList.add("reordering");
+      }
+      if (state.dragging) state.button.style.transform = `translateX(${delta}px)`;
+    };
+
+    const onMouseUp = (event) => {
+      const state = this._reorderCandidate;
+      this._reorderCandidate = null;
+      if (!state) return;
+      state.button.classList.remove("reordering");
+      state.button.style.transform = "";
+      if (!state.dragging) return;
+
+      const toIndex = this._dropIndexFor(event.clientX, state.button);
+      this.projectStore.reorderTab(state.tab.id, toIndex);
+
+      // One-shot suppression (same pattern as `_wireDragPan`'s
+      // `suppressNextClick`) — dropping a dragged tab must never also fire
+      // its own "activate" click.
+      const suppressClick = (clickEvent) => {
+        clickEvent.stopPropagation();
+        clickEvent.preventDefault();
+        state.button.removeEventListener("click", suppressClick, true);
+      };
+      state.button.addEventListener("click", suppressClick, true);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+
+    this._unwireReorderDrag = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
   }
 
   /**
@@ -61,9 +271,9 @@ export class ProjectTabStrip {
   }
 
   _render() {
-    this.root.innerHTML = "";
+    this.scrollArea.innerHTML = "";
     for (const tab of this.projectStore.tabs) {
-      this.root.appendChild(this._buildTabButton(tab));
+      this.scrollArea.appendChild(this._buildTabButton(tab));
     }
     this._notifyActivationChange();
   }
@@ -109,6 +319,7 @@ export class ProjectTabStrip {
     });
     button.appendChild(closeButton);
 
+    button.addEventListener("mousedown", (event) => this._maybeStartReorder(tab, button, event));
     button.addEventListener("click", () => {
       this.projectStore.setActiveTab(tab.id);
     });

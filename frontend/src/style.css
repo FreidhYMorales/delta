@@ -1322,11 +1322,55 @@ body {
   gap: var(--space-xs);
 }
 
+/* Outer row: the scrollable tab list plus the nav buttons docked at the
+ * right edge, outside the scrolling area (follow-up fix — many open tabs
+ * used to squash every name/badge instead of overflowing). */
 .project-tab-strip {
+  display: flex;
+  align-items: center;
+}
+
+.project-tab-strip-scroll {
   display: flex;
   align-items: center;
   gap: var(--space-2xs);
   overflow-x: auto;
+  /* A flex child's default min-width is `auto` (its content's natural
+   * width), which would keep growing this to fit every tab and never
+   * actually overflow/scroll — `min-width: 0` is what lets `overflow-x:
+   * auto` above actually kick in once there are more tabs than fit. */
+  min-width: 0;
+  flex: 1;
+  cursor: grab;
+}
+
+.project-tab-strip-scroll.dragging {
+  cursor: grabbing;
+}
+
+.project-tab-strip-nav {
+  display: flex;
+  gap: var(--space-2xs);
+  flex-shrink: 0;
+  padding-left: var(--space-xs);
+}
+
+.project-tab-strip-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: none;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.project-tab-strip-nav-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
 }
 
 .project-tab {
@@ -1339,10 +1383,25 @@ body {
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
+  /* Never shrink to fit — without this, flex's default shrink-to-fit
+   * squashes every name/badge down as more tabs open instead of letting
+   * `.project-tab-strip-scroll` overflow/scroll them. */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .project-tab.active {
   border-bottom-color: var(--accent);
+}
+
+/* Drag-to-reorder in progress (`ProjectTabStrip._wireReorderDrag`) — the
+ * dragged tab's own `translateX` follows the pointer via inline `style`,
+ * this just lifts it visually above its siblings while that's happening. */
+.project-tab.reordering {
+  position: relative;
+  z-index: 3;
+  opacity: 0.75;
+  background: var(--surface-2);
 }
 
 .project-tab-kind-badge {
