@@ -97,6 +97,21 @@ impl ProjectSession {
         let tab = self.tabs.remove(from);
         self.tabs.insert(to, tab);
     }
+
+    /// Empties the tab list WITHOUT resetting `next_tab_id` — used by
+    /// `project_new`/`project_open` (a full project replace) instead of
+    /// `*guard = ProjectSession::new()`, so a freshly created/loaded
+    /// project's tabs never reuse an id from the project it replaces.
+    /// `TabHost` (frontend) tracks a mounted document view by `TabId`
+    /// alone: reusing id 0 for a new project's first tab (every prior
+    /// `ProjectSession::new()` reset the allocator back to 0) collided
+    /// with whatever view was ALREADY mounted at id 0 — almost always
+    /// true, since the very first tab of every app session is id 0 —
+    /// leaving that stale, never-reloaded mount on screen instead of the
+    /// new project's actual first tab.
+    pub fn clear_tabs(&mut self) {
+        self.tabs.clear();
+    }
 }
 
 impl Default for ProjectSession {
@@ -120,6 +135,19 @@ mod tests {
         assert_ne!(b, c);
         assert!(a.0 < b.0);
         assert!(b.0 < c.0);
+    }
+
+    #[test]
+    fn clear_tabs_empties_the_list_but_keeps_allocating_past_the_highest_id_seen() {
+        let mut session = ProjectSession::new();
+        session.new_tab(MachineKind::Fa, "A");
+        let b = session.new_tab(MachineKind::Fa, "B");
+
+        session.clear_tabs();
+        assert!(session.tabs().is_empty());
+
+        let c = session.new_tab(MachineKind::Mealy, "C");
+        assert!(c.0 > b.0);
     }
 
     #[test]

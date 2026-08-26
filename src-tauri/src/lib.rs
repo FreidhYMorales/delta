@@ -71,6 +71,7 @@ pub fn run() {
       project::project_new_tab,
       project::project_close_tab,
       project::project_rename_tab,
+      project::project_reorder_tab,
       project::project_open,
       project::project_save,
     ])

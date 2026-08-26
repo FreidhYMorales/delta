@@ -112,9 +112,15 @@ fn clear_all_sessions(sessions: &Sessions) {
 /// Resets the project to a fresh, empty state — no tabs. Tab creation is a
 /// separate, explicit `project_new_tab` call (app-boot "start with one
 /// empty FA tab" behavior is PR11's job, not this command's).
+///
+/// Uses `ProjectSession::clear_tabs` rather than replacing the whole
+/// session with `ProjectSession::new()` — the latter also resets the
+/// `TabId` allocator back to 0, which a still-mounted frontend view from
+/// the project being replaced would collide with (see `clear_tabs`'s own
+/// doc comment).
 pub fn new_project(project: &Mutex<ProjectSession>, sessions: &Sessions) -> ProjectManifest {
     let mut guard = project.lock().expect("project session mutex poisoned");
-    *guard = ProjectSession::new();
+    guard.clear_tabs();
     clear_all_sessions(sessions);
     manifest_of(&guard, sessions)
 }
@@ -211,6 +217,30 @@ pub fn rename_tab(
     Ok(manifest_of(&guard, sessions))
 }
 
+/// Moves the tab `tab_id` to position `to_index` in the ordered tab list
+/// (drag-to-reorder, `ProjectTabStrip`). `to_index` is clamped to the last
+/// valid index rather than silently left a no-op like
+/// `ProjectSession::reorder` itself is on an out-of-range index — a drop
+/// past the last tab is an ordinary "move to the end" gesture, not an
+/// error. Unknown `tab_id` is an `Err`, same convention as `rename_tab`/
+/// `close_tab`.
+pub fn reorder_tab(
+    project: &Mutex<ProjectSession>,
+    sessions: &Sessions,
+    tab_id: TabId,
+    to_index: usize,
+) -> Result<ProjectManifest, String> {
+    let mut guard = project.lock().expect("project session mutex poisoned");
+    let from_index = guard
+        .tabs()
+        .iter()
+        .position(|t| t.id == tab_id)
+        .ok_or_else(|| format!("no tab with id {}", tab_id.0))?;
+    let clamped_to = to_index.min(guard.tabs().len().saturating_sub(1));
+    guard.reorder(from_index, clamped_to);
+    Ok(manifest_of(&guard, sessions))
+}
+
 /// Runtime document of any machine kind, already converted from its
 /// on-disk `MachineDoc` DTO — an intermediate so `open_project` finishes
 /// every fallible conversion *before* touching any live state (an
@@ -271,7 +301,7 @@ pub fn open_project(project: &Mutex<ProjectSession>, sessions: &Sessions, path: 
     }
 
     let mut guard = project.lock().expect("project session mutex poisoned");
-    *guard = ProjectSession::new();
+    guard.clear_tabs();
     clear_all_sessions(sessions);
     for (name, kind, doc) in loaded {
         let id = guard.new_tab(kind, name);
@@ -374,6 +404,21 @@ pub fn project_rename_tab(
 ) -> Result<ProjectManifest, String> {
     let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
     rename_tab(&project.0, &sessions, tab_id, new_name)
+}
+
+#[tauri::command]
+pub fn project_reorder_tab(
+    project: tauri::State<'_, ProjectState>,
+    fa: tauri::State<'_, Session>,
+    mealy: tauri::State<'_, MealySession>,
+    moore: tauri::State<'_, MooreSession>,
+    pda: tauri::State<'_, PdaSession>,
+    tm: tauri::State<'_, TmSession>,
+    tab_id: TabId,
+    to_index: usize,
+) -> Result<ProjectManifest, String> {
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    reorder_tab(&project.0, &sessions, tab_id, to_index)
 }
 
 #[tauri::command]
