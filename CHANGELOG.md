@@ -5,6 +5,8 @@ Versionado [semver](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.2.1] — 2026-08-26
+
 ### Agregado
 
 - CI (`ci.yml`) corriendo `cargo test --workspace` y `npm test` en cada
@@ -74,5 +76,6 @@ Definición formal, Verificación de cadenas), undo/redo transaccional,
 persistencia en JSON, e interoperabilidad de importación/exportación con
 el formato `.jff` de JFLAP.
 
+[0.2.1]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.1
 [0.2.0]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.0
 [0.1.0]: https://github.com/FreidhYMorales/delta/releases/tag/v0.1.0
