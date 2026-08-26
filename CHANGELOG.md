@@ -13,6 +13,13 @@ Versionado [semver](https://semver.org/lang/es/).
   pestaña individual (botón `×`, `Ctrl+W`) y salir de la app (cerrar la
   ventana) — antes solo protegía "Nuevo proyecto"/"Abrir proyecto".
 
+### Corregido
+
+- Las acciones de proyecto (Abrir/Guardar/Guardar como/Recientes/Nueva
+  pestaña/Renombrar pestaña) ahora muestran un aviso visible cuando fallan
+  (archivo borrado, nombre duplicado, etc.) — antes fallaban en silencio,
+  sin ningún indicio para el usuario.
+
 ## [0.2.0] — 2026-08-26
 
 ### Agregado
