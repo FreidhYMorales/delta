@@ -5,6 +5,8 @@ Versionado [semver](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.2.2] — 2026-08-27
+
 ### Agregado
 
 - Auto-actualización (`tauri-plugin-updater` + `tauri-plugin-process`): al
@@ -14,6 +16,21 @@ Versionado [semver](https://semver.org/lang/es/).
   (secrets `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD`) y ya no se marcan como
   "Pre-release" — el updater necesita que GitHub reconozca una release como
   "Latest" para poder resolverla.
+- "Organizar" ahora acomoda los estados en fila horizontal, de izquierda a
+  derecha según su distancia al estado inicial, en vez de un layout de
+  resorte que terminaba en un amontonamiento cruzado — un ciclo se detecta
+  y se excluye solo del cálculo de columnas, sin afectar cómo se dibuja.
+
+### Corregido
+
+- Dejar el campo de símbolo en blanco (o escribir "epsilon"/"ε") al crear
+  una transición ahora sí genera una transición épsilon real — antes se
+  perdía el pedido (se trataba como un prompt cancelado) o quedaba
+  interpretado como un símbolo literal "ε" del alfabeto, produciendo una
+  transición que se veía bien pero nunca disparaba en la simulación.
+- "Nuevo proyecto" ya abre una pestaña — antes dejaba la pantalla en
+  blanco y sin pestañas, dando la sensación de que la acción no hacía
+  nada.
 
 ## [0.2.1] — 2026-08-26
 
@@ -86,6 +103,7 @@ Definición formal, Verificación de cadenas), undo/redo transaccional,
 persistencia en JSON, e interoperabilidad de importación/exportación con
 el formato `.jff` de JFLAP.
 
+[0.2.2]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.2
 [0.2.1]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.1
 [0.2.0]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.0
 [0.1.0]: https://github.com/FreidhYMorales/delta/releases/tag/v0.1.0
