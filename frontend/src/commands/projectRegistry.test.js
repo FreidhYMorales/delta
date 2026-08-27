@@ -79,6 +79,16 @@ describe("project.new / project.open — unsaved-changes guard (confirmDiscardIf
     expect(ctx.projectStore.client.projectNew).toHaveBeenCalled();
   });
 
+  it("project.new also creates a first tab — projectNew() alone resets to a ZERO-tab project, which used to leave the user on a blank, tab-less screen (reported bug)", async () => {
+    const ctx = fakeCtx({});
+    const action = projectActions.find((a) => a.id === "project.new");
+
+    await action.run(ctx);
+
+    expect(ctx.projectStore.client.projectNewTab).toHaveBeenCalledWith("Fa", expect.any(String));
+    expect(ctx.projectStore.tabs.length).toBeGreaterThan(0);
+  });
+
   it("project.new does not proceed when the project is dirty and the user cancels", async () => {
     const confirmDiscard = vi.fn().mockResolvedValue("cancel");
     const ctx = fakeCtx({ confirmDiscard });
@@ -264,13 +274,13 @@ describe("reachability without any FA-specific context field (design D8)", () =>
     }
   });
 
-  it("project.new's run works end-to-end against the injected projectStore", async () => {
+  it("project.new's run works end-to-end against the injected projectStore, ending on a fresh first tab (not a blank, tab-less project)", async () => {
     const ctx = fakeCtx();
     const action = projectActions.find((a) => a.id === "project.new");
 
     await action.run(ctx);
 
-    expect(ctx.projectStore.tabs).toEqual([]);
+    expect(ctx.projectStore.tabs).not.toEqual([]);
   });
 
   it("project.open's run prompts a path and opens it, recording it as recent", async () => {

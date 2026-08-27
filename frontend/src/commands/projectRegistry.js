@@ -24,6 +24,7 @@
 // actions, which had never gotten it.
 
 import { showNotice } from "../ui/notice.js";
+import { machineKindLabel } from "../project/machineKinds.js";
 
 /** Registry `group` -> menu title (mirrors `MenuBar.js`'s own
  * `MENU_GROUP_TITLES`, same "single source of truth for the reachability
@@ -108,7 +109,14 @@ export const projectActions = [
     when: alwaysOn,
     run: async (ctx) => {
       if (!(await confirmDiscardIfDirty(ctx))) return;
+      // `projectStore.newProject()` alone resets to a project with ZERO
+      // tabs (`project_new`'s own contract — tab creation is a separate
+      // call) — main.js's boot sequence knows this and immediately follows
+      // it with a first `newTab`, but this menu action didn't, leaving the
+      // user on a completely blank, tab-less screen every time (reported
+      // bug: "Nuevo proyecto" looked like it did nothing / never finished).
       await ctx.projectStore.newProject();
+      await ctx.projectStore.newTab("Fa", `${machineKindLabel("Fa")} 1`);
     },
   },
 
