@@ -36,5 +36,13 @@
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZBN0U1MDRERDAyMkNCQUUKUldTdXl5TFFUVkIrK3B6Z3k5WHUzY1Z0UXA0MEk5L0gvOUFjS3JQVkthOW1JYmswQ1phbUNXcUsK",
+      "endpoints": [
+        "https://github.com/FreidhYMorales/delta/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -5,6 +5,16 @@ Versionado [semver](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Agregado
+
+- Auto-actualización (`tauri-plugin-updater` + `tauri-plugin-process`): al
+  arrancar, la app chequea en silencio si hay una release nueva publicada en
+  GitHub y, si la hay, pregunta antes de descargar, instalar y reiniciar.
+  Los builds de `release.yml` ahora se firman con una clave dedicada
+  (secrets `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD`) y ya no se marcan como
+  "Pre-release" — el updater necesita que GitHub reconozca una release como
+  "Latest" para poder resolverla.
+
 ## [0.2.1] — 2026-08-26
 
 ### Agregado

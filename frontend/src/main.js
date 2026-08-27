@@ -49,6 +49,7 @@ import { newTabModal } from "./ui/newTabModal.js";
 import { choiceModal } from "./ui/choiceModal.js";
 import { pickOpenProjectPath, pickSaveProjectPath } from "./ui/nativeDialog.js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { checkForUpdates } from "./updater.js";
 
 /** Registry `{actions, titles}` PER KIND — a plain DISPATCH lookup (which
  * registry to read from for a given active tab's `kind`), never a shared
@@ -158,6 +159,11 @@ async function main() {
   } catch {
     // Not running in a Tauri webview.
   }
+
+  // Fire-and-forget: never delays the boot sequence above, and its own
+  // try/catch (see updater.js) swallows a failed check silently — a bad
+  // network on launch is not worth blocking the user over.
+  void checkForUpdates();
 
   // Keep references reachable for the app's lifetime (avoids "unused"
   // lint/tooling noise on bindings this module never reads again by name).
