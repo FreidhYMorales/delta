@@ -227,6 +227,125 @@ function compactToTarget(pos, centerX, centerY, minSeparation, idealEdgeLength) 
 }
 
 /**
+ * Horizontal, "layered"/Sugiyama-style layout: every state is placed in a
+ * left-to-right column by its longest-path distance from `initialId`, so
+ * the overall flow reads left-to-right even when the automaton has a cycle
+ * — unlike `forceDirectedLayout`'s free-floating blob. A cycle is handled
+ * by classifying edges via one DFS from `initialId`: whichever edge closes
+ * a cycle (points back to a state still on the current DFS path) is
+ * excluded only from the column assignment — same as a hand-drawn diagram, where
+ * the "return" arm of a loop is naturally drawn curving backward rather
+ * than reshuffling the whole layout around it. The edge itself is still
+ * drawn normally; only its *layering* is ignored.
+ *
+ * Layering uses LONGEST path over the remaining (now acyclic) edges, not
+ * shortest (BFS): a shortcut edge under shortest-path layering can land
+ * entirely within one column, which is exactly the crossing this layout
+ * exists to avoid. A state with no incoming (non-back) edges — including
+ * one disconnected from `initialId` entirely, which this app already flags
+ * as "unreachable" elsewhere — starts its own column-0 chain rather than
+ * being dropped.
+ * @param {{id:number}[]} states
+ * @param {{from:number, to:number}[]} edges self-loops ignored, same convention as `forceDirectedLayout`
+ * @param {number} initialId
+ * @param {{centerX:number, centerY:number, columnSpacing?:number, rowSpacing?:number}} opts
+ * @returns {{id:number, x:number, y:number}[]}
+ */
+export function layeredLayout(states, edges, initialId, { centerX, centerY, columnSpacing = 160, rowSpacing = 90 }) {
+  const n = states.length;
+  if (n === 0) return [];
+  if (n === 1) return [{ id: states[0].id, x: centerX, y: centerY }];
+
+  const ids = states.map((s) => s.id);
+  const idSet = new Set(ids);
+  const rawAdj = new Map(ids.map((id) => [id, []]));
+  for (const e of edges) {
+    if (e.from === e.to || !idSet.has(e.from) || !idSet.has(e.to)) continue;
+    rawAdj.get(e.from).push(e.to);
+  }
+
+  // One iterative (explicit stack) 3-color DFS, `initialId` visited first so
+  // its own component's cycles get broken relative to it — this app's other
+  // from-scratch graph traversals (Tarjan's SCC in `engine/fa.rs`) avoid
+  // recursion the same way: a long chain of states must never risk blowing
+  // the JS stack. Every tree/forward/cross edge (destination UNVISITED or
+  // already DONE) is kept for layering; only a true back edge (destination
+  // still IN_PROGRESS, i.e. an ancestor on the current path) is dropped.
+  const UNVISITED = 0;
+  const IN_PROGRESS = 1;
+  const DONE = 2;
+  const color = new Map(ids.map((id) => [id, UNVISITED]));
+  const forwardAdj = new Map(ids.map((id) => [id, []]));
+  const inDegree = new Map(ids.map((id) => [id, 0]));
+  const visitStarts = idSet.has(initialId) ? [initialId, ...ids] : ids;
+  for (const start of visitStarts) {
+    if (color.get(start) !== UNVISITED) continue;
+    const stack = [{ id: start, next: 0 }];
+    color.set(start, IN_PROGRESS);
+    while (stack.length) {
+      const frame = stack[stack.length - 1];
+      const neighbors = rawAdj.get(frame.id);
+      if (frame.next >= neighbors.length) {
+        color.set(frame.id, DONE);
+        stack.pop();
+        continue;
+      }
+      const neighbor = neighbors[frame.next++];
+      if (color.get(neighbor) === IN_PROGRESS) continue; // back edge: skip for layering
+      forwardAdj.get(frame.id).push(neighbor);
+      inDegree.set(neighbor, inDegree.get(neighbor) + 1);
+      if (color.get(neighbor) === UNVISITED) {
+        color.set(neighbor, IN_PROGRESS);
+        stack.push({ id: neighbor, next: 0 });
+      }
+    }
+  }
+
+  // Kahn's algorithm for a topological order over `forwardAdj` — guaranteed
+  // acyclic (back edges were excluded above) — `initialId` dequeued first
+  // among equally-ready (in-degree 0) roots so its own chain claims column 0
+  // ahead of any other disconnected root.
+  const remainingInDegree = new Map(inDegree);
+  const queue = ids.filter((id) => remainingInDegree.get(id) === 0);
+  queue.sort((a, b) => (a === initialId ? -1 : b === initialId ? 1 : 0));
+  const order = [];
+  while (queue.length) {
+    const id = queue.shift();
+    order.push(id);
+    for (const next of forwardAdj.get(id)) {
+      remainingInDegree.set(next, remainingInDegree.get(next) - 1);
+      if (remainingInDegree.get(next) === 0) queue.push(next);
+    }
+  }
+
+  const layer = new Map(ids.map((id) => [id, 0]));
+  for (const id of order) {
+    for (const next of forwardAdj.get(id)) {
+      layer.set(next, Math.max(layer.get(next), layer.get(id) + 1));
+    }
+  }
+
+  const byLayer = new Map();
+  for (const id of ids) {
+    const l = layer.get(id);
+    if (!byLayer.has(l)) byLayer.set(l, []);
+    byLayer.get(l).push(id);
+  }
+
+  const layerCount = Math.max(...byLayer.keys()) + 1;
+  const startX = centerX - ((layerCount - 1) * columnSpacing) / 2;
+
+  const positions = [];
+  for (const [l, idsInLayer] of byLayer) {
+    const startY = centerY - ((idsInLayer.length - 1) * rowSpacing) / 2;
+    idsInLayer.forEach((id, i) => {
+      positions.push({ id, x: startX + l * columnSpacing, y: startY + i * rowSpacing });
+    });
+  }
+  return positions;
+}
+
+/**
  * Trim a straight edge's endpoints to the boundary of each state's circle
  * (radius `r`), so arrowheads land on the circle edge rather than its
  * center. Returns a self-loop descriptor when `from === to` (same point).

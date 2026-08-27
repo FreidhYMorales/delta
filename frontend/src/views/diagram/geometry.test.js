@@ -4,6 +4,7 @@ import {
   curvedEdgePath,
   edgeEndpoints,
   forceDirectedLayout,
+  layeredLayout,
   nextStateLabel,
   preferredLoopAngle,
   selfLoopPath,
@@ -135,6 +136,98 @@ describe("forceDirectedLayout", () => {
     // hundred px across, not the thousands a purely repulsive, unbounded
     // layout would produce.
     expect(maxDist).toBeLessThan(900);
+  });
+});
+
+describe("layeredLayout", () => {
+  it("returns [] for no states, and centers a single state", () => {
+    expect(layeredLayout([], [], 1, { centerX: 0, centerY: 0 })).toEqual([]);
+    const positions = layeredLayout([{ id: 1 }], [], 1, { centerX: 100, centerY: 50 });
+    expect(positions).toEqual([{ id: 1, x: 100, y: 50 }]);
+  });
+
+  it("places a linear chain in strictly increasing x order, one per column", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const edges = [{ from: 1, to: 2 }, { from: 2, to: 3 }];
+    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(1).x).toBeLessThan(byId.get(2).x);
+    expect(byId.get(2).x).toBeLessThan(byId.get(3).x);
+    // A straight chain has no branching, so every state shares one row.
+    expect(byId.get(1).y).toBe(byId.get(2).y);
+    expect(byId.get(2).y).toBe(byId.get(3).y);
+  });
+
+  it("uses the LONGEST path for layering, so a shortcut edge still points strictly forward", () => {
+    // 1 -> 2 -> 3, plus a shortcut 1 -> 3: shortest-path layering would put
+    // 3 one column after 1 (via the shortcut) — sharing 2's column and
+    // making the 2->3 edge point backward. Longest-path layering must place
+    // 3 strictly after 2 instead.
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const edges = [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 1, to: 3 }];
+    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(3).x).toBeGreaterThan(byId.get(2).x);
+  });
+
+  it("stacks branches sharing a column across distinct rows, not on top of each other", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const edges = [{ from: 1, to: 2 }, { from: 1, to: 3 }];
+    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(2).x).toBe(byId.get(3).x);
+    expect(byId.get(2).y).not.toBe(byId.get(3).y);
+  });
+
+  it("gives a state disconnected from the initial state its own column-0 row instead of dropping it", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const edges = [{ from: 2, to: 3 }]; // 1 is the initial state but isolated
+    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    expect(positions).toHaveLength(3);
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(1).x).toBe(byId.get(2).x);
+    expect(byId.get(3).x).toBeGreaterThan(byId.get(2).x);
+  });
+
+  it("still lays out left-to-right when the automaton has a cycle, by treating whichever edge closes it as a backward exception (not a column-breaking crossing)", () => {
+    // A direct 2-cycle: 1 -> 2 -> 1. DFS from 1 visits 2 via the forward
+    // edge; 2's edge back to 1 is the one closing the cycle, so it's
+    // excluded from layering only — 1 stays column 0, 2 column 1.
+    const states = [{ id: 1 }, { id: 2 }];
+    const edges = [{ from: 1, to: 2 }, { from: 2, to: 1 }];
+    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(2).x).toBeGreaterThan(byId.get(1).x);
+  });
+
+  it("reproduces the reported a*b-regex shape: a 2-cycle midway through an otherwise linear chain still reads left-to-right end to end", () => {
+    // t2 (initial) -eps-> t0 -a-> t1 -eps-> t0 (cycle), t1 -eps-> t3,
+    // t2 -eps-> t3 (direct shortcut), t3 -eps-> t4 -b-> t5.
+    const states = [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+    const edges = [
+      { from: 2, to: 0 },
+      { from: 0, to: 1 },
+      { from: 1, to: 0 },
+      { from: 1, to: 3 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 },
+      { from: 4, to: 5 },
+    ];
+    const positions = layeredLayout(states, edges, 2, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(2).x).toBeLessThan(byId.get(0).x);
+    expect(byId.get(0).x).toBeLessThan(byId.get(1).x);
+    expect(byId.get(1).x).toBeLessThan(byId.get(3).x);
+    expect(byId.get(3).x).toBeLessThan(byId.get(4).x);
+    expect(byId.get(4).x).toBeLessThan(byId.get(5).x);
+  });
+
+  it("ignores self-loops when computing columns", () => {
+    const states = [{ id: 1 }, { id: 2 }];
+    const edges = [{ from: 1, to: 1 }, { from: 1, to: 2 }];
+    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(2).x).toBeGreaterThan(byId.get(1).x);
   });
 });
 
