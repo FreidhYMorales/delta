@@ -16,6 +16,7 @@ import { PdaTableView } from "../../views/pdaTable/PdaTableView.js";
 import { PdaFormalView } from "../../views/pdaFormal/PdaFormalView.js";
 import { promptModal } from "../../ui/promptModal.js";
 import { applyGreekSymbols } from "../../store/greekSymbols.js";
+import { EPSILON } from "../../views/pdaDiagram/pdaLogic.js";
 import { pickOpenJsonPath, pickSaveJsonPath } from "../../ui/nativeDialog.js";
 import { showNotice } from "../../ui/notice.js";
 import { createTabs } from "../../ui/tabs.js";
@@ -63,17 +64,27 @@ export function mountPdaTab(tabId, hosts, client, collaborators = {}) {
       const state = docStore.getState(id);
       return promptModal("Rename state", state?.label ?? "");
     },
+    // Typing the literal "ε" glyph or its Greek name ("epsilon") means the
+    // same thing as leaving the field blank — otherwise it silently interns
+    // "ε" as a real symbol instead of the epsilon/empty-stack case, the same
+    // trap fixed for FA's promptSymbol.
     promptInput: async (existing = "") => {
       const value = await promptModal("Símbolo de entrada (vacío = ε)", existing);
-      return value ? applyGreekSymbols(value) : value;
+      if (!value) return value;
+      const converted = applyGreekSymbols(value);
+      return converted === EPSILON ? "" : converted;
     },
     promptPop: async (existing = "") => {
       const value = await promptModal("Símbolos a desapilar (vacío = ε)", existing);
-      return value ? applyGreekSymbols(value) : value;
+      if (!value) return value;
+      const converted = applyGreekSymbols(value);
+      return converted === EPSILON ? "" : converted;
     },
     promptPush: async (existing = "") => {
       const value = await promptModal("Símbolos a apilar (vacío = ε)", existing);
-      return value ? applyGreekSymbols(value) : value;
+      if (!value) return value;
+      const converted = applyGreekSymbols(value);
+      return converted === EPSILON ? "" : converted;
     },
     openFile: async () => {
       const path = await pickOpenJsonPath();

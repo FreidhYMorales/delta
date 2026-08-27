@@ -421,11 +421,20 @@ export class DiagramView {
     const from = this._pendingFrom;
     this._pendingFrom = null;
     const symbol = await this.ctx.promptSymbol();
-    if (!symbol) return;
+    // null = the prompt was cancelled, do nothing. "" = the field was left
+    // blank on purpose, meaning "make this an epsilon transition" (the
+    // prompt's own "blank = epsilon" label) — distinct from cancelling, so
+    // it must NOT be folded into the same early return as null.
+    if (symbol == null) return;
     const existing = this.docStore.getEdge(from, stateId);
-    const symbols = existing ? [...new Set([...existing.symbols, symbol])] : [symbol];
+    const isEpsilon = symbol === "";
+    const symbols = isEpsilon
+      ? (existing?.symbols ?? [])
+      : existing
+        ? [...new Set([...existing.symbols, symbol])]
+        : [symbol];
     await this.docStore.apply([
-      { op: "SetEdge", from, to: stateId, epsilon: existing?.epsilon ?? false, symbols },
+      { op: "SetEdge", from, to: stateId, epsilon: isEpsilon || (existing?.epsilon ?? false), symbols },
     ]);
   }
 

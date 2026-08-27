@@ -189,4 +189,102 @@ describe("mountFaTab ctx.promptSymbol Greek-letter conversion", () => {
 
     expect(await resultPromise).toBeNull();
   });
+
+  it("treats typing the Greek name 'epsilon' the same as leaving the field blank (epsilon requested), not as a literal ε symbol", async () => {
+    const hosts = fakeHosts();
+    const mount = mountFaTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptSymbol();
+    const input = document.querySelector(".prompt-modal-input");
+    input.value = "epsilon";
+    document.querySelector(".prompt-modal-ok").click();
+
+    expect(await resultPromise).toBe("");
+  });
+
+  it("treats typing the literal ε glyph the same as leaving the field blank (epsilon requested)", async () => {
+    const hosts = fakeHosts();
+    const mount = mountFaTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptSymbol();
+    const input = document.querySelector(".prompt-modal-input");
+    input.value = "ε";
+    document.querySelector(".prompt-modal-ok").click();
+
+    expect(await resultPromise).toBe("");
+  });
+
+  it("submitting the field genuinely blank means 'epsilon requested' (\"\"), distinct from a cancelled prompt (null)", async () => {
+    const hosts = fakeHosts();
+    const mount = mountFaTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const resultPromise = mount.ctx.promptSymbol();
+    document.querySelector(".prompt-modal-ok").click();
+
+    expect(await resultPromise).toBe("");
+  });
+});
+
+describe("mountFaTab ctx.layout.arrange (horizontal layered layout)", () => {
+  it("arranges an acyclic automaton left-to-right by longest-path column, not the force-directed blob", async () => {
+    const hosts = fakeHosts();
+    const client = fakeClient({
+      docSnapshot: vi.fn().mockResolvedValue({
+        revision: 0,
+        states: [
+          { id: 0, label: "q0", x: 0, y: 0, initial: true, accepting: false },
+          { id: 1, label: "q1", x: 0, y: 0, initial: false, accepting: false },
+          { id: 2, label: "q2", x: 0, y: 0, initial: false, accepting: true },
+        ],
+        edges: [
+          { from: 0, to: 1, epsilon: false, symbols: ["a"] },
+          { from: 1, to: 2, epsilon: false, symbols: ["b"] },
+        ],
+        derived: { classification: "Dfa", alphabet: ["a", "b"], unreachable: [] },
+      }),
+      docApply: vi.fn().mockResolvedValue({ revision: 1, patches: [], derived: { alphabet: [], classification: "Dfa", unreachable: [] } }),
+    });
+    const mount = mountFaTab(0, hosts, client);
+    await Promise.resolve();
+
+    await mount.ctx.layout.arrange();
+
+    const ops = client.docApply.mock.calls[0][0];
+    const byId = new Map(ops.map((op) => [op.id, op]));
+    expect(byId.get(0).x).toBeLessThan(byId.get(1).x);
+    expect(byId.get(1).x).toBeLessThan(byId.get(2).x);
+  });
+
+  it("still arranges left-to-right when the automaton has a cycle, instead of falling back to the force-directed blob (reported: an a*b-regex-shaped NFA with a small back-edge loop should still read left-to-right)", async () => {
+    const hosts = fakeHosts();
+    const client = fakeClient({
+      docSnapshot: vi.fn().mockResolvedValue({
+        revision: 0,
+        states: [
+          { id: 0, label: "q0", x: 0, y: 0, initial: true, accepting: false },
+          { id: 1, label: "q1", x: 0, y: 0, initial: false, accepting: false },
+          { id: 2, label: "q2", x: 0, y: 0, initial: false, accepting: true },
+        ],
+        edges: [
+          { from: 0, to: 1, epsilon: false, symbols: ["a"] },
+          { from: 1, to: 0, epsilon: true, symbols: [] }, // closes a cycle back to q0
+          { from: 1, to: 2, epsilon: false, symbols: ["b"] },
+        ],
+        derived: { classification: "Afn", alphabet: ["a", "b"], unreachable: [] },
+      }),
+      docApply: vi.fn().mockResolvedValue({ revision: 1, patches: [], derived: { alphabet: [], classification: "Afn", unreachable: [] } }),
+    });
+    const mount = mountFaTab(0, hosts, client);
+    await Promise.resolve();
+
+    await mount.ctx.layout.arrange();
+
+    const ops = client.docApply.mock.calls[0][0];
+    const byId = new Map(ops.map((op) => [op.id, op]));
+    expect(byId.get(0).x).toBeLessThan(byId.get(1).x);
+    expect(byId.get(1).x).toBeLessThan(byId.get(2).x);
+  });
 });

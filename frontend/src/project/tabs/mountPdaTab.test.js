@@ -138,4 +138,36 @@ describe("mountPdaTab prompt hooks' Greek-letter conversion", () => {
     document.querySelector(".prompt-modal-ok").click();
     expect(await pushPromise).toBe("γ a");
   });
+
+  it("treats typing 'epsilon' or the literal ε glyph the same as leaving promptInput blank, not as a literal ε symbol", async () => {
+    const hosts = fakeHosts();
+    const mount = mountPdaTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const epsilonNamePromise = mount.ctx.promptInput();
+    document.querySelector(".prompt-modal-input").value = "epsilon";
+    document.querySelector(".prompt-modal-ok").click();
+    expect(await epsilonNamePromise).toBe("");
+
+    const epsilonGlyphPromise = mount.ctx.promptInput();
+    document.querySelector(".prompt-modal-input").value = "ε";
+    document.querySelector(".prompt-modal-ok").click();
+    expect(await epsilonGlyphPromise).toBe("");
+  });
+
+  it("treats typing 'epsilon' the same as leaving promptPop/promptPush blank", async () => {
+    const hosts = fakeHosts();
+    const mount = mountPdaTab(0, hosts, fakeClient());
+    await Promise.resolve();
+
+    const popPromise = mount.ctx.promptPop();
+    document.querySelector(".prompt-modal-input").value = "epsilon";
+    document.querySelector(".prompt-modal-ok").click();
+    expect(await popPromise).toBe("");
+
+    const pushPromise = mount.ctx.promptPush();
+    document.querySelector(".prompt-modal-input").value = "epsilon";
+    document.querySelector(".prompt-modal-ok").click();
+    expect(await pushPromise).toBe("");
+  });
 });

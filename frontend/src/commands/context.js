@@ -22,7 +22,7 @@ export class ViewContext {
    *   layout?: {arrange: Function},
    *   promptPath?: (kind: 'open-jff'|'save-jff') => Promise<string|null>,
    *   promptLabel?: (stateId: number) => Promise<string|null>,
-   *   promptSymbol?: () => Promise<string|null>,
+   *   promptSymbol?: () => Promise<string|null>, // "" = epsilon requested, null = cancelled, non-empty = real symbol
    *   importJff?: (path: string) => Promise<void>,
    *   exportJff?: (path: string) => Promise<void>,
    *   simTrace?: (word: string[], budget?: object) => Promise<object>,

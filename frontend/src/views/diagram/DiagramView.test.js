@@ -451,6 +451,57 @@ describe("DiagramView create-transition tool", () => {
     ]);
   });
 
+  it("promptSymbol resolving with \"\" (blank submitted) creates a real epsilon transition, not a no-op (reported bug: 'blank = epsilon' never actually fired)", async () => {
+    const promptSymbol = vi.fn().mockReturnValue("");
+    const snapshot = twoStateSnapshot();
+    const client = {
+      docSnapshot: vi.fn().mockResolvedValue(snapshot),
+      docApply: vi.fn().mockResolvedValue({
+        revision: snapshot.revision + 1,
+        patches: [],
+        derived: snapshot.derived,
+      }),
+      docUndo: vi.fn(),
+      docRedo: vi.fn(),
+    };
+    const docStore = new DocStore(client);
+    await docStore.load();
+    const ctx = new ViewContext(docStore, { promptSymbol });
+    const container = document.createElement("div");
+    const view = new DiagramView(container, docStore, ctx);
+
+    ctx.setTool("create-transition");
+    container
+      .querySelector('circle[data-state-id="2"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await view._lastEditPromise;
+
+    expect(client.docApply).toHaveBeenCalledWith([
+      { op: "SetEdge", from: 2, to: 1, epsilon: true, symbols: [] },
+    ]);
+  });
+
+  it("promptSymbol resolving with null (cancelled) does nothing", async () => {
+    const promptSymbol = vi.fn().mockReturnValue(null);
+    const { container, ctx, client } = await setup();
+
+    ctx.setTool("create-transition");
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    ctx.promptSymbol = promptSymbol;
+    container
+      .querySelector('circle[data-state-id="2"]')
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.docApply).not.toHaveBeenCalled();
+  });
+
   it("marks the clicked source state with .pending-edge-source until a target is picked", async () => {
     const { container, ctx } = await setup();
     ctx.setTool("create-transition");

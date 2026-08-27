@@ -370,6 +370,41 @@ mod tests {
     }
 
     #[test]
+    fn diag_reported_astar_b_topology() {
+        // Reproduces the exact 5-state graph from the bug report: q0 -eps->
+        // q1, q0 -eps-> q3, q1 -a-> q2, q2 -eps-> q1, q2 -eps-> q3, q3 -b->
+        // q4 (accepting). Thompson-style a*b with the loop-back epsilon edge
+        // going q2->q1 instead of the more common q1<->q2 double-epsilon.
+        let mut doc = FaDoc::new();
+        let q0 = doc.add_state("q0", 0.0, 0.0).unwrap();
+        let q1 = doc.add_state("q1", 0.0, 0.0).unwrap();
+        let q2 = doc.add_state("q2", 0.0, 0.0).unwrap();
+        let q3 = doc.add_state("q3", 0.0, 0.0).unwrap();
+        let q4 = doc.add_state("q4", 0.0, 0.0).unwrap();
+        doc.add_epsilon_transition(q0, q1);
+        doc.add_epsilon_transition(q0, q3);
+        doc.add_transition(q1, q2, "a");
+        doc.add_epsilon_transition(q2, q1);
+        doc.add_epsilon_transition(q2, q3);
+        doc.add_transition(q3, q4, "b");
+        doc.set_initial(Some(q0));
+        doc.set_accepting(q4, true);
+
+        let engine = FaEngine::compile(&doc);
+        for (input_word, expected) in [
+            (&[][..], Outcome::Rejected),
+            (&["b"][..], Outcome::Accepted),
+            (&["a"][..], Outcome::Rejected),
+            (&["a", "b"][..], Outcome::Accepted),
+            (&["a", "a", "b"][..], Outcome::Accepted),
+        ] {
+            let input = word(&doc, input_word);
+            let trace = run_bounded(&engine, &input, Budget::default());
+            assert_eq!(trace.outcome, expected, "input {input_word:?}");
+        }
+    }
+
+    #[test]
     fn eps_closure_of_a_cycle_includes_every_member_but_nothing_reached_only_by_a_real_symbol() {
         let mut doc = FaDoc::new();
         let q0 = doc.add_state("q0", 0.0, 0.0).unwrap();

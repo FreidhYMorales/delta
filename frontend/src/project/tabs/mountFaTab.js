@@ -30,7 +30,7 @@ import { RegexView } from "../../views/regex/RegexView.js";
 import { GrammarView } from "../../views/grammar/GrammarView.js";
 import { TestingView } from "../../views/testing/TestingView.js";
 import { Toolbar } from "../../views/toolbar/Toolbar.js";
-import { forceDirectedLayout } from "../../views/diagram/geometry.js";
+import { forceDirectedLayout, layeredLayout } from "../../views/diagram/geometry.js";
 import { promptModal } from "../../ui/promptModal.js";
 import { pickOpenPath, pickSavePath } from "../../ui/nativeDialog.js";
 import { showNotice } from "../../ui/notice.js";
@@ -40,6 +40,7 @@ import { wireResizer } from "../../ui/resizer.js";
 import { wireSidebarToggle } from "../../ui/sidebarToggle.js";
 import { applyAutomatonModel } from "../../store/applyAutomatonModel.js";
 import { applyGreekSymbols } from "../../store/greekSymbols.js";
+import { EPSILON } from "../../views/table/tableLogic.js";
 import { docSnapshotToModel } from "../../views/formal/formalLogic.js";
 import { bindFaTab } from "../../tauri/tabClient.js";
 import { machineKindLabel } from "../machineKinds.js";
@@ -50,7 +51,16 @@ async function autoLayoutAction(docStore, ctx) {
   const states = docStore.getStates();
   if (!states.length) return undefined;
   const edges = docStore.getEdges();
-  const positions = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
+  // The horizontal layered layout handles cycles on its own (it breaks them
+  // via DFS for column-assignment purposes only, see its own doc comment) —
+  // it only needs a designated initial state to lay out from. Without one
+  // (mid-edit, before any state is marked initial) there's no meaningful
+  // "left-to-right from where" to lay out around, so fall back to the
+  // free-floating spring layout instead.
+  const initial = states.find((s) => s.initial);
+  const positions = initial
+    ? layeredLayout(states, edges, initial.id, { centerX: 300, centerY: 200 })
+    : forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
   const result = await docStore.apply(positions.map((p) => ({ op: "MoveState", id: p.id, x: p.x, y: p.y })));
   ctx.viewport.fitToWindow();
   return result;
@@ -122,7 +132,22 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
     },
     promptSymbol: async () => {
       const value = await promptModal("Transition symbol (blank = epsilon)");
-      return value ? applyGreekSymbols(value) : null;
+      // `promptModal` already distinguishes "cancelled" (null) from "blank,
+      // submitted" ("") — collapsing both into null here (the previous bug)
+      // made DiagramView's `if (!symbol) return;` treat "I want an epsilon
+      // transition" identically to "never mind", so the diagram's own
+      // documented "blank = epsilon" convention had no way to ever fire.
+      if (value == null) return null;
+      if (value === "") return "";
+      // Typing the literal "ε" glyph or its Greek name ("epsilon", which
+      // applyGreekSymbols converts to the same glyph) means the same thing
+      // as leaving the field blank — without this, it silently interns "ε"
+      // as a real alphabet symbol instead of setting the epsilon flag,
+      // producing a transition that looks identical in the diagram but
+      // never actually fires (reported bug: an a*b-shaped NFA where every
+      // non-empty input got stuck).
+      const converted = applyGreekSymbols(value);
+      return converted === EPSILON ? "" : converted;
     },
     promptPath: async (kind) => (kind === "open-jff" ? pickOpenPath() : pickSavePath()),
     // D12 cutover: always creates a brand-new Fa tab and imports into THAT
