@@ -48,7 +48,7 @@ vi.mock("./tauri/client.js", () => ({
     tabs: [{ id: 0, kind: "Fa", name: "Autómata Finito 1", revision: 0 }],
     revision: 0,
   }),
-  projectCloseTab: vi.fn(),
+  projectCloseTab: vi.fn().mockResolvedValue({ tabs: [], revision: 0 }),
   projectRenameTab: vi.fn(),
   projectOpen: vi.fn(),
   projectSave: vi.fn(),
@@ -103,5 +103,22 @@ describe("main.js quit guard (window close discards unsaved work the same way Nu
     // confirm, so the close proceeds without ever showing a dialog.
     expect(choiceModal).not.toHaveBeenCalled();
     expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+});
+
+describe("main.js global keybindings (commands/projectRegistry.js actions, not just their menu click)", () => {
+  it("Ctrl+W actually closes the active tab from the keyboard, not just from the Archivo menu", async () => {
+    const client = await import("./tauri/client.js");
+    await import("./main.js");
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "w", ctrlKey: true, bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.projectCloseTab).toHaveBeenCalled();
   });
 });

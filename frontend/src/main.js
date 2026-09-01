@@ -27,7 +27,7 @@
 import "./style.css";
 import * as client from "./tauri/client.js";
 import { MenuBar, MENU_GROUP_TITLES } from "./views/menubar/MenuBar.js";
-import { actions } from "./commands/registry.js";
+import { actions, keybindingOf } from "./commands/registry.js";
 import { MEALY_MENU_GROUP_TITLES, mealyActions } from "./commands/mealyRegistry.js";
 import { MOORE_MENU_GROUP_TITLES, mooreActions } from "./commands/mooreRegistry.js";
 import { PDA_MENU_GROUP_TITLES, pdaActions } from "./commands/pdaRegistry.js";
@@ -39,6 +39,7 @@ import {
   PROJECT_MENU_GROUP_TITLES,
   confirmDiscardIfDirty,
   confirmDiscardTabIfDirty,
+  findProjectActionByKeybinding,
 } from "./commands/projectRegistry.js";
 import { ProjectTabStrip } from "./views/projectTabs/ProjectTabStrip.js";
 import { TabHost } from "./project/TabHost.js";
@@ -159,6 +160,25 @@ async function main() {
   } catch {
     // Not running in a Tauri webview.
   }
+
+  // Project-level shortcuts (Ctrl+N/O/S/Shift+S/W) had a `keybinding` on
+  // their registry entry (commands/projectRegistry.js) purely as a menu
+  // display hint — nothing ever matched an actual key PRESS against it.
+  // `DiagramView._dispatchKey` only reads `commands/registry.js`'s own
+  // `actions` (a deliberately separate registry, design D8), so these never
+  // fired outside of clicking the Archivo menu (reported bug). Capture phase
+  // so this always sees the keydown before it reaches the diagram canvas —
+  // harmless, since no keybinding here collides with `registry.js`'s own.
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      const action = findProjectActionByKeybinding(keybindingOf(event));
+      if (!action || !action.when(projectCtx)) return;
+      event.preventDefault();
+      action.run(projectCtx);
+    },
+    true,
+  );
 
   // Fire-and-forget: never delays the boot sequence above, and its own
   // try/catch (see updater.js) swallows a failed check silently — a bad

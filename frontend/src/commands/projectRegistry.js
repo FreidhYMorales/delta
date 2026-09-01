@@ -259,3 +259,20 @@ const byId = new Map(projectActions.map((a) => [a.id, a]));
 export function findProjectAction(id) {
   return byId.get(id);
 }
+
+/**
+ * `registry.js`'s `findByKeybinding` counterpart for this separate registry
+ * (design D8: two independent registries, so two independent lookups — see
+ * this file's own header comment). Used by `main.js`'s document-level
+ * keydown dispatch: without it, `project.open`/`project.save`/etc. had a
+ * `keybinding` string only for the menu's own display hint (`formatKeybinding`
+ * in `MenuBar.js`) — nothing ever matched an actual key PRESS against it,
+ * since `DiagramView._dispatchKey` only ever looks up `registry.js`'s own
+ * `actions` (reported bug: every project-level shortcut, e.g. Ctrl+O, did
+ * nothing at all unless clicked from the Archivo menu).
+ * @param {string} key normalized keybinding, e.g. "ctrl+o" (see `keybindingOf`)
+ * @returns {object|undefined}
+ */
+export function findProjectActionByKeybinding(key) {
+  return projectActions.find((a) => a.keybinding === key);
+}
