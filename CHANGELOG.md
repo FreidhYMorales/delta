@@ -5,6 +5,20 @@ Versionado [semver](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.2.3] — 2026-08-31
+
+### Corregido
+
+- Los atajos de teclado a nivel de proyecto (Ctrl+N/O/S/Shift+S/W) no
+  disparaban nada — solo funcionaban al hacer clic en el menú Archivo. El
+  despachador de teclado del diagrama solo miraba el registro de acciones
+  de herramienta/estado, nunca el de proyecto.
+- Cerrar una pestaña o la ventana tras elegir "Descartar" en el diálogo de
+  cambios sin guardar no cerraba nada — faltaba el permiso
+  `core:window:allow-destroy` en las capabilities de Tauri, y el rechazo
+  de la promesa solo se veía en la consola de WebKitGTK, nunca en la
+  terminal de `tauri dev`.
+
 ## [0.2.2] — 2026-08-27
 
 ### Agregado
@@ -103,6 +117,7 @@ Definición formal, Verificación de cadenas), undo/redo transaccional,
 persistencia en JSON, e interoperabilidad de importación/exportación con
 el formato `.jff` de JFLAP.
 
+[0.2.3]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.3
 [0.2.2]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.2
 [0.2.1]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.1
 [0.2.0]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.0

@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.2.2"
+version = "0.2.3"
 description = "Delta — a JFLAP-inspired automata theory workbench (FA, Mealy, Moore, Pushdown, Turing Machine)"
 authors = ["FreidhYMorales"]
 license = "MIT"
