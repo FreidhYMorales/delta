@@ -7,6 +7,7 @@ import {
   layeredLayout,
   nextStateLabel,
   preferredLoopAngle,
+  routedEdgePath,
   selfLoopPath,
   statusSummary,
 } from "./geometry.js";
@@ -141,15 +142,15 @@ describe("forceDirectedLayout", () => {
 
 describe("layeredLayout", () => {
   it("returns [] for no states, and centers a single state", () => {
-    expect(layeredLayout([], [], 1, { centerX: 0, centerY: 0 })).toEqual([]);
-    const positions = layeredLayout([{ id: 1 }], [], 1, { centerX: 100, centerY: 50 });
+    expect(layeredLayout([], [], 1, { centerX: 0, centerY: 0 }).positions).toEqual([]);
+    const { positions } = layeredLayout([{ id: 1 }], [], 1, { centerX: 100, centerY: 50 });
     expect(positions).toEqual([{ id: 1, x: 100, y: 50 }]);
   });
 
   it("places a linear chain in strictly increasing x order, one per column", () => {
     const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
     const edges = [{ from: 1, to: 2 }, { from: 2, to: 3 }];
-    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
     const byId = new Map(positions.map((p) => [p.id, p]));
     expect(byId.get(1).x).toBeLessThan(byId.get(2).x);
     expect(byId.get(2).x).toBeLessThan(byId.get(3).x);
@@ -165,7 +166,7 @@ describe("layeredLayout", () => {
     // 3 strictly after 2 instead.
     const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
     const edges = [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 1, to: 3 }];
-    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
     const byId = new Map(positions.map((p) => [p.id, p]));
     expect(byId.get(3).x).toBeGreaterThan(byId.get(2).x);
   });
@@ -173,7 +174,7 @@ describe("layeredLayout", () => {
   it("stacks branches sharing a column across distinct rows, not on top of each other", () => {
     const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
     const edges = [{ from: 1, to: 2 }, { from: 1, to: 3 }];
-    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
     const byId = new Map(positions.map((p) => [p.id, p]));
     expect(byId.get(2).x).toBe(byId.get(3).x);
     expect(byId.get(2).y).not.toBe(byId.get(3).y);
@@ -182,7 +183,7 @@ describe("layeredLayout", () => {
   it("gives a state disconnected from the initial state its own column-0 row instead of dropping it", () => {
     const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
     const edges = [{ from: 2, to: 3 }]; // 1 is the initial state but isolated
-    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
     expect(positions).toHaveLength(3);
     const byId = new Map(positions.map((p) => [p.id, p]));
     expect(byId.get(1).x).toBe(byId.get(2).x);
@@ -195,7 +196,7 @@ describe("layeredLayout", () => {
     // excluded from layering only — 1 stays column 0, 2 column 1.
     const states = [{ id: 1 }, { id: 2 }];
     const edges = [{ from: 1, to: 2 }, { from: 2, to: 1 }];
-    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
     const byId = new Map(positions.map((p) => [p.id, p]));
     expect(byId.get(2).x).toBeGreaterThan(byId.get(1).x);
   });
@@ -213,7 +214,7 @@ describe("layeredLayout", () => {
       { from: 3, to: 4 },
       { from: 4, to: 5 },
     ];
-    const positions = layeredLayout(states, edges, 2, { centerX: 0, centerY: 0 });
+    const { positions } = layeredLayout(states, edges, 2, { centerX: 0, centerY: 0 });
     const byId = new Map(positions.map((p) => [p.id, p]));
     expect(byId.get(2).x).toBeLessThan(byId.get(0).x);
     expect(byId.get(0).x).toBeLessThan(byId.get(1).x);
@@ -225,9 +226,122 @@ describe("layeredLayout", () => {
   it("ignores self-loops when computing columns", () => {
     const states = [{ id: 1 }, { id: 2 }];
     const edges = [{ from: 1, to: 1 }, { from: 1, to: 2 }];
-    const positions = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
     const byId = new Map(positions.map((p) => [p.id, p]));
     expect(byId.get(2).x).toBeGreaterThan(byId.get(1).x);
+  });
+
+  it("aligns a diamond's parallel branches by their own connections, not plain insertion order", () => {
+    // 1 -> 2, 1 -> 3 fan out (tied so far); 3 -> 4, 2 -> 5 cross-wire the
+    // fan-back-in so insertion order (states declared as ...,4,5) and
+    // connection order disagree — a real barycenter sweep must carry 2/5's
+    // and 3/4's shared branch alignment through, not just keep declaration
+    // order.
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+    const edges = [
+      { from: 1, to: 2 },
+      { from: 1, to: 3 },
+      { from: 3, to: 4 },
+      { from: 2, to: 5 },
+    ];
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(2).y).toBeLessThan(byId.get(3).y);
+    // 5 hangs off 2, 4 hangs off 3 — insertion order alone (4 declared
+    // before 5) would put 4 first; the sweep must instead follow 2/5's and
+    // 3/4's shared branch.
+    expect(byId.get(5).y).toBeLessThan(byId.get(4).y);
+  });
+
+  it("keeps a dead-end branch's relative position instead of collapsing every unaligned state to the front", () => {
+    // 1 fans out to 2, 3, 4 (tied, no signal yet); only 4 continues on to
+    // 6. On the sweep's backward pass, 2 and 3 are both dead ends (no
+    // successor to align with) — 3 must stay behind 4 once 4's real
+    // connection pulls it forward, not tie with 2 at the front just
+    // because both lack a signal.
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 6 }];
+    const edges = [
+      { from: 1, to: 2 },
+      { from: 1, to: 3 },
+      { from: 1, to: 4 },
+      { from: 4, to: 6 },
+    ];
+    const { positions } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    expect(byId.get(4).y).toBeLessThan(byId.get(3).y);
+  });
+
+  it("routes a skip edge (spanning >=2 layers) through dummy waypoints, one per intermediate layer, but gives an adjacent-layer edge no route at all", () => {
+    // 1 -> 2 -> 3 -> 4 (chain, one layer apart each) plus a direct 1 -> 4
+    // skip that jumps 3 layers — the skip must get a waypoint for layer 1
+    // (2's column) and layer 2 (3's column), landing at those columns'
+    // exact x, while the adjacent-layer edges (1:2, 2:3, 3:4) get no route
+    // at all — they keep today's plain rendering untouched.
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+    const edges = [
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 },
+      { from: 1, to: 4 },
+    ];
+    const { positions, edgeWaypoints } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+
+    expect(edgeWaypoints.has("1:2")).toBe(false);
+    expect(edgeWaypoints.has("2:3")).toBe(false);
+    expect(edgeWaypoints.has("3:4")).toBe(false);
+
+    const route = edgeWaypoints.get("1:4");
+    expect(route).toHaveLength(2);
+    expect(route[0].x).toBe(byId.get(2).x);
+    expect(route[1].x).toBe(byId.get(3).x);
+  });
+
+  it("gives two independent skip edges through the same intermediate layers distinct dummy rows, not one collapsed lane", () => {
+    // Two parallel 3-hop paths from the same initial state (1->2->3->4 and
+    // 1->5->6->7), each with its own direct skip (1->4, 1->7) crossing the
+    // exact same intermediate layers (1 and 2) — the two skips' dummy
+    // chains must stay distinguishable rows at every shared layer, not
+    // collide into the same slot (the actual "5 overlapping lines" bug
+    // reported: several distinct edges landing on the same visual lane).
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }, { id: 6 }, { id: 7 }];
+    const edges = [
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 },
+      { from: 1, to: 5 },
+      { from: 5, to: 6 },
+      { from: 6, to: 7 },
+      { from: 1, to: 4 },
+      { from: 1, to: 7 },
+    ];
+    const { edgeWaypoints } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const routeA = edgeWaypoints.get("1:4");
+    const routeB = edgeWaypoints.get("1:7");
+    expect(routeA).toHaveLength(2);
+    expect(routeB).toHaveLength(2);
+    expect(routeA[0].y).not.toBe(routeB[0].y);
+    expect(routeA[1].y).not.toBe(routeB[1].y);
+  });
+
+  it("spaces a dummy waypoint from a neighboring real state more tightly than two real states would be spaced, so routing lanes don't balloon the diagram's height", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+    const edges = [
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 },
+      { from: 1, to: 4 },
+    ];
+    const { positions, edgeWaypoints } = layeredLayout(states, edges, 1, {
+      centerX: 0,
+      centerY: 0,
+      rowSpacing: 90,
+    });
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    const route = edgeWaypoints.get("1:4");
+    // Layer 1 holds exactly state 2 and this route's dummy waypoint.
+    const gap = Math.abs(byId.get(2).y - route[0].y);
+    expect(gap).toBeLessThan(90);
   });
 });
 
@@ -373,6 +487,40 @@ describe("curvedEdgePath", () => {
     const bToA = curvedEdgePath(b, a, R, -1);
     expect(Math.sign(aToB.labelY)).not.toBe(Math.sign(bToA.labelY));
     expect(Math.sign(aToB.labelY)).not.toBe(0);
+  });
+});
+
+describe("routedEdgePath", () => {
+  it("degenerates to a straight line for exactly 2 points (no waypoints)", () => {
+    const { d } = routedEdgePath([{ x: 0, y: 0 }, { x: 200, y: 0 }]);
+    expect(d).toBe("M0,0 L200,0");
+  });
+
+  it("produces smooth cubic-bezier segments (not sharp L joints) through 1+ waypoints", () => {
+    const points = [{ x: 0, y: 0 }, { x: 100, y: 40 }, { x: 200, y: 0 }];
+    const { d } = routedEdgePath(points);
+    expect(d).not.toContain("L");
+    expect(d.match(/C/g)).toHaveLength(2);
+  });
+
+  it("the curve passes exactly through every original point, including interior waypoints", () => {
+    // A cubic bezier always starts at its own P0 and ends at its own P3 —
+    // only the tangents (control points) are approximated by the clamped
+    // Catmull-Rom conversion, so every input point must appear verbatim as
+    // either the initial M or some segment's end coordinates.
+    const points = [{ x: 0, y: 0 }, { x: 100, y: 40 }, { x: 200, y: -20 }, { x: 300, y: 0 }];
+    const { d } = routedEdgePath(points);
+    for (const p of points) {
+      expect(d).toContain(`${p.x},${p.y}`);
+    }
+  });
+
+  it("labelGap pushes the label away from the curve, not directly on top of it", () => {
+    const points = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }];
+    const onCurve = routedEdgePath(points, 0);
+    const withGap = routedEdgePath(points, 12);
+    const dist = Math.hypot(withGap.labelX - onCurve.labelX, withGap.labelY - onCurve.labelY);
+    expect(dist).toBeCloseTo(12, 5);
   });
 });
 

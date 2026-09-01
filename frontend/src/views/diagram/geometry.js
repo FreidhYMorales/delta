@@ -248,13 +248,22 @@ function compactToTarget(pos, centerX, centerY, minSeparation, idealEdgeLength) 
  * @param {{id:number}[]} states
  * @param {{from:number, to:number}[]} edges self-loops ignored, same convention as `forceDirectedLayout`
  * @param {number} initialId
- * @param {{centerX:number, centerY:number, columnSpacing?:number, rowSpacing?:number}} opts
- * @returns {{id:number, x:number, y:number}[]}
+ * @param {{centerX:number, centerY:number, columnSpacing?:number, rowSpacing?:number, edgeSpacing?:number}} opts
+ *   `edgeSpacing`: gap between two adjacent row slots when either one is a
+ *   dummy/routing waypoint rather than a real state (see below) — smaller
+ *   than `rowSpacing` so a skip edge's own lane doesn't balloon the
+ *   diagram's height just to keep it separate from real states.
+ * @returns {{positions: {id:number, x:number, y:number}[], edgeWaypoints: Map<string, {x:number,y:number}[]>}}
  */
-export function layeredLayout(states, edges, initialId, { centerX, centerY, columnSpacing = 160, rowSpacing = 90 }) {
+export function layeredLayout(
+  states,
+  edges,
+  initialId,
+  { centerX, centerY, columnSpacing = 160, rowSpacing = 90, edgeSpacing = 28 },
+) {
   const n = states.length;
-  if (n === 0) return [];
-  if (n === 1) return [{ id: states[0].id, x: centerX, y: centerY }];
+  if (n === 0) return { positions: [], edgeWaypoints: new Map() };
+  if (n === 1) return { positions: [{ id: states[0].id, x: centerX, y: centerY }], edgeWaypoints: new Map() };
 
   const ids = states.map((s) => s.id);
   const idSet = new Set(ids);
@@ -332,17 +341,142 @@ export function layeredLayout(states, edges, initialId, { centerX, centerY, colu
     byLayer.get(l).push(id);
   }
 
-  const layerCount = Math.max(...byLayer.keys()) + 1;
+  const realLayerNums = [...byLayer.keys()].sort((a, b) => a - b);
+  const layerCount = realLayerNums[realLayerNums.length - 1] + 1;
   const startX = centerX - ((layerCount - 1) * columnSpacing) / 2;
 
+  // Edge normalization (Sugiyama's own term): an edge spanning >=2 layers
+  // gets a chain of dummy waypoints, one per intermediate layer it
+  // crosses — every OTHER phase below (row ordering, coordinate
+  // assignment) then treats a dummy exactly like a real state, so a skip
+  // edge gets its own row/lane instead of being drawn as one plain line
+  // straight across whatever real states happen to sit in between. This
+  // is what actually fixes the reported "hasta 5 líneas superpuestas" —
+  // without dummies, a distant `from`/`to` pair never even participates in
+  // the barycenter sweep below (its two endpoints are never in adjacent
+  // layers to each other), so nothing was ever pulling separate skip edges
+  // apart. Uses `layer` (every state's already-resolved layer number)
+  // rather than `forwardAdj`, so this applies uniformly whether the DFS
+  // above classified this particular edge as forward or back — a
+  // long-range back edge deserves its own lane too, same reasoning.
+  const dummyChains = new Map(); // edgeKey (`${from}:${to}`) -> ordered dummy id[]
+  for (const e of edges) {
+    if (e.from === e.to || !idSet.has(e.from) || !idSet.has(e.to)) continue;
+    const layerFrom = layer.get(e.from);
+    const layerTo = layer.get(e.to);
+    if (Math.abs(layerTo - layerFrom) < 2) continue;
+    const step = layerTo > layerFrom ? 1 : -1;
+    const chain = [];
+    for (let l = layerFrom + step; l !== layerTo; l += step) {
+      const dummyId = `dummy:${e.from}->${e.to}@${l}`;
+      chain.push(dummyId);
+      if (!byLayer.has(l)) byLayer.set(l, []);
+      byLayer.get(l).push(dummyId);
+    }
+    dummyChains.set(`${e.from}:${e.to}`, chain);
+  }
+  const isDummyId = (id) => typeof id === "string";
+  // Recomputed AFTER dummy insertion — a chain never reaches outside
+  // [0, layerCount-1] (both endpoints already live in that range), so
+  // `layerCount`/`startX` above stay correct; this just also picks up any
+  // layer that had zero real states but now holds a dummy passing through.
+  const layerNums = [...byLayer.keys()].sort((a, b) => a - b);
+
+  // Barycenter/median sweep (Sugiyama's own row-ordering step, the same
+  // idea Graphviz `dot` uses) — the column assignment above says nothing
+  // about ROW order within a layer, so two branches sharing a column
+  // otherwise just keep whatever order they happened to be declared in,
+  // which is exactly what left a Thompson-construction-style diamond (a
+  // parallel pair of states, or a state re-merging after a bypass) looking
+  // arbitrarily staggered instead of reading as one clean shape. Row
+  // adjacency deliberately uses the full (undirected) `edges` list, not
+  // just `forwardAdj` — a back edge excluded from layering above (e.g. a
+  // Kleene-star's loop-back) still pulls its row toward whatever it
+  // connects to. A routed (>=2-layer) edge contributes its CHAIN links
+  // (from<->dummy_1<->...<->to) instead of the raw far-apart pair — that
+  // raw pair was never usable by the sweep anyway (its endpoints are never
+  // in "the adjacent layer" to each other), so this only adds signal, it
+  // never removes any real-state alignment that existed before.
+  const adjAll = new Map();
+  for (const l of layerNums) {
+    for (const id of byLayer.get(l)) adjAll.set(id, new Set());
+  }
+  for (const e of edges) {
+    if (e.from === e.to || !idSet.has(e.from) || !idSet.has(e.to)) continue;
+    const chain = dummyChains.get(`${e.from}:${e.to}`);
+    const sequence = chain && chain.length ? [e.from, ...chain, e.to] : [e.from, e.to];
+    for (let i = 0; i < sequence.length - 1; i++) {
+      adjAll.get(sequence[i]).add(sequence[i + 1]);
+      adjAll.get(sequence[i + 1]).add(sequence[i]);
+    }
+  }
+
+  const rowOrder = new Map(layerNums.map((l) => [l, [...byLayer.get(l)]]));
+  const position = new Map();
+  for (const l of layerNums) {
+    rowOrder.get(l).forEach((id, i) => position.set(id, { layer: l, index: i }));
+  }
+
+  const SWEEPS = 4;
+  for (let pass = 0; pass < SWEEPS; pass++) {
+    const forward = pass % 2 === 0;
+    const sweepOrder = forward ? layerNums : [...layerNums].reverse();
+    for (const l of sweepOrder) {
+      const currentIds = rowOrder.get(l);
+      if (currentIds.length < 2) continue;
+      const adjacentLayer = forward ? l - 1 : l + 1;
+      const withBarycenter = currentIds.map((id, i) => {
+        const neighborRows = [];
+        for (const neighbor of adjAll.get(id)) {
+          const pos = position.get(neighbor);
+          if (pos && pos.layer === adjacentLayer) neighborRows.push(pos.index);
+        }
+        // No neighbor in the adjacent layer this pass looks at (a dead end,
+        // or nothing placed there yet): keep this state's own current index
+        // as its sort key, so it holds its relative spot instead of every
+        // unaligned state collapsing to the front together.
+        const barycenter = neighborRows.length
+          ? neighborRows.reduce((sum, r) => sum + r, 0) / neighborRows.length
+          : i;
+        return { id, i, barycenter };
+      });
+      withBarycenter.sort((a, b) => a.barycenter - b.barycenter || a.i - b.i);
+      const newOrder = withBarycenter.map((w) => w.id);
+      rowOrder.set(l, newOrder);
+      newOrder.forEach((id, i) => position.set(id, { layer: l, index: i }));
+    }
+  }
+
+  // Coordinate assignment: a running cumulative offset rather than a flat
+  // `i * rowSpacing`, since adjacent slots no longer share one uniform
+  // gap — two real states keep `rowSpacing`, but a gap touching a dummy
+  // (dagre's "edgeSep", vs. "nodeSep" for real states) uses the tighter
+  // `edgeSpacing`, so a skip edge's own routing lane doesn't inflate the
+  // whole diagram's height just to stay separate from real content.
   const positions = [];
-  for (const [l, idsInLayer] of byLayer) {
-    const startY = centerY - ((idsInLayer.length - 1) * rowSpacing) / 2;
+  const dummyPositions = new Map();
+  for (const l of layerNums) {
+    const idsInLayer = rowOrder.get(l);
+    const x = startX + l * columnSpacing;
+    const cumulative = [0];
+    for (let i = 1; i < idsInLayer.length; i++) {
+      const gap = isDummyId(idsInLayer[i - 1]) || isDummyId(idsInLayer[i]) ? edgeSpacing : rowSpacing;
+      cumulative.push(cumulative[i - 1] + gap);
+    }
+    const startY = centerY - cumulative[cumulative.length - 1] / 2;
     idsInLayer.forEach((id, i) => {
-      positions.push({ id, x: startX + l * columnSpacing, y: startY + i * rowSpacing });
+      const y = startY + cumulative[i];
+      if (isDummyId(id)) dummyPositions.set(id, { x, y });
+      else positions.push({ id, x, y });
     });
   }
-  return positions;
+
+  const edgeWaypoints = new Map();
+  for (const [key, chain] of dummyChains) {
+    edgeWaypoints.set(key, chain.map((dummyId) => dummyPositions.get(dummyId)));
+  }
+
+  return { positions, edgeWaypoints };
 }
 
 /**
@@ -478,6 +612,68 @@ export function curvedEdgePath(from, to, r, side, offset = 36, labelGap = 12) {
     d: `M${p0.x},${p0.y} Q${control.x},${control.y} ${p1.x},${p1.y}`,
     labelX: label.x + px * labelGap * side,
     labelY: label.y + py * labelGap * side,
+  };
+}
+
+/**
+ * A smooth curve through an ordered point sequence (a routed skip edge's
+ * dummy-node waypoints, `from`/`to` already trimmed to their circle
+ * boundaries by the caller) — a clamped Catmull-Rom spline converted to
+ * cubic-bezier segments, so a multi-waypoint route reads as one continuous
+ * curve (matching `curvedEdgePath`'s arcs) instead of sharp angular joints
+ * at each dummy node. "Clamped" means the sequence's own first/last point
+ * stands in for the missing neighbor a real Catmull-Rom tangent would need
+ * at the ends, rather than extrapolating a virtual one — simple and correct
+ * for the short chains (3-5 points) a routed edge actually produces.
+ * @param {{x:number,y:number}[]} points already-trimmed, >= 2 points
+ * @param {number} [labelGap]
+ * @returns {{d: string, labelX: number, labelY: number}}
+ */
+export function routedEdgePath(points, labelGap = 12) {
+  const n = points.length;
+  if (n === 2) {
+    const [p0, p1] = points;
+    const mx = (p0.x + p1.x) / 2;
+    const my = (p0.y + p1.y) / 2;
+    const ddx = p1.x - p0.x;
+    const ddy = p1.y - p0.y;
+    const dist = Math.hypot(ddx, ddy) || 1;
+    return {
+      d: `M${p0.x},${p0.y} L${p1.x},${p1.y}`,
+      labelX: mx + (-ddy / dist) * labelGap,
+      labelY: my + (ddx / dist) * labelGap,
+    };
+  }
+
+  let d = `M${points[0].x},${points[0].y}`;
+  const segments = [];
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = points[i - 1] ?? points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] ?? points[i + 1];
+    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+    d += ` C${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}`;
+    segments.push({ start: p1, c1, c2, end: p2 });
+  }
+
+  // Middle segment's own true midpoint (same "close enough" reasoning as
+  // the rest of this route: segments are short and similar in length, not
+  // worth true arc-length parameterization) — direction for the label
+  // offset comes from that segment's own endpoints (a secant), same
+  // convention the rest of this file already uses for a straight/curved
+  // edge's label push.
+  const midIndex = Math.min(Math.floor((n - 1) / 2), segments.length - 1);
+  const mid = segments[midIndex];
+  const midpoint = cubicMidpoint(mid.start, mid.c1, mid.c2, mid.end);
+  const ddx = mid.end.x - mid.start.x;
+  const ddy = mid.end.y - mid.start.y;
+  const dist = Math.hypot(ddx, ddy) || 1;
+  return {
+    d,
+    labelX: midpoint.x + (-ddy / dist) * labelGap,
+    labelY: midpoint.y + (ddx / dist) * labelGap,
   };
 }
 

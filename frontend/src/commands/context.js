@@ -42,6 +42,16 @@ export class ViewContext {
     this.activeTool = "select";
     /** @type {Selection} */
     this.selection = null;
+    // Skip-edge dummy-node waypoints from the most recent "Organizar"
+    // (`layeredLayout`'s `edgeWaypoints`, `views/diagram/geometry.js`),
+    // keyed by the same `${from}:${to}` edge convention `DiagramView.js`
+    // already uses — a snapshot of that ONE layout call, not a persisted
+    // routing model. `DiagramView` clears it the instant the user starts
+    // manually dragging a state (any drag, not just one touching a routed
+    // edge — simpler to reason about than partial invalidation), so a
+    // stale route never lingers past whatever positions it was computed
+    // for; edges just revert to plain rendering until the next Organizar.
+    this.edgeRoutes = new Map();
     this._listeners = new Set();
 
     this.viewport = hooks.viewport ?? noopViewport();
@@ -137,6 +147,25 @@ export class ViewContext {
 
   clearSelection() {
     this.setSelection(null);
+  }
+
+  /** @param {Map<string, {x:number,y:number}[]>} routes */
+  setEdgeRoutes(routes) {
+    this.edgeRoutes = routes;
+    this._notify();
+  }
+
+  /** No-op (no `_notify()`) when already empty — `DiagramView` calls this
+   * unconditionally on every drag START, and its own subscriber is a full
+   * canvas rebuild; notifying on the (common) case where there was nothing
+   * to clear would force that full rebuild at the start of every single
+   * drag, defeating the whole point of patching just the dragged state
+   * during a drag (found by an actual regressed test: the drag-patch
+   * "same DOM node" tests started failing once this call was wired in). */
+  clearEdgeRoutes() {
+    if (this.edgeRoutes.size === 0) return;
+    this.edgeRoutes = new Map();
+    this._notify();
   }
 }
 

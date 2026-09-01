@@ -16,6 +16,7 @@ import {
   edgeEndpoints,
   nextStateLabel,
   preferredLoopAngle,
+  routedEdgePath,
   selfLoopPath,
   statusSummary,
 } from "./geometry.js";
@@ -28,6 +29,14 @@ const BASE_HEIGHT = 400;
  * to the arrow instead of sitting on top of it (matches `curvedEdgePath`/
  * `selfLoopPath`'s own `labelGap` default in geometry.js). */
 const EDGE_LABEL_GAP = 12;
+/** A routed skip edge's own lane (`edgeSpacing`, default 28 in
+ * `layeredLayout`) is much tighter than the `rowSpacing` gap between real
+ * states — its label needs to push further out than `EDGE_LABEL_GAP` to
+ * clear a neighboring lane's own line/label, without pushing so far it
+ * drifts INTO that neighboring lane instead (found live: labels from a
+ * routed edge and a nearby curved pair overlapping). Scoped to routed edges
+ * only — every other edge kind keeps `EDGE_LABEL_GAP`. */
+const ROUTED_EDGE_LABEL_GAP = 20;
 
 export class DiagramView {
   /**
@@ -110,7 +119,35 @@ export class DiagramView {
     const maxX = Math.max(...xs) + pad;
     const minY = Math.min(...ys) - pad;
     const maxY = Math.max(...ys) + pad;
-    this._setViewBox(minX, minY, Math.max(maxX - minX, 1), Math.max(maxY - minY, 1));
+    let w = Math.max(maxX - minX, 1);
+    let h = Math.max(maxY - minY, 1);
+    const cx = minX + w / 2;
+    const cy = minY + h / 2;
+
+    // Grow the tight content bbox to the pane's own aspect ratio before
+    // setting the viewBox — a mismatch (routine after the layered
+    // "Organizar" layout, which is wide and short) gets letterboxed by the
+    // SVG's default `preserveAspectRatio` (xMidYMid meet): empty margins on
+    // whichever axis is "too short". `_svgScale()`/`_svgPoint()` divide by
+    // the FULL element rect, not that letterboxed visible sub-rect, so the
+    // margined axis ends up under-scaled there — found live as "dragging a
+    // state feels sluggish vertically, perfect horizontally" right after
+    // Organizar. Padding here removes the letterbox (and the scale
+    // mismatch with it) instead of patching the drag math to compensate for
+    // it. Skipped when the element has no real layout yet (jsdom in tests,
+    // same zero-rect case `_svgScale()` already falls back on) — nothing to
+    // match against, so the tight bbox stands.
+    const rect = this.svg.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      const targetAspect = rect.width / rect.height;
+      const contentAspect = w / h;
+      if (contentAspect > targetAspect) {
+        h = w / targetAspect;
+      } else if (contentAspect < targetAspect) {
+        w = h * targetAspect;
+      }
+    }
+    this._setViewBox(cx - w / 2, cy - h / 2, w, h);
   }
 
   _buildStaticDom() {
@@ -263,6 +300,13 @@ export class DiagramView {
     if (this.ctx.activeTool === "select" && stateId != null) {
       const state = this.docStore.getState(stateId);
       if (!state) return;
+      // Any cached post-Organizar routing (`ctx.edgeRoutes`) is presumed
+      // stale the instant the user starts moving a state by hand — cleared
+      // wholesale (every route, not just ones touching this state) rather
+      // than partially invalidated, since "you're back to plain edges
+      // until you reorganize again" is simple to reason about and honest,
+      // not a silently wrong-looking bent line frozen mid-drag.
+      this.ctx.clearEdgeRoutes();
       this._dragState = {
         id: stateId,
         startClientX: event.clientX,
@@ -302,7 +346,12 @@ export class DiagramView {
       if (state) {
         state.x = x;
         state.y = y;
-        this._render();
+        // Not `_render()` — that tears down and rebuilds every state/edge in
+        // the whole diagram on every single mousemove, which visibly lags on
+        // anything but a tiny automaton. Patch just the dragged state and
+        // whatever edges touch it instead; everything else keeps its
+        // existing DOM nodes untouched.
+        this._patchDragPosition(drag.id);
       }
       return;
     }
@@ -457,6 +506,90 @@ export class DiagramView {
     this.svg.classList.toggle("awaiting-edge-target", this._pendingFrom != null);
   }
 
+  /**
+   * Geometry for one edge — shared by `_renderCanvas` (building a new `<path>`/
+   * `<line>`) and `_patchDragPosition` (updating an existing one's attributes
+   * during a drag) so the two never drift apart into two slightly different
+   * ideas of where an edge goes.
+   * @param {{from:number, to:number}} edge
+   * @param {Map<number, {x:number,y:number}>} positions
+   * @param {Map<number, Set<number>>} neighborsOf
+   * @param {(edge:{from:number,to:number}) => boolean} hasReverse
+   */
+  _computeEdgeGeometry(edge, positions, neighborsOf, hasReverse) {
+    const from = positions.get(edge.from);
+    const to = positions.get(edge.to);
+    if (!from || !to) return null;
+
+    // A skip edge routed through dummy waypoints by the most recent
+    // "Organizar" (`ctx.edgeRoutes`, set from `layeredLayout`'s
+    // `edgeWaypoints`) takes priority over the self-loop/mutual-pair/
+    // straight-line cases below — those never apply to a routed edge
+    // anyway (a route only ever exists for an edge spanning >=2 layers,
+    // never a self-loop or an adjacent-layer pair).
+    const route = this.ctx.edgeRoutes.get(`${edge.from}:${edge.to}`);
+    if (route && route.length) return this._computeRoutedEdgeGeometry(from, to, route);
+
+    let d = null;
+    let labelX;
+    let labelY;
+    const isSelfLoop = edge.from === edge.to;
+
+    if (isSelfLoop) {
+      const neighborPositions = [...(neighborsOf.get(edge.from) ?? [])]
+        .map((id) => positions.get(id))
+        .filter(Boolean);
+      const angleDeg = preferredLoopAngle(from, neighborPositions);
+      ({ d, labelX, labelY } = selfLoopPath(from, STATE_RADIUS, { angleDeg }));
+    } else if (hasReverse(edge)) {
+      const side = edge.from < edge.to ? 1 : -1;
+      ({ d, labelX, labelY } = curvedEdgePath(from, to, STATE_RADIUS, side));
+    }
+
+    let x1, y1, x2, y2;
+    if (!d) {
+      const geo = edgeEndpoints(from, to, STATE_RADIUS);
+      x1 = geo.x1;
+      y1 = geo.y1;
+      x2 = geo.x2;
+      y2 = geo.y2;
+      // Offset perpendicular to the line, not just a flat -4 in y — a flat
+      // offset only reads as "beside the line" when the line happens to be
+      // roughly horizontal; on any other angle the label still sits right
+      // on top of the stroke.
+      const ddx = to.x - from.x;
+      const ddy = to.y - from.y;
+      const dist = Math.hypot(ddx, ddy) || 1;
+      labelX = (from.x + to.x) / 2 + (-ddy / dist) * EDGE_LABEL_GAP;
+      labelY = (from.y + to.y) / 2 + (ddx / dist) * EDGE_LABEL_GAP;
+    }
+    return { d, x1, y1, x2, y2, labelX, labelY, isSelfLoop };
+  }
+
+  /**
+   * A skip edge's dummy-node waypoints as one smooth curve (`routedEdgePath`,
+   * geometry.js — a clamped Catmull-Rom spline, matching how
+   * `curvedEdgePath`'s mutual-pair arcs already look rather than sharp
+   * angular joints at each waypoint). Only the first and last point get
+   * trimmed to the circle boundary (`edgeEndpoints` already does exactly
+   * that math for a plain 2-point edge, reused here for just those two
+   * segments) — the waypoints themselves aren't circles, nothing trims
+   * around them. Uses `ROUTED_EDGE_LABEL_GAP`, not `EDGE_LABEL_GAP` — a
+   * routed edge's lane is tighter than normal row spacing (see that
+   * constant's own comment).
+   * @param {{x:number,y:number}} from
+   * @param {{x:number,y:number}} to
+   * @param {{x:number,y:number}[]} route ordered waypoints, `from` -> `to`
+   */
+  _computeRoutedEdgeGeometry(from, to, route) {
+    const points = [from, ...route, to];
+    const start = edgeEndpoints(points[0], points[1], STATE_RADIUS);
+    const end = edgeEndpoints(points[points.length - 2], points[points.length - 1], STATE_RADIUS);
+    const trimmed = [{ x: start.x1, y: start.y1 }, ...route, { x: end.x2, y: end.y2 }];
+    const { d, labelX, labelY } = routedEdgePath(trimmed, ROUTED_EDGE_LABEL_GAP);
+    return { d, labelX, labelY, isSelfLoop: false };
+  }
+
   _renderCanvas() {
     while (this.svg.firstChild) this.svg.removeChild(this.svg.firstChild);
     this.svg.appendChild(this._defs);
@@ -486,27 +619,21 @@ export class DiagramView {
     // drawn right now so they never pick the same side as each other.
     const hasReverse = (edge) => edges.some((e) => e.from === edge.to && e.to === edge.from);
 
+    // Rebuilt from scratch every full render (this method already tears
+    // down and recreates every element above) — `_patchDragPosition` reads
+    // these to update an in-progress drag's affected elements in place,
+    // without going through here again. `edgesByState` maps a state id to
+    // every edge touching it (both ends of a self-loop count once), so a
+    // drag can find exactly which edges need their geometry recomputed.
+    this._stateEls = new Map();
+    this._edgeEls = new Map();
+    this._edgesByState = new Map(states.map((s) => [s.id, []]));
+    this._geometryCtx = { positions, neighborsOf, hasReverse };
+
     for (const edge of edges) {
-      const from = positions.get(edge.from);
-      const to = positions.get(edge.to);
-      if (!from || !to) continue;
-
-      let d = null;
-      let labelX;
-      let labelY;
-      let isSelfLoop = false;
-
-      if (edge.from === edge.to) {
-        isSelfLoop = true;
-        const neighborPositions = [...(neighborsOf.get(edge.from) ?? [])]
-          .map((id) => positions.get(id))
-          .filter(Boolean);
-        const angleDeg = preferredLoopAngle(from, neighborPositions);
-        ({ d, labelX, labelY } = selfLoopPath(from, STATE_RADIUS, { angleDeg }));
-      } else if (hasReverse(edge)) {
-        const side = edge.from < edge.to ? 1 : -1;
-        ({ d, labelX, labelY } = curvedEdgePath(from, to, STATE_RADIUS, side));
-      }
+      const geo = this._computeEdgeGeometry(edge, positions, neighborsOf, hasReverse);
+      if (!geo) continue;
+      const { d, x1, y1, x2, y2, labelX, labelY, isSelfLoop } = geo;
 
       const tag = d ? "path" : "line";
       const el = document.createElementNS(SVG_NS, tag);
@@ -516,20 +643,10 @@ export class DiagramView {
         el.setAttribute("d", d);
         el.setAttribute("fill", "none");
       } else {
-        const geo = edgeEndpoints(from, to, STATE_RADIUS);
-        el.setAttribute("x1", String(geo.x1));
-        el.setAttribute("y1", String(geo.y1));
-        el.setAttribute("x2", String(geo.x2));
-        el.setAttribute("y2", String(geo.y2));
-        // Offset perpendicular to the line, not just a flat -4 in y — a flat
-        // offset only reads as "beside the line" when the line happens to be
-        // roughly horizontal; on any other angle the label still sits right
-        // on top of the stroke.
-        const ddx = to.x - from.x;
-        const ddy = to.y - from.y;
-        const dist = Math.hypot(ddx, ddy) || 1;
-        labelX = (from.x + to.x) / 2 + (-ddy / dist) * EDGE_LABEL_GAP;
-        labelY = (from.y + to.y) / 2 + (ddx / dist) * EDGE_LABEL_GAP;
+        el.setAttribute("x1", String(x1));
+        el.setAttribute("y1", String(y1));
+        el.setAttribute("x2", String(x2));
+        el.setAttribute("y2", String(y2));
       }
       el.setAttribute("class", "edge");
       if (isSelfLoop) el.classList.add("self-loop");
@@ -558,9 +675,16 @@ export class DiagramView {
       label.setAttribute("y", String(labelY));
       label.setAttribute("class", "edge-label");
       this.svg.append(hit, el, label);
+
+      const edgeKey = el.dataset.edge;
+      this._edgeEls.set(edgeKey, { edge, el, hit, label });
+      this._edgesByState.get(edge.from)?.push(edgeKey);
+      if (edge.to !== edge.from) this._edgesByState.get(edge.to)?.push(edgeKey);
     }
 
     for (const state of states) {
+      const stateEls = {};
+
       // A short floating arrow pointing into the initial state from
       // outside, same convention as the wireframe artifact's demo SVG (a
       // fixed direction, not collision-avoided like self-loops — good
@@ -575,6 +699,7 @@ export class DiagramView {
         arrow.setAttribute("marker-end", "url(#arrow)");
         arrow.setAttribute("class", "initial-arrow");
         this.svg.appendChild(arrow);
+        stateEls.initialArrow = arrow;
       }
 
       const circle = document.createElementNS(SVG_NS, "circle");
@@ -601,6 +726,8 @@ export class DiagramView {
       label.setAttribute("class", "state-label");
 
       this.svg.append(circle, label);
+      stateEls.circle = circle;
+      stateEls.label = label;
 
       // Classic automata-theory "double circle" for an accepting/final
       // state — a stroke-width difference alone (the previous approach)
@@ -614,7 +741,79 @@ export class DiagramView {
         ring.setAttribute("r", String(STATE_RADIUS - 4));
         ring.setAttribute("class", "state-accepting-ring");
         this.svg.appendChild(ring);
+        stateEls.ring = ring;
       }
+
+      this._stateEls.set(state.id, stateEls);
+    }
+  }
+
+  /**
+   * Updates only the dragged state's own circle/label/arrow and whichever
+   * edges touch it, in place — called on every mousemove of a drag instead
+   * of `_render()`'s full teardown-and-rebuild (design: dragging visibly
+   * lagged on anything but a tiny automaton, since a full rebuild recreates
+   * every state and edge in the diagram on every single mousemove,
+   * regardless of how many of them actually moved).
+   *
+   * Deliberately does NOT re-point another state's self-loop even if that
+   * other state has an edge to/from the one being dragged — a self-loop's
+   * angle depends on the *average direction* of all its neighbors
+   * (`preferredLoopAngle`), so it can go briefly stale mid-drag. That's a
+   * cosmetic-only gap, corrected the instant the drag commits (`MoveState`
+   * on mouseup triggers the usual full `_render()` via `docStore.subscribe`)
+   * — not worth widening this patch to chase for a transient-only case.
+   * @param {number} stateId
+   */
+  _patchDragPosition(stateId) {
+    const state = this.docStore.getState(stateId);
+    const stateEls = this._stateEls?.get(stateId);
+    if (!state || !stateEls) {
+      // No lookup yet (e.g. a render path that skipped `_renderCanvas`) —
+      // fall back to the always-correct full render rather than silently
+      // doing nothing.
+      this._render();
+      return;
+    }
+
+    stateEls.circle.setAttribute("cx", String(state.x));
+    stateEls.circle.setAttribute("cy", String(state.y));
+    stateEls.label.setAttribute("x", String(state.x));
+    stateEls.label.setAttribute("y", String(state.y));
+    if (stateEls.ring) {
+      stateEls.ring.setAttribute("cx", String(state.x));
+      stateEls.ring.setAttribute("cy", String(state.y));
+    }
+    if (stateEls.initialArrow) {
+      stateEls.initialArrow.setAttribute("x1", String(state.x - STATE_RADIUS - 22));
+      stateEls.initialArrow.setAttribute("y1", String(state.y));
+      stateEls.initialArrow.setAttribute("x2", String(state.x - STATE_RADIUS - 4));
+      stateEls.initialArrow.setAttribute("y2", String(state.y));
+    }
+
+    // Refresh this one state's own entry in the shared positions map
+    // (`_computeEdgeGeometry` reads from it) before recomputing its edges.
+    this._geometryCtx.positions.set(stateId, { x: state.x, y: state.y });
+    const { positions, neighborsOf, hasReverse } = this._geometryCtx;
+
+    for (const edgeKey of this._edgesByState.get(stateId) ?? []) {
+      const entry = this._edgeEls.get(edgeKey);
+      if (!entry) continue;
+      const geo = this._computeEdgeGeometry(entry.edge, positions, neighborsOf, hasReverse);
+      if (!geo) continue;
+      const { d, x1, y1, x2, y2, labelX, labelY } = geo;
+      for (const el of [entry.el, entry.hit]) {
+        if (d) {
+          el.setAttribute("d", d);
+        } else {
+          el.setAttribute("x1", String(x1));
+          el.setAttribute("y1", String(y1));
+          el.setAttribute("x2", String(x2));
+          el.setAttribute("y2", String(y2));
+        }
+      }
+      entry.label.setAttribute("x", String(labelX));
+      entry.label.setAttribute("y", String(labelY));
     }
   }
 

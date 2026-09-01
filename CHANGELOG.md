@@ -5,6 +5,29 @@ Versionado [semver](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Agregado
+
+- "Organizar" ahora alinea las ramas paralelas entre sí (un par que se
+  bifurca y vuelve a juntarse, un ciclo con vuelta atrás) en vez de
+  apilarlas en el orden en que se crearon — se ven más parejas, más
+  parecidas a como se dibuja un autómata a mano.
+- Las transiciones que "saltan" varias columnas (un atajo directo) ahora
+  se dibujan por su propio carril, como una curva suave, en vez de una
+  línea recta con quiebres que puede pasar por encima de otros estados y
+  transiciones — en autómatas grandes esto evitaba distinguir cuál línea
+  era cuál cuando varias se superponían.
+
+### Corregido
+
+- Arrastrar un estado con la herramienta de selección se sentía trabado en
+  autómatas con varios estados/transiciones — cada movimiento del mouse
+  redibujaba el diagrama entero en vez de solo el estado que se estaba
+  moviendo.
+- Después de "Organizar", arrastrar un estado en vertical se sentía mucho
+  más lento que en horizontal — el ajuste automático de zoom no
+  respetaba la proporción real del panel del diagrama, dejando un margen
+  invisible en un eje que el arrastre no tenía en cuenta.
+
 ## [0.2.3] — 2026-08-31
 
 ### Corregido

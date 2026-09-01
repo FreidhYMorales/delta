@@ -10,6 +10,237 @@ Orden cronológico, más reciente arriba.
 
 ---
 
+## 2026-09-01 — "Organizar": ruteo por nodos fantasma para las aristas que saltan columnas
+
+**Qué se decidió**: el usuario probó el barycenter sweep de la entrada de
+abajo y reportó que en autómatas más grandes seguía habiendo un problema
+distinto — aristas que saltan varias columnas de un tirón (un atajo
+directo de un estado temprano a uno mucho más adelante) se dibujaban como
+una línea recta sin importar cuántos otros estados o aristas quedaban en
+el medio, y en diagramas grandes eso producía "hasta 5 líneas
+superpuestas, sin idea de cuál es cuál". Investigado en línea (paper
+TSE93 de Graphviz `dot`, y `dagre.js`) antes de implementar — ambas
+implementaciones de referencia resuelven esto con la misma técnica:
+**nodos fantasma** (dummy/virtual nodes). Cada arista que abarca 2 o más
+capas ahora se parte en una cadena de nodos invisibles, uno por cada capa
+intermedia que atraviesa (`layeredLayout`, `frontend/src/views/diagram/geometry.js`).
+
+El punto clave, tomado directo de esas dos referencias: los nodos
+fantasma NO son solo puntos de ruteo — participan en el MISMO barrido de
+barycenter que ya existía (entrada de abajo) igual que un estado real, así
+que terminan empujados a su propia fila, separados de los estados reales
+y de las cadenas de OTRAS aristas. Eso es lo que resuelve las dos quejas a
+la vez con un solo mecanismo: cada arista consigue su propio carril (no
+más superposición) y el diagrama en forma de "diamante" (una rama paralela
+que se eleva y vuelve a bajar, como una construcción de Thompson) sale
+solo, sin reconocer el patrón a mano — un atajo directo simplemente no
+tiene nada que lo empuje a compartir fila con lo que pasa por el medio.
+
+La separación entre filas ya no es uniforme: dos estados reales vecinos
+siguen usando `rowSpacing` (default 90), pero cualquier fila que toca un
+nodo fantasma usa un `edgeSpacing` más chico (default 28) — la misma
+distinción que `dagre` llama `nodeSep`/`edgeSep` — para que los carriles
+de ruteo no inflen la altura del diagrama.
+
+**Decisiones de alcance, deliberadas**: el ruteo es un efecto EFÍMERO de
+la última vez que se usó "Organizar" — `layeredLayout` ahora devuelve
+`{ positions, edgeWaypoints }` (antes solo el array de posiciones; el
+único call site de producción y ~11 tests existentes se actualizaron
+mecánicamente para desestructurar), y `mountFaTab.js` lo entrega a la vista
+vía un `ViewContext.setEdgeRoutes`/`clearEdgeRoutes` nuevo. **No se
+persiste** en el documento (nada nuevo en `DocStore`/Rust/el formato en
+disco) — es a propósito: perseguir "el ruteo sobrevive a cualquier edición
+futura" es un problema de ruteo con evasión de obstáculos en vivo, mucho
+más grande que lo que hace falta hoy. En cambio, `DiagramView` limpia
+TODO el caché de rutas apenas el usuario empieza a arrastrar un estado a
+mano (no solo las rutas que tocan ese estado) — más simple de razonar y
+probar que invalidar de forma parcial, y el comportamiento resultante es
+honesto: "las aristas vuelven a dibujarse rectas hasta el próximo
+Organizar", no una línea con curvas rara congelada a mitad de arrastre.
+
+**Bug real encontrado durante la implementación (no en el plan original)**:
+la primera versión de `clearEdgeRoutes` notificaba incondicionalmente,
+incluso cuando no había nada que limpiar — como `DiagramView` la llama en
+CADA inicio de arrastre, eso disparaba un `_render()` completo (el
+suscriptor de `ctx`) al primer mousedown de cualquier drag, ni siquiera
+durante el `mousemove`, deshaciendo de raíz el fix de rendimiento de la
+entrada de abajo (dos tests de "mismo nodo DOM" que ya pasaban se
+rompieron). Corregido haciendo que `clearEdgeRoutes` sea un no-op (sin
+notificar) cuando el mapa de rutas ya estaba vacío — el caso común, ya que
+solo hay algo que limpiar justo después de un Organizar.
+
+**Cómo se verificó**: TDD en cada pieza — 3 tests nuevos en
+`geometry.test.js` (cantidad de waypoints de un salto y ausencia de ruta
+en una arista adyacente; dos saltos independientes por las mismas capas
+intermedias terminan en filas distintas, no colapsadas en una sola;
+separación entre fantasma y estado real más chica que `rowSpacing`), 2 en
+`context.test.js` (`setEdgeRoutes`/`clearEdgeRoutes`), 3 en
+`DiagramView.test.js` (arista ruteada se dibuja como `<path>` multi-
+segmento; sin ruta cae al `<line>` de siempre; un arrastre real limpia el
+caché). Confirmados en rojo antes de implementar (incluida una reversión
+temporal manual del wiring de `DiagramView.js` para probar que esos 2
+tests specíficos fallaban sin él, ya que se habían escrito después de
+implementar esa pieza puntual — la única desviación del orden estricto
+rojo-antes-que-verde en este cambio). Suite completa: 1148/1148 (91
+archivos), subiendo de 1140/1140.
+
+**Addendum, mismo día — curva suave + label más lejos, todavía sin
+detección de colisión real**: el usuario probó esto en vivo y reportó dos
+cosas más. Primero, la ruta se veía con quiebres angulares en cada nodo
+fantasma en vez de una curva continua (a diferencia de los arcos ya
+suaves de `curvedEdgePath` para un par mutuo) — se cambió la polilínea
+recta (`M`/`L`) por una spline de Catmull-Rom "clampeada" convertida a
+segmentos cubic-bezier (`routedEdgePath`, nueva función en `geometry.js`,
+misma forma `{d, labelX, labelY}` que `curvedEdgePath`/`selfLoopPath`) —
+técnica estándar, sin parametrización centrípeta ni tensión configurable,
+"clampear" en los extremos (reusar el primer/último punto de la propia
+secuencia en vez de extrapolar uno virtual) es suficiente para las
+cadenas cortas (3-5 puntos) que produce una arista ruteada. La curva sigue
+pasando EXACTO por cada punto original (`from`, cada waypoint, `to`) — eso
+no cambia, solo las tangentes entre ellos se suavizan.
+
+Segundo, las labels seguían pisándose entre sí en zonas apretadas — el
+usuario mismo identificó correctamente que agrandar `rowSpacing`/
+`edgeSpacing` no alcanza para esto, porque cada label se posiciona con un
+offset fijo respecto a SU PROPIA arista, sin ningún conocimiento de qué
+otra label anda cerca. Se aumentó ese offset SOLO para aristas ruteadas
+(`ROUTED_EDGE_LABEL_GAP = 20` en `DiagramView.js`, contra el `12` de
+`EDGE_LABEL_GAP` que usa cualquier otra arista) — su carril (`edgeSpacing`,
+default 28) es más angosto que el de un estado real, así que necesitaba
+más empuje para alejarse de lo que tiene al lado, sin pasarse tanto que
+invada el carril vecino. **Esto reduce el problema para el caso de
+aristas ruteadas, no lo resuelve en general** — una detección de colisión
+real entre labels (revisar el bounding box de cada una contra las demás y
+empujarlas si se pisan) sigue explícitamente pospuesta, a propósito, como
+una decisión aparte si hace falta más adelante.
+
+**Cómo se verificó**: TDD — 4 tests nuevos en `geometry.test.js` para
+`routedEdgePath` (2 puntos degenera a línea recta; 3+ puntos produce
+curvas `C`, no `L`; el punto de cada waypoint aparece exacto en el `d`;
+`labelGap` empuja la label la distancia exacta pedida) y 1 en
+`DiagramView.test.js` (el `d` de una arista ruteada contiene `C` y no
+contiene `L`) — todos rojos antes de implementar, verdes después. Suite
+completa: 1153/1153 (91 archivos), subiendo de 1148/1148.
+
+---
+
+## 2026-08-31 — "Organizar" con barycenter sweep; arrastre de estados sin redibujar todo
+
+**Qué se decidió (layout)**: `layeredLayout` (`frontend/src/views/diagram/geometry.js`)
+ya calculaba bien la COLUMNA de cada estado (camino más largo desde el
+estado inicial, ciclos manejados excluyendo solo la arista que cierra el
+ciclo del cálculo de columnas). Lo que le faltaba era la otra mitad de un
+layout Sugiyama de verdad: dentro de una misma columna, las FILAS se
+asignaban en el orden de inserción nomás, sin ningún criterio de
+alineación con la columna vecina. Se agregó un barrido de
+barycenter/mediana (la misma idea que usa Graphviz `dot`): 4 pasadas
+alternando izquierda→derecha y derecha→izquierda, reordenando cada
+columna por el promedio de fila de sus vecinos ya ubicados en la columna
+adyacente de esa pasada — usando la lista de aristas SIN dirección (no
+solo las de `forwardAdj`), para que una arista de "vuelta atrás" excluida
+del cálculo de columnas (el loop-back de un Kleene-star, por ejemplo)
+igual tire de su fila hacia donde corresponda. Un estado sin vecino en la
+columna adyacente de esa pasada conserva su posición relativa actual como
+mediana (en vez de colapsar a la fila 0), para que un callejón sin salida
+no se amontone al frente junto con cualquier otro estado sin señal.
+
+**Por qué**: el usuario pidió que "Organizar" se pareciera a cómo se
+dibuja a mano una construcción de Thompson — un par de estados que se
+bifurca y se vuelve a juntar (una atajo directo + un camino más largo)
+quedando alineados entre sí, no apilados en el orden en que se declararon
+los estados. Es una limitación real conocida: con el layering actual, dos
+estados unidos por un atajo directo y un camino más largo casi nunca
+terminan compartiendo columna (el camino largo empuja al estado de
+llegada a una columna más lejana vía camino-más-largo), así que el
+barrido por sí solo no reproduce ese "diamante" exacto — sí resuelve el
+caso más común y más simple: cualquier bifurcación/fusión real donde dos
+o más estados SÍ comparten columna (subset construction, ramas de un AFN,
+etc.), que antes quedaba en el orden arbitrario de creación.
+
+**Cómo se verificó**: TDD — dos tests nuevos en `geometry.test.js`
+escritos en rojo antes de tocar la función (uno cruza a propósito el
+orden de declaración contra el de conexión en un diamante de 5 estados;
+el otro confirma que un callejón sin salida no colapsa al frente junto
+con otro estado sin señal), verdes después de implementar. Los 37 tests
+preexistentes de `layeredLayout` (que solo verifican orden de columnas o
+igualdad/desigualdad de fila, nunca un valor exacto atado al orden de
+inserción) siguieron pasando sin tocarlos.
+
+**Qué se decidió (arrastre)**: `_onCanvasMouseMove` (`DiagramView.js`)
+llamaba a `_render()` — que tira TODO el SVG (`removeChild` de cada hijo)
+y reconstruye cada estado, arista, hit-target y label desde cero — en
+cada mousemove mientras se arrastra un estado, sin importar cuántos
+elementos realmente cambiaron. Se extrajo la geometría de una arista a un
+método compartido (`_computeEdgeGeometry`, usado tanto por el rebuild
+completo como por el parche) y se agregó `_patchDragPosition`: durante un
+arrastre, solo actualiza los atributos del círculo/label/flecha-inicial
+del estado que se mueve y de las aristas que lo tocan, dejando el resto
+del DOM intacto. `_onCanvasMouseUp` (que confirma el `MoveState`) sigue
+disparando un `_render()` completo como antes vía `docStore.subscribe`.
+
+**Por qué**: el usuario reportó que mover un estado se sentía trabado en
+autómatas con varios estados/transiciones. Reconstruir el SVG entero en
+cada mousemove es costoso y escala con el tamaño del diagrama — un
+problema real independiente de en qué eje se mueva el mouse. No se pudo
+confirmar leyendo el código una asimetría específica vertical-vs-
+horizontal (el costo del rebuild es simétrico); si el usuario sigue
+notando lag después de este cambio, hace falta perfilarlo en vivo
+(devtools performance) en vez de seguir adivinando la causa.
+
+**Qué queda sin resolver a propósito**: el self-loop de OTRO estado que
+sea vecino del que se arrastra no se re-orienta en vivo durante el
+arrastre (`preferredLoopAngle` promedia la dirección de todos los vecinos
+de ese estado, y `_patchDragPosition` solo toca al estado que se mueve y
+sus propias aristas). Es cosmético y transitorio nomás — se corrige solo
+apenas se suelta el mouse (el `MoveState` dispara el `_render()` completo
+de siempre) — así que no se amplió el parche para cubrir ese caso.
+
+**Cómo se verificó**: TDD — dos tests nuevos en `DiagramView.test.js`,
+rojos antes del cambio (capturan el nodo `<circle>` de un estado/arista
+NO relacionados con el arrastre y confirman que siguen siendo el mismo
+nodo — con el rebuild completo de antes, `querySelector` encontraba un
+nodo nuevo cada vez), verdes después. Suite completa del frontend:
+1139/1139 (91 archivos), sin tocar ningún test preexistente.
+
+**Corrección posterior — la asimetría vertical/horizontal SÍ tenía causa
+real, no era solo el rebuild completo**: el usuario, ya probando el fix de
+arriba, reportó que el arrastre seguía sintiéndose lento en vertical
+específicamente DESPUÉS de usar "Organizar". Releyendo `_fitToWindow`
+(`DiagramView.js`), que `autoLayoutAction` (`mountFaTab.js`) dispara
+automáticamente apenas termina de aplicar el layout: arma el `viewBox`
+como el bounding box EXACTO de los estados, sin ajustarlo al aspect ratio
+real del panel del diagrama. El layout horizontal por columnas de
+"Organizar" produce cajas anchas y bajas casi siempre — con el `<svg>` sin
+`preserveAspectRatio` propio (default del navegador: `xMidYMid meet`), ese
+desajuste se resuelve con márgenes vacíos (letterbox) arriba/abajo en vez
+de estirar. El problema real: `_svgScale()`/`_svgPoint()` calculan el
+factor pantalla→SVG dividiendo por el rect COMPLETO del elemento, sin
+saber que ese margen existe — el eje con el margen queda subescalado ahí,
+así que arrastrar en ese eje necesita mucho más recorrido de mouse para
+mover lo mismo que el otro eje. Coincide exactamente con lo reportado
+("perfecto en horizontal, lento en vertical") y con que recién se nota
+fuerte después de "Organizar" (que es cuando el bbox se vuelve
+extremadamente ancho-y-bajo). **Se corrige la afirmación de la entrada
+original de arriba** ("no se pudo confirmar... el costo del rebuild es
+simétrico") — esa parte seguía siendo cierta (el rebuild en sí no tiene
+asimetría), pero no era la causa completa del síntoma reportado.
+
+**Fix**: `_fitToWindow` ahora expande la dimensión más corta del bbox
+ajustado para igualar el aspect ratio real del panel (vía
+`getBoundingClientRect` del propio `<svg>`) ANTES de fijar el `viewBox` —
+sin letterbox, no hay desajuste de escala que compensar. No distorsiona
+los círculos de los estados (la escala sigue siendo uniforme, se
+agranda el encuadre, no se estira el contenido). Sin rect real (jsdom en
+tests) se mantiene el bbox ajustado de siempre — mismo fallback que ya
+usa `_svgScale()`.
+
+**Cómo se verificó**: TDD — un test nuevo confirma que un bbox 640×80
+(aspect 8, la forma típica de "Organizar") contra un panel mockeado de
+1000×500 (aspect 2) produce un `viewBox` de 640×320, no 640×80. Rojo antes
+del cambio, verde después. Suite completa: 1140/1140.
+
+---
+
 ## 2026-08-26 — Auto-actualización: pospuesta, no descartada
 
 **Qué se decidió**: no implementar auto-actualización todavía. No es

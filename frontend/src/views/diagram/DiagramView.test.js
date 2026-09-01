@@ -207,6 +207,110 @@ describe("DiagramView drag-to-move (select tool, bug 1)", () => {
   });
 });
 
+describe("DiagramView drag-to-move performs a targeted DOM patch, not a full rebuild (perf)", () => {
+  // A third, unrelated state + edge — full-rebuild-per-mousemove would tear
+  // these down and recreate them too, even though dragging state 1 has
+  // nothing to do with either.
+  function threeStateSnapshot() {
+    return {
+      revision: 1,
+      states: [
+        { id: 1, label: "q0", x: 10, y: 10, initial: true, accepting: false },
+        { id: 2, label: "q1", x: 100, y: 10, initial: false, accepting: false },
+        { id: 3, label: "q2", x: 200, y: 10, initial: false, accepting: true },
+      ],
+      edges: [{ from: 2, to: 3, epsilon: false, symbols: ["a"] }],
+      derived: { classification: "Dfa", alphabet: ["a"], unreachable: [] },
+    };
+  }
+
+  it("keeps the same DOM nodes for states/edges unrelated to the one being dragged", async () => {
+    const { container } = await setup(threeStateSnapshot());
+    const otherCircle = container.querySelector('circle[data-state-id="3"]');
+    const otherEdge = container.querySelector('.edge[data-edge="2:3"]');
+
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }));
+    container
+      .querySelector("svg")
+      .dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 60, clientY: 40 }));
+
+    expect(container.querySelector('circle[data-state-id="3"]')).toBe(otherCircle);
+    expect(container.querySelector('.edge[data-edge="2:3"]')).toBe(otherEdge);
+  });
+
+  it("updates the dragged state's own circle in place (same node, new coordinates) instead of replacing it", async () => {
+    const { container } = await setup(threeStateSnapshot());
+    const draggedCircle = container.querySelector('circle[data-state-id="1"]');
+
+    draggedCircle.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }),
+    );
+    container
+      .querySelector("svg")
+      .dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 60, clientY: 40 }));
+
+    expect(container.querySelector('circle[data-state-id="1"]')).toBe(draggedCircle);
+    expect(draggedCircle.getAttribute("cx")).toBe("60");
+    expect(draggedCircle.getAttribute("cy")).toBe("40");
+  });
+});
+
+describe("DiagramView renders a skip edge's dummy-node route (ctx.edgeRoutes, set by Organizar)", () => {
+  function threeStateChainSnapshot() {
+    return {
+      revision: 1,
+      states: [
+        { id: 1, label: "q0", x: 0, y: 0, initial: true, accepting: false },
+        { id: 2, label: "q1", x: 100, y: 0, initial: false, accepting: false },
+        { id: 3, label: "q2", x: 200, y: 0, initial: false, accepting: true },
+      ],
+      edges: [{ from: 1, to: 3, epsilon: false, symbols: ["a"] }],
+      derived: { classification: "Dfa", alphabet: ["a"], unreachable: [] },
+    };
+  }
+
+  it("draws a routed edge as a multi-segment path through its waypoints instead of a plain 2-point line", async () => {
+    const { container, ctx } = await setup(threeStateChainSnapshot());
+    ctx.setEdgeRoutes(new Map([["1:3", [{ x: 100, y: 60 }]]]));
+    ctx.setSelection(null); // trigger a re-render so the new route takes effect
+
+    const edgeEl = container.querySelector('path.edge[data-edge="1:3"]');
+    expect(edgeEl).not.toBeNull();
+    expect(edgeEl.getAttribute("d")).toContain("100,60");
+  });
+
+  it("draws the route as a smooth curve (cubic-bezier segments), not sharp polyline joints at each waypoint", async () => {
+    const { container, ctx } = await setup(threeStateChainSnapshot());
+    ctx.setEdgeRoutes(new Map([["1:3", [{ x: 100, y: 60 }]]]));
+    ctx.setSelection(null);
+
+    const edgeEl = container.querySelector('path.edge[data-edge="1:3"]');
+    const d = edgeEl.getAttribute("d");
+    expect(d).toContain("C");
+    expect(d).not.toContain("L");
+  });
+
+  it("falls back to a plain line once no route exists for that edge", async () => {
+    const { container } = await setup(threeStateChainSnapshot());
+    expect(container.querySelector('line.edge[data-edge="1:3"]')).not.toBeNull();
+    expect(container.querySelector('path.edge[data-edge="1:3"]')).toBeNull();
+  });
+
+  it("clears any cached route the instant a real drag starts, so a stale route never survives a manual move", async () => {
+    const { container, ctx } = await setup(threeStateChainSnapshot());
+    ctx.setEdgeRoutes(new Map([["1:3", [{ x: 100, y: 60 }]]]));
+    expect(ctx.edgeRoutes.size).toBe(1);
+
+    container
+      .querySelector('circle[data-state-id="1"]')
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 0, clientY: 0 }));
+
+    expect(ctx.edgeRoutes.size).toBe(0);
+  });
+});
+
 describe("DiagramView state context menu (bug 3)", () => {
   it("right-clicking a state selects it, suppresses the native menu, and lists registry actions", async () => {
     const { container, ctx } = await setup();
@@ -346,6 +450,43 @@ describe("DiagramView viewport (view.zoomIn/zoomOut/reset/fitToWindow)", () => {
     const spy = vi.spyOn(view.viewport, "fitToWindow");
     findAction("view.fitToWindow").run(ctx);
     expect(spy).toHaveBeenCalled();
+  });
+
+  it("pads a wide-and-short bbox to match the pane's own aspect ratio, not just the tight content box (bug: post-Organizar drag felt slow on one axis)", async () => {
+    // Two states far apart horizontally, same y — the shape a horizontal
+    // layered layout ("Organizar") routinely produces. Tight content bbox
+    // (states +/- STATE_RADIUS*2 padding) is 640x80, aspect 8 — nothing
+    // like the pane's own 1000x500 (aspect 2). Left as a tight fit, the
+    // SVG's default `preserveAspectRatio` (xMidYMid meet) would letterbox
+    // the mismatch with empty vertical margins that `_svgScale()` doesn't
+    // know about (it divides by the FULL rect, not the letterboxed visible
+    // area) — under-scaling every vertical drag on this pane specifically.
+    const { container, view } = await setup({
+      revision: 1,
+      states: [
+        { id: 1, label: "q0", x: 0, y: 100, initial: true, accepting: false },
+        { id: 2, label: "q1", x: 560, y: 100, initial: false, accepting: true },
+      ],
+      edges: [],
+      derived: { classification: "Dfa", alphabet: [], unreachable: [] },
+    });
+    const svg = container.querySelector("svg");
+    svg.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 500,
+      right: 1000,
+      bottom: 500,
+      x: 0,
+      y: 0,
+    });
+
+    view.viewport.fitToWindow();
+
+    const [, , w, h] = svg.getAttribute("viewBox").split(" ").map(Number);
+    expect(w).toBe(640);
+    expect(h).toBe(320);
   });
 
   it("mouse-wheel zoom keeps the point under the cursor in place, and zooms out on a positive deltaY", async () => {

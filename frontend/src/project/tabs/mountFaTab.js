@@ -58,9 +58,16 @@ async function autoLayoutAction(docStore, ctx) {
   // "left-to-right from where" to lay out around, so fall back to the
   // free-floating spring layout instead.
   const initial = states.find((s) => s.initial);
-  const positions = initial
+  const { positions, edgeWaypoints } = initial
     ? layeredLayout(states, edges, initial.id, { centerX: 300, centerY: 200 })
-    : forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
+    : { positions: forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 }), edgeWaypoints: new Map() };
+  // Routed skip-edge waypoints (only the layered layout produces any) are
+  // handed to the view so it can draw those edges as a multi-segment path
+  // instead of a plain straight line — see `ViewContext.setEdgeRoutes`.
+  // Always set, even to an empty map on the spring-layout branch, so a
+  // stale route from a PREVIOUS Organizar doesn't linger once positions
+  // change again.
+  ctx.setEdgeRoutes(edgeWaypoints);
   const result = await docStore.apply(positions.map((p) => ({ op: "MoveState", id: p.id, x: p.x, y: p.y })));
   ctx.viewport.fitToWindow();
   return result;
