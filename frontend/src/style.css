@@ -1078,6 +1078,47 @@ body {
  * typography (mono font, generous line-height) is copied from the
  * wireframe's `.formal-def`, since color-per-keyword isn't representable
  * inside native textarea content. */
+/* "AFN → AFD" tab (views/afnToAfd): three read-only step tables, each
+ * titled with its own copy button, then the create-DFA action. Reuses
+ * `.table-view`'s table look. */
+.afn-afd-view {
+  gap: var(--space-md);
+}
+
+.afn-afd-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.afn-afd-step-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+}
+
+.afn-afd-view td,
+.afn-afd-view tbody th {
+  white-space: nowrap;
+}
+
+.afn-afd-step table {
+  width: auto;
+  min-width: 100%;
+}
+
+.afn-afd-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.afn-afd-create {
+  align-self: flex-start;
+}
+
 .formal-view {
   flex: 1;
   display: flex;

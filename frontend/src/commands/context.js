@@ -25,6 +25,7 @@ export class ViewContext {
    *   promptLabel?: (stateId: number) => Promise<string|null>,
    *   promptSymbol?: (message?: string) => Promise<string|null>, // "" = epsilon requested, null = cancelled, non-empty = real symbol
    *   insertPiece?: (kind: string) => Promise<boolean>,
+   *   createDfaTab?: (model: {states:string[], initial:string, accepting:string[], transitions:{from:string,symbol:string,to:string}[]}) => Promise<void>,
    *   importJff?: (path: string) => Promise<void>,
    *   exportJff?: (path: string) => Promise<void>,
    *   simTrace?: (word: string[], budget?: object) => Promise<object>,
@@ -92,6 +93,10 @@ export class ViewContext {
       hooks.convertToDfa ?? (async () => { throw new Error("No hay conversión AFN→AFD disponible."); });
     this.minimizeDfa =
       hooks.minimizeDfa ?? (async () => { throw new Error("No hay minimización de AFD disponible."); });
+    // "AFN → AFD" tab's "create the DFA in a new tab" — needs the project's
+    // tab machinery, so no safe default (same reasoning as `fromRegex`).
+    this.createDfaTab =
+      hooks.createDfaTab ?? (async () => { throw new Error("No se puede crear una pestaña nueva desde aquí."); });
     // Thompson piece insertion (commands/thompsonPieces.js). Real by
     // default, like `renameState`: it only needs `docStore` and the prompt
     // hook; a refusal (e.g. nesting into a self-loop) becomes a notice.

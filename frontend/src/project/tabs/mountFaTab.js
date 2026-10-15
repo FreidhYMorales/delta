@@ -27,6 +27,7 @@ import { DiagramView } from "../../views/diagram/DiagramView.js";
 import { TableView } from "../../views/table/TableView.js";
 import { FormalView } from "../../views/formal/FormalView.js";
 import { RegexView } from "../../views/regex/RegexView.js";
+import { AfnToAfdView } from "../../views/afnToAfd/AfnToAfdView.js";
 import { GrammarView } from "../../views/grammar/GrammarView.js";
 import { TestingView } from "../../views/testing/TestingView.js";
 import { Toolbar } from "../../views/toolbar/Toolbar.js";
@@ -108,6 +109,7 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
       { id: "formal", label: "Definición formal" },
       { id: "regex", label: "Expresión regular" },
       { id: "grammar", label: "Gramática regular" },
+      { id: "afnToAfd", label: "AFN → AFD" },
     ],
     { collapsible: true },
   );
@@ -175,6 +177,28 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
         showNotice({ kind: "error", title: "Import failed", message: String(error) });
       }
     },
+    // "AFN → AFD" tab: the DFA built from its step-3 table opens in a
+    // brand-new Fa tab (same create/fill/close-on-failure shape as
+    // `importJff`), leaving this automaton untouched.
+    createDfaTab: async (model) => {
+      if (!projectStore || !tabHost) {
+        throw new Error("mountFaTab: createDfaTab needs both projectStore and tabHost collaborators");
+      }
+      let newTabId;
+      try {
+        const sourceName = projectStore.tabs.find((t) => t.id === tabId)?.name ?? machineKindLabel("Fa");
+        await projectStore.newTab("Fa", `${sourceName} (AFD)`);
+        newTabId = projectStore.tabs.at(-1).id;
+        const mount = tabHost.getMount(newTabId);
+        await mount.docStore.load();
+        await applyAutomatonModel(mount.docStore, model);
+        projectStore.setActiveTab(newTabId);
+        await mount.ctx.layout.arrange();
+      } catch (error) {
+        if (newTabId != null) await projectStore.closeTab(newTabId);
+        showNotice({ kind: "error", title: "No se pudo crear el AFD", message: String(error?.message ?? error) });
+      }
+    },
     exportJff: async (path) => {
       try {
         const report = await boundClient.jffExport(path);
@@ -237,6 +261,7 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
   new FormalView(upperTabs.panels.get("formal"), docStore);
   new RegexView(upperTabs.panels.get("regex"), docStore, ctx);
   new GrammarView(upperTabs.panels.get("grammar"), docStore, ctx);
+  new AfnToAfdView(upperTabs.panels.get("afnToAfd"), docStore, ctx);
   const testingView = new TestingView(panelLower, docStore, ctx, {
     onCollapsedChange: (collapsed) => {
       panelLower.classList.toggle("tabs-collapsed", collapsed);
