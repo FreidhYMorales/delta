@@ -70,8 +70,21 @@ mod tests {
     fn grammar_tab(name: &str) -> ProjectTab {
         ProjectTab {
             name: name.to_string(),
-            model: MachineDoc::Grammar(GrammarDto { source: "S -> aS | b\nA -> ε".to_string() }),
+            model: MachineDoc::Grammar(GrammarDto {
+                source: "digito ::= '0' | '1'.".to_string(),
+                notation: crate::grammar_doc::Notation::Bnf,
+            }),
         }
+    }
+
+    #[test]
+    fn a_grammar_tab_saved_before_notations_existed_loads_as_plain_productions() {
+        let json = r#"{"version":1,"tabs":[{"name":"G","model":{"kind":"Grammar","source":"S -> a"}}]}"#;
+        let tabs = project_load_from_str(json).unwrap();
+        assert_eq!(
+            tabs[0].model,
+            MachineDoc::Grammar(GrammarDto { source: "S -> a".into(), notation: crate::grammar_doc::Notation::Productions })
+        );
     }
 
     #[test]

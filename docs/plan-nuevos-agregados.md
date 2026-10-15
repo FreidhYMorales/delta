@@ -100,4 +100,4 @@ Pasos del PDF `ER a AFD.pdf`:
 - [x] Unidad 1: ER → AFD (método directo)
 - [x] Unidad 2: pestaña Gramática + Chomsky
 - [x] Unidad 3: derivaciones + árbol (prueba individual y en lote)
-- [ ] Unidad 4: BNF / EBNF
+- [x] Unidad 4: BNF / EBNF

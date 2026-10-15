@@ -16,7 +16,7 @@ const MARGIN = 20;
 export class DerivationPanel {
   /**
    * @param {HTMLElement} container
-   * @param {{derive: (input: string, order: string) => Promise<object>}} store
+   * @param {{derive: (input: string, order: string, start: string|null) => Promise<object>}} store
    */
   constructor(container, store) {
     this.store = store;
@@ -57,7 +57,14 @@ export class DerivationPanel {
     runButton.addEventListener("click", () => {
       this._lastRunPromise = this._run();
     });
-    row.append(this.input, this.order, runButton);
+    // Which non-terminal to derive from: the grammar's start symbol by
+    // default, or any other (a BNF text defines many rules worth testing on
+    // their own). Filled by `setNonterminals`.
+    this.start = document.createElement("select");
+    this.start.className = "derive-start";
+    this.start.title = "Derivar desde";
+    this.setNonterminals([]);
+    row.append(this.input, this.start, this.order, runButton);
 
     this.outcome = document.createElement("p");
     this.outcome.className = "derive-outcome";
@@ -94,10 +101,30 @@ export class DerivationPanel {
     container.appendChild(this.root);
   }
 
+  /** @param {string[]} nonterminals the current grammar's, in order */
+  setNonterminals(nonterminals) {
+    const chosen = this.start.value;
+    const initial = document.createElement("option");
+    initial.value = "";
+    initial.textContent = "Desde el símbolo inicial";
+    const options = nonterminals.map((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = `Desde ${name}`;
+      return option;
+    });
+    this.start.replaceChildren(initial, ...options);
+    this.start.value = nonterminals.includes(chosen) ? chosen : "";
+  }
+
+  _startSymbol() {
+    return this.start.value || null;
+  }
+
   async _run() {
     this._clearResult();
     try {
-      const derivation = await this.store.derive(this.input.value, this.order.value);
+      const derivation = await this.store.derive(this.input.value, this.order.value, this._startSymbol());
       this._show(derivation);
     } catch (error) {
       this.reason.textContent = String(error?.message ?? error);
@@ -131,7 +158,7 @@ export class DerivationPanel {
     const results = [];
     for (const input of inputs) {
       try {
-        results.push({ input, derivation: await this.store.derive(input, this.order.value) });
+        results.push({ input, derivation: await this.store.derive(input, this.order.value, this._startSymbol()) });
       } catch (error) {
         results.push({ input, error: String(error?.message ?? error) });
       }

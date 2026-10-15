@@ -292,6 +292,7 @@ fn load_doc(model: MachineDoc) -> Result<(MachineKind, LoadedDoc), String> {
         MachineDoc::Grammar(dto) => {
             let mut doc = GrammarDocument::new();
             doc.source = dto.source;
+            doc.notation = dto.notation;
             Ok((MachineKind::Grammar, LoadedDoc::Grammar(doc)))
         }
     }
@@ -345,7 +346,7 @@ pub fn save_project(project: &Mutex<ProjectSession>, sessions: &Sessions, path: 
             MachineKind::Tm => sessions.tm.try_with(meta.id, |d| MachineDoc::Tm(tm_to_dto(&d.model)))?,
             MachineKind::Grammar => sessions
                 .grammar
-                .try_with(meta.id, |d| MachineDoc::Grammar(GrammarDto { source: d.source.clone() }))?,
+                .try_with(meta.id, |d| MachineDoc::Grammar(GrammarDto { source: d.source.clone(), notation: d.notation }))?,
         };
         tabs.push(ProjectTab { name: meta.name.clone(), model });
     }

@@ -9,10 +9,23 @@ import { DerivationPanel } from "./DerivationPanel.js";
 import { CHOMSKY_TABLE, formalDefinition, grammarTypeName } from "./grammarTabLogic.js";
 
 const SEND_DELAY_MS = 300;
-const PLACEHOLDER = "S -> aS | aA\nA -> bA | b";
-const SYNTAX_HINT =
-  "Una producción por línea: -> o → · | alternativas · ε (o λ, ∈) vacío · mayúsculas o <nombre> son no terminales · " +
-  "'palabra' es un terminal de varias letras · opcional: Σ = {a, b}, N = {S, A}, S = S";
+// Example and syntax help per notation.
+const NOTATIONS = {
+  productions: {
+    label: "Producciones (S → aB)",
+    placeholder: "S -> aS | aA\nA -> bA | b",
+    hint:
+      "Una producción por línea: -> o → · | alternativas · ε (o λ, ∈) vacío · mayúsculas o <nombre> son no terminales · " +
+      "'palabra' es un terminal de varias letras · opcional: Σ = {a, b}, N = {S, A}, S = S",
+  },
+  bnf: {
+    label: "BNF / EBNF",
+    placeholder: "entero ::= [ signo ] digito { digito } .\nsigno ::= '+' | '-' .\ndigito ::= '0' | .. | '9' .",
+    hint:
+      "::= se define como · | alternativa · ( ) agrupa · [ ] 0 o 1 vez · { } 0 o más veces · 'xyz' terminal · " +
+      ". fin de regla · '0' | .. | '9' rango · los nombres sueltos son no terminales; la primera regla es el símbolo inicial",
+  },
+};
 
 export class GrammarTabView {
   /**
@@ -36,25 +49,39 @@ export class GrammarTabView {
 
     const editorPane = document.createElement("div");
     editorPane.className = "grammar-editor-pane";
+    const editorHeader = document.createElement("div");
+    editorHeader.className = "grammar-editor-header";
     const editorLabel = document.createElement("label");
     editorLabel.className = "field-label";
     editorLabel.textContent = "Gramática G = {Σ, N, S, P}";
+    this.notation = document.createElement("select");
+    this.notation.className = "grammar-notation";
+    this.notation.title = "Notación";
+    for (const [value, { label }] of Object.entries(NOTATIONS)) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      this.notation.appendChild(option);
+    }
+    this.notation.addEventListener("change", () => {
+      this._lastNotationPromise = this.store.setNotation(this.notation.value);
+    });
+    editorHeader.append(editorLabel, this.notation);
     this.editor = document.createElement("textarea");
     this.editor.className = "grammar-source";
     this.editor.spellcheck = false;
-    this.editor.placeholder = PLACEHOLDER;
     this.editor.addEventListener("input", () => this._onInput());
-    const hint = document.createElement("p");
-    hint.className = "grammar-hint";
-    hint.textContent = SYNTAX_HINT;
+    this.hint = document.createElement("p");
+    this.hint.className = "grammar-hint";
     this.error = document.createElement("div");
     this.error.className = "grammar-error";
     this.warnings = document.createElement("ul");
     this.warnings.className = "grammar-warnings";
-    editorPane.append(editorLabel, this.editor, hint, this.error, this.warnings);
+    editorPane.append(editorHeader, this.editor, this.hint, this.error, this.warnings);
 
     const analysisPane = document.createElement("div");
     analysisPane.className = "grammar-analysis-pane";
+    this.expansion = section(analysisPane, "Conversión EBNF → BNF", "grammar-expansion");
     this.definition = section(analysisPane, "Definición formal", "grammar-definition");
     this.classification = section(analysisPane, "Jerarquía de Chomsky", "grammar-classification");
     this.table = document.createElement("table");
@@ -63,7 +90,7 @@ export class GrammarTabView {
 
     const derivations = document.createElement("div");
     derivations.className = "grammar-derivations";
-    new DerivationPanel(derivations, this.store);
+    this.derivationPanel = new DerivationPanel(derivations, this.store);
 
     this.root.append(editorPane, analysisPane, derivations);
     container.appendChild(this.root);
@@ -79,7 +106,26 @@ export class GrammarTabView {
 
   _render() {
     if (!this._edited) this.editor.value = this.store.source;
+    const notation = NOTATIONS[this.store.notation] ? this.store.notation : "productions";
+    this.notation.value = notation;
+    this.editor.placeholder = NOTATIONS[notation].placeholder;
+    this.hint.textContent = NOTATIONS[notation].hint;
     const analysis = this.store.analysis ?? { grammar: null, classification: null, error: null };
+    this.derivationPanel.setNonterminals(analysis.grammar?.nonterminals ?? []);
+
+    // Shown only for BNF/EBNF (and its heading with it).
+    this.expansion.replaceChildren();
+    this.expansion.previousElementSibling.hidden = !analysis.expansion;
+    if (analysis.expansion) {
+      const list = document.createElement("ul");
+      list.className = "grammar-productions";
+      for (const line of analysis.expansion) {
+        const li = document.createElement("li");
+        li.textContent = line;
+        list.appendChild(li);
+      }
+      this.expansion.appendChild(list);
+    }
 
     this.error.textContent = analysis.error ? `Línea ${analysis.error.line}: ${analysis.error.message}` : "";
     this.warnings.replaceChildren(

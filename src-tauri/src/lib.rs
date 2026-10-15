@@ -41,6 +41,7 @@ pub fn run() {
       grammar::grammar_snapshot,
       grammar::grammar_set_source,
       grammar::grammar_derive,
+      grammar::grammar_set_notation,
       convert::conv_to_grammar,
       convert::conv_from_grammar,
       convert::conv_nfa_to_dfa,

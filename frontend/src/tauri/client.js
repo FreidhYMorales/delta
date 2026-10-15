@@ -460,12 +460,23 @@ export function grammarSetSource(source, tabId) {
 
 /**
  * Derives `input` from the grammar tab's current grammar: whether it is
- * generated, the derivation step by step and its derivation tree. Rejects
- * with the parse error if the grammar text is invalid.
+ * generated, the derivation step by step and its derivation tree — from
+ * `start` when given (any non-terminal), else from the grammar's start
+ * symbol. Rejects with the parse error if the grammar text is invalid.
  * @param {string} input
  * @param {"leftmost"|"rightmost"} order
  * @param {number} tabId
+ * @param {string|null} [start]
  */
-export function grammarDerive(input, order, tabId) {
-  return call("grammar_derive", { input, order, tabId });
+export function grammarDerive(input, order, tabId, start = null) {
+  return call("grammar_derive", { input, order, tabId, start });
+}
+
+/**
+ * Switches how the grammar tab's text is read; resolves with the snapshot.
+ * @param {"productions"|"bnf"} notation
+ * @param {number} tabId
+ */
+export function grammarSetNotation(notation, tabId) {
+  return call("grammar_set_notation", { notation, tabId });
 }

@@ -46,7 +46,7 @@ describe("DerivationPanel — one string", () => {
   it("derives the typed string (leftmost by default) and shows the outcome, the steps and the tree", async () => {
     const { container, panel, store } = setup();
     await deriveSingle(container, panel);
-    expect(store.derive).toHaveBeenCalledWith("ab", "leftmost");
+    expect(store.derive).toHaveBeenCalledWith("ab", "leftmost", null);
     expect(container.querySelector(".derive-outcome").textContent).toBe("✓ Aceptada");
     const steps = [...container.querySelectorAll(".derive-steps li")].map((li) => li.textContent);
     expect(steps).toEqual(["S", "⇒ aS  (S → aS)", "⇒ ab  (S → b)"]);
@@ -76,11 +76,31 @@ describe("DerivationPanel — one string", () => {
     expect(rule.querySelector("title").textContent).toBe("aA → b");
   });
 
+  it("can derive from another non-terminal (a BNF text defines many rules worth testing alone)", async () => {
+    const { container, panel, store } = setup();
+    panel.setNonterminals(["entero", "signo"]);
+    const start = container.querySelector(".derive-start");
+    expect([...start.options].map((o) => o.value)).toEqual(["", "entero", "signo"]);
+    start.value = "signo";
+    await deriveSingle(container, panel);
+    expect(store.derive).toHaveBeenCalledWith("ab", "leftmost", "signo");
+  });
+
+  it("keeps the chosen start symbol while it still exists", () => {
+    const { container, panel } = setup();
+    panel.setNonterminals(["entero", "signo"]);
+    container.querySelector(".derive-start").value = "signo";
+    panel.setNonterminals(["entero", "signo", "digito"]);
+    expect(container.querySelector(".derive-start").value).toBe("signo");
+    panel.setNonterminals(["entero"]);
+    expect(container.querySelector(".derive-start").value).toBe("");
+  });
+
   it("can derive rightmost", async () => {
     const { container, panel, store } = setup();
     container.querySelector(".derive-order").value = "rightmost";
     await deriveSingle(container, panel);
-    expect(store.derive).toHaveBeenCalledWith("ab", "rightmost");
+    expect(store.derive).toHaveBeenCalledWith("ab", "rightmost", null);
   });
 
   it("Enter in the input derives too", async () => {
@@ -89,7 +109,7 @@ describe("DerivationPanel — one string", () => {
     input.value = "ab";
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
     await panel._lastRunPromise;
-    expect(store.derive).toHaveBeenCalledWith("ab", "leftmost");
+    expect(store.derive).toHaveBeenCalledWith("ab", "leftmost", null);
   });
 
   it("a rejected string shows why, with no steps or tree", async () => {
@@ -136,7 +156,7 @@ describe("DerivationPanel — batch", () => {
     container.querySelector(".batch-table tbody tr .batch-show").click();
     await panel._lastRunPromise;
     expect(container.querySelector(".derive-input").value).toBe("ab");
-    expect(store.derive).toHaveBeenLastCalledWith("ab", "leftmost");
+    expect(store.derive).toHaveBeenLastCalledWith("ab", "leftmost", null);
     expect(container.querySelector("svg.derivation-tree")).toBeTruthy();
   });
 });

@@ -32,10 +32,12 @@ function fakeStore(source = "S -> aA\nA -> bAA", analysis = contextFreeAnalysis(
   const listeners = new Set();
   return {
     source,
+    notation: "productions",
     revision: 0,
     analysis,
     subscribe: (l) => (listeners.add(l), () => listeners.delete(l)),
     setSource: vi.fn().mockResolvedValue(undefined),
+    setNotation: vi.fn().mockResolvedValue(undefined),
     derive: vi.fn(),
     emit(next) {
       Object.assign(this, next);
@@ -129,5 +131,31 @@ describe("GrammarTabView", () => {
     expect(panel).toBeTruthy();
     expect(panel.querySelector(".derive-input")).toBeTruthy();
     expect(panel.querySelector(".batch-input")).toBeTruthy();
+  });
+
+  it("switches notation through the store, and shows the BNF example and syntax when in BNF", () => {
+    const { container, store } = setup();
+    const select = container.querySelector(".grammar-notation");
+    expect(select.value).toBe("productions");
+    select.value = "bnf";
+    select.dispatchEvent(new Event("change"));
+    expect(store.setNotation).toHaveBeenCalledWith("bnf");
+    store.emit({ notation: "bnf" });
+    expect(container.querySelector(".grammar-source").placeholder).toContain("::=");
+    expect(container.querySelector(".grammar-hint").textContent).toContain("{ }");
+  });
+
+  it("shows the EBNF → BNF conversion when the analysis has one", () => {
+    const { container, store } = setup();
+    expect(container.querySelector(".grammar-expansion").textContent).toBe("");
+    store.emit({ notation: "bnf", analysis: { ...contextFreeAnalysis(), expansion: ["n ::= d n_rep1 .", "n_rep1 ::= d n_rep1 | ε ."] } });
+    const lines = [...container.querySelectorAll(".grammar-expansion li")].map((li) => li.textContent);
+    expect(lines).toEqual(["n ::= d n_rep1 .", "n_rep1 ::= d n_rep1 | ε ."]);
+  });
+
+  it("offers the grammar's non-terminals as start symbols for testing strings", () => {
+    const { container } = setup();
+    const options = [...container.querySelectorAll(".derive-start option")].map((o) => o.value);
+    expect(options).toEqual(["", "S", "A"]);
   });
 });

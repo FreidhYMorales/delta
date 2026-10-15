@@ -48,6 +48,10 @@ pub enum MachineDoc {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GrammarDto {
     pub source: String,
+    /// Absent in grammar tabs saved before BNF/EBNF existed: plain
+    /// productions.
+    #[serde(default)]
+    pub notation: crate::grammar_doc::Notation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

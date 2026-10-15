@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { GrammarDocStore } from "./GrammarDocStore.js";
 
-const snap = (source, revision) => ({ revision, source, analysis: { grammar: null, classification: null, error: null } });
+const snap = (source, revision, notation = "productions") => ({
+  revision,
+  source,
+  notation,
+  analysis: { grammar: null, classification: null, error: null },
+});
 
 function setup() {
   const client = {
@@ -45,10 +50,20 @@ describe("GrammarDocStore", () => {
     expect(store.revision).toBe(2);
   });
 
-  it("derive asks the core for this tab's derivation of a string", async () => {
+  it("derive asks the core for this tab's derivation of a string, optionally from another start symbol", async () => {
     const { client, store } = setup();
     client.grammarDerive = vi.fn().mockResolvedValue({ outcome: "accepted" });
     expect(await store.derive("ab", "rightmost")).toEqual({ outcome: "accepted" });
-    expect(client.grammarDerive).toHaveBeenCalledWith("ab", "rightmost", 7);
+    expect(client.grammarDerive).toHaveBeenCalledWith("ab", "rightmost", 7, null);
+    await store.derive("-4", "leftmost", "entero");
+    expect(client.grammarDerive).toHaveBeenLastCalledWith("-4", "leftmost", 7, "entero");
+  });
+
+  it("setNotation switches the notation and adopts the re-read snapshot", async () => {
+    const { client, store } = setup();
+    client.grammarSetNotation = vi.fn(async (notation) => snap("S -> a", 1, notation));
+    await store.setNotation("bnf");
+    expect(client.grammarSetNotation).toHaveBeenCalledWith("bnf", 7);
+    expect(store.notation).toBe("bnf");
   });
 });

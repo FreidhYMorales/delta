@@ -10,6 +10,7 @@
 
 use std::fmt;
 
+pub mod bnf;
 pub mod chomsky;
 pub mod derive;
 pub mod general;

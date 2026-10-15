@@ -239,6 +239,9 @@ fn a_grammar_tab_keeps_its_source_through_save_and_open() {
     assert_eq!(manifest.tabs[0].kind, MachineKind::Grammar);
     app_lib::commands::grammar::set_source(&fx.grammar, id, "S -> aSb | ε".into()).unwrap();
     assert_eq!(project::manifest(&fx.project, &fx.sessions()).tabs[0].revision, 1);
+    let bnf_tab = project::new_tab(&fx.project, &fx.sessions(), MachineKind::Grammar, "BNF".into()).unwrap().tabs[1].id;
+    app_lib::commands::grammar::set_source(&fx.grammar, bnf_tab, "signo ::= '+' | '-'.".into()).unwrap();
+    app_lib::commands::grammar::set_notation(&fx.grammar, bnf_tab, automata_core::grammar_doc::Notation::Bnf).unwrap();
 
     let dir = std::env::temp_dir().join(format!("grammar-tab-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -251,5 +254,8 @@ fn a_grammar_tab_keeps_its_source_through_save_and_open() {
     let snap = app_lib::commands::grammar::snapshot(&reopened.grammar, manifest.tabs[0].id).unwrap();
     assert_eq!(snap.source, "S -> aSb | ε");
     assert_eq!(snap.analysis.classification.unwrap().chomsky_type, 2);
+    let bnf = app_lib::commands::grammar::snapshot(&reopened.grammar, manifest.tabs[1].id).unwrap();
+    assert_eq!(bnf.notation, automata_core::grammar_doc::Notation::Bnf);
+    assert!(bnf.analysis.error.is_none());
     std::fs::remove_dir_all(dir).ok();
 }

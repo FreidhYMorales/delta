@@ -112,8 +112,15 @@ describe("client.js grammar tab commands", () => {
     expect(invoke).toHaveBeenCalledWith("grammar_set_source", { source: "S -> a", tabId: 4 });
   });
 
-  it("grammarDerive(input, order, tabId) calls grammar_derive with {input, order, tabId}", async () => {
+  it("grammarDerive(input, order, tabId, start) calls grammar_derive with {input, order, tabId, start}", async () => {
+    await client.grammarDerive("aab", "leftmost", 4, "entero");
+    expect(invoke).toHaveBeenCalledWith("grammar_derive", { input: "aab", order: "leftmost", tabId: 4, start: "entero" });
     await client.grammarDerive("aab", "leftmost", 4);
-    expect(invoke).toHaveBeenCalledWith("grammar_derive", { input: "aab", order: "leftmost", tabId: 4 });
+    expect(invoke).toHaveBeenLastCalledWith("grammar_derive", { input: "aab", order: "leftmost", tabId: 4, start: null });
+  });
+
+  it("grammarSetNotation(notation, tabId) calls grammar_set_notation with {notation, tabId}", async () => {
+    await client.grammarSetNotation("bnf", 4);
+    expect(invoke).toHaveBeenCalledWith("grammar_set_notation", { notation: "bnf", tabId: 4 });
   });
 });

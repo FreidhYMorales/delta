@@ -13,6 +13,8 @@ export class GrammarDocStore {
     this.client = client;
     this.tabId = tabId;
     this.source = "";
+    /** @type {"productions"|"bnf"} */
+    this.notation = "productions";
     this.revision = 0;
     /** @type {{grammar: object|null, classification: object|null, error: object|null}|null} */
     this.analysis = null;
@@ -39,18 +41,27 @@ export class GrammarDocStore {
     if (token === this._requestToken) this._adopt(snapshot);
   }
 
+  /** @param {"productions"|"bnf"} notation */
+  async setNotation(notation) {
+    const token = ++this._requestToken;
+    const snapshot = await this.client.grammarSetNotation(notation, this.tabId);
+    if (token === this._requestToken) this._adopt(snapshot);
+  }
+
   /**
    * The core's derivation of `input` from this tab's grammar (read-only:
-   * nothing in the document changes).
+   * nothing in the document changes), from `start` when given.
    * @param {string} input
    * @param {"leftmost"|"rightmost"} order
+   * @param {string|null} [start]
    */
-  derive(input, order) {
-    return this.client.grammarDerive(input, order, this.tabId);
+  derive(input, order, start = null) {
+    return this.client.grammarDerive(input, order, this.tabId, start);
   }
 
   _adopt(snapshot) {
     this.source = snapshot.source;
+    this.notation = snapshot.notation ?? "productions";
     this.revision = snapshot.revision;
     this.analysis = snapshot.analysis;
     for (const listener of this._listeners) listener();
