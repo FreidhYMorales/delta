@@ -10,7 +10,12 @@
 //! - Non-terminals: an uppercase letter, or a name in angle brackets
 //!   (`<expresión>`). Terminals: any other single character, or a quoted
 //!   multi-character word (`'if'`, `"then"`).
-//! - Empty string: `ε`, `λ`, `∈`, `Є`, `ϵ` or an empty right side.
+//! - Empty string: `ε`, `λ`, `∈`, `є`, `Є`, `ϵ` or an empty right side.
+//! - Ranges: an alternative that is just `…` (or `..`, `...`) between two
+//!   single characters stands for every character in between
+//!   (`M -> A|B|C|…|Z`). In a right side with a range, every single-character
+//!   alternative is a terminal — even an uppercase one: those are letters of
+//!   the alphabet, not non-terminals.
 //! - Optional declarations: `Σ = {a, b}` (also `∑` or `T`), `N = {S, A}`,
 //!   `S = S` (start symbol). Without them, Σ and N are inferred and the
 //!   start symbol is `S` when it appears, else the first production's left
@@ -93,7 +98,10 @@ pub struct GrammarError {
 }
 
 const ARROWS: [&str; 5] = ["::=", "->", "→", "–>", "—>"];
-const EPSILONS: [char; 5] = ['ε', 'λ', '∈', 'Є', 'ϵ'];
+/// Every spelling of the empty string the course's material uses.
+pub(crate) const EPSILONS: [char; 6] = ['ε', 'λ', '∈', 'є', 'Є', 'ϵ'];
+/// Range markers: `a|b|c|…|z`.
+pub(crate) const RANGE_MARKERS: [&str; 3] = ["…", "..", "..."];
 
 fn error(line: usize, message: impl Into<String>) -> GrammarError {
     GrammarError { line, message: message.into() }
@@ -137,7 +145,14 @@ pub fn parse_general(text: &str) -> Result<GeneralGrammar, GrammarError> {
                 format!("el lado izquierdo «{}» debe tener al menos un no terminal", lhs_text.trim()),
             ));
         }
-        for alternative in split_alternatives(rhs_text) {
+        let alternatives = split_alternatives(rhs_text);
+        if alternatives.iter().any(|a| RANGE_MARKERS.contains(&a.trim())) {
+            for c in expand_range(&alternatives).map_err(|m| error(line, m))? {
+                productions.push(GeneralProduction { lhs: lhs.clone(), rhs: vec![Symbol::Terminal(c.to_string())], line });
+            }
+            continue;
+        }
+        for alternative in alternatives {
             let rhs = tokenize(alternative, &declared_n).map_err(|m| error(line, m))?;
             productions.push(GeneralProduction { lhs: lhs.clone(), rhs, line });
         }
@@ -219,6 +234,36 @@ fn set_items(value: &str) -> Vec<String> {
         .filter(|item| !item.is_empty())
         .map(str::to_string)
         .collect()
+}
+
+/// The characters of a right side written as a list with a range
+/// (`A|B|C|…|Z`): each alternative must be a single character, and a range
+/// marker between two of them stands for every character in between.
+fn expand_range(alternatives: &[&str]) -> Result<Vec<char>, String> {
+    let message = "'…' solo puede ir entre dos símbolos de un carácter, p. ej. a|b|…|z".to_string();
+    let single = |a: &str| {
+        let mut chars = a.trim().chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => Some(c),
+            _ => None,
+        }
+    };
+    let mut out: Vec<char> = Vec::new();
+    for (i, alternative) in alternatives.iter().enumerate() {
+        if !RANGE_MARKERS.contains(&alternative.trim()) {
+            out.push(single(alternative).ok_or_else(|| {
+                format!("en una lista con '…' cada alternativa es un solo carácter: «{}»", alternative.trim())
+            })?);
+            continue;
+        }
+        let from = i.checked_sub(1).and_then(|p| single(alternatives[p])).ok_or(message.clone())?;
+        let to = alternatives.get(i + 1).and_then(|a| single(a)).ok_or(message.clone())?;
+        if from >= to {
+            return Err(message);
+        }
+        out.extend(((from as u32 + 1)..(to as u32)).filter_map(char::from_u32));
+    }
+    Ok(out)
 }
 
 /// Splits a right side on top-level `|` (not inside quotes or `<…>`).
@@ -319,6 +364,25 @@ mod tests {
             productions(&g),
             vec!["S → A1B", "A → 0A", "A → ε", "B → 0B", "B → 1B", "B → ε", "C → ε", "D → ε"]
         );
+    }
+
+    #[test]
+    fn ranges_with_an_ellipsis_and_the_courses_epsilon_spelling() {
+        // Ejemplos gramáticas.pdf: M -> A|B|C|…|Z, L -> a|b|c|…|z, I -> LI | є
+        let g = parse_general("S -> NN\nN -> MI\nM -> A|B|C|…|Z\nI -> LI | є\nL -> a|b|c|…|z").unwrap();
+        let m: Vec<String> = productions(&g).into_iter().filter(|p| p.starts_with("M →")).collect();
+        assert_eq!(m.len(), 26);
+        assert_eq!(m[25], "M → Z");
+        assert!(productions(&g).contains(&"I → ε".to_string()));
+        assert_eq!(productions(&g).iter().filter(|p| p.starts_with("L →")).count(), 26);
+        let digits = parse_general("D -> 0|1|..|9").unwrap();
+        assert_eq!(digits.productions.len(), 10);
+    }
+
+    #[test]
+    fn a_range_needs_single_characters_on_both_sides() {
+        let err = parse_general("S -> a|…").unwrap_err();
+        assert!(err.message.contains("…"), "{}", err.message);
     }
 
     #[test]

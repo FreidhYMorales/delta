@@ -23,7 +23,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use serde::Serialize;
 
 use super::chomsky::{classify, context_split};
-use super::general::{GeneralGrammar, Symbol};
+use super::general::{GeneralGrammar, Symbol, EPSILONS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -46,6 +46,10 @@ pub struct DerivationStep {
     pub production: String,
     /// Index (in symbols) in the previous form where its left side starts.
     pub position: usize,
+    /// The form this step leads to, as the course writes it: a step that
+    /// erases (`A → ε`) shows `ε` where the symbol was (`5<entero>` then
+    /// `5ε`), the next step drops it.
+    pub form: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -111,8 +115,11 @@ impl Derivation {
 /// string.
 fn tokenize_input(grammar: &GeneralGrammar, input: &str) -> Result<Vec<Symbol>, String> {
     let trimmed = input.trim();
-    if matches!(trimmed, "ε" | "λ" | "∈") {
-        return Ok(vec![]);
+    let mut chars = trimmed.chars();
+    if let (Some(c), None) = (chars.next(), chars.next()) {
+        if EPSILONS.contains(&c) {
+            return Ok(vec![]);
+        }
     }
     let mut terminals: Vec<&String> = grammar.terminals.iter().collect();
     terminals.sort_by_key(|t| std::cmp::Reverse(t.chars().count()));
@@ -152,6 +159,7 @@ struct Earley<'a> {
     completed: Vec<HashSet<(usize, usize)>>,
 }
 
+#[derive(Clone)]
 enum ParseTree {
     Node(usize, Vec<ParseTree>),
     Leaf(Symbol),
@@ -219,7 +227,7 @@ fn derive_context_free(grammar: &GeneralGrammar, target: &[Symbol], order: Deriv
     }
 
     let parser = Earley { grammar, by_lhs, target, completed };
-    let tree = parser.build(&grammar.start, 0, n, &mut HashSet::new());
+    let tree = parser.build(&grammar.start, 0, n, &mut HashSet::new(), &mut HashMap::new()).map(|(tree, _)| tree);
     match tree {
         Some(tree) => from_parse_tree(grammar, &tree, order),
         None => Derivation::without_steps(
@@ -250,57 +258,82 @@ impl Earley<'_> {
         self.by_lhs.get(a).is_some_and(|ps| ps.iter().any(|&p| self.completed[j].contains(&(p, i))))
     }
 
-    /// A parse tree for `a` spanning `target[i..j]`. `stack` guards against
-    /// cycles (A → B, B → A, nullable loops): a minimal tree never revisits
-    /// the same (A, i, j) on one path, so skipping those loses nothing.
-    fn build(&self, a: &str, i: usize, j: usize, stack: &mut HashSet<(String, usize, usize)>) -> Option<ParseTree> {
+    /// The smallest parse tree (fewest nodes) for `a` spanning
+    /// `target[i..j]` — on an ambiguous grammar, the one written by hand,
+    /// without detours through ε. `stack` guards against cycles (A → B,
+    /// B → A, nullable loops): a minimal tree never revisits the same
+    /// (A, i, j) on one path, so skipping those loses nothing. `memo` keeps
+    /// every span already solved.
+    fn build(
+        &self,
+        a: &str,
+        i: usize,
+        j: usize,
+        stack: &mut HashSet<(String, usize, usize)>,
+        memo: &mut HashMap<(String, usize, usize), (ParseTree, usize)>,
+    ) -> Option<(ParseTree, usize)> {
         let key = (a.to_string(), i, j);
+        if let Some(solved) = memo.get(&key) {
+            return Some(solved.clone());
+        }
         if !stack.insert(key.clone()) {
             return None;
         }
-        let mut result = None;
+        let mut best: Option<(ParseTree, usize)> = None;
         for &p in self.by_lhs.get(a).map(Vec::as_slice).unwrap_or(&[]) {
             if !self.completed[j].contains(&(p, i)) {
                 continue;
             }
-            if let Some(children) = self.match_rhs(&self.grammar.productions[p].rhs, i, j, stack) {
-                result = Some(ParseTree::Node(p, children));
-                break;
+            if let Some((children, size)) = self.match_rhs(&self.grammar.productions[p].rhs, i, j, stack, memo) {
+                // An empty right side still draws one ε leaf.
+                let total = 1 + size.max(1);
+                if best.as_ref().is_none_or(|(_, s)| total < *s) {
+                    best = Some((ParseTree::Node(p, children), total));
+                }
             }
         }
         stack.remove(&key);
-        result
+        if let Some(solved) = &best {
+            memo.insert(key, solved.clone());
+        }
+        best
     }
 
+    /// The smallest way to derive `target[pos..end]` from `rhs`, as the
+    /// children trees and their total size.
     fn match_rhs(
         &self,
         rhs: &[Symbol],
         pos: usize,
         end: usize,
         stack: &mut HashSet<(String, usize, usize)>,
-    ) -> Option<Vec<ParseTree>> {
+        memo: &mut HashMap<(String, usize, usize), (ParseTree, usize)>,
+    ) -> Option<(Vec<ParseTree>, usize)> {
         let Some((first, rest)) = rhs.split_first() else {
-            return (pos == end).then(Vec::new);
+            return (pos == end).then(|| (Vec::new(), 0));
         };
         match first {
             Symbol::NonTerminal(b) => {
+                let mut best: Option<(Vec<ParseTree>, usize)> = None;
                 for q in pos..=end {
                     if !self.completes(b, pos, q) {
                         continue;
                     }
-                    let Some(child) = self.build(b, pos, q, stack) else { continue };
-                    if let Some(mut tail) = self.match_rhs(rest, q, end, stack) {
+                    let Some((child, child_size)) = self.build(b, pos, q, stack, memo) else { continue };
+                    let Some((mut tail, tail_size)) = self.match_rhs(rest, q, end, stack, memo) else { continue };
+                    let total = child_size + tail_size;
+                    if best.as_ref().is_none_or(|(_, s)| total < *s) {
                         tail.insert(0, child);
-                        return Some(tail);
+                        best = Some((tail, total));
                     }
                 }
-                None
+                best
             }
             terminal => {
                 if pos < end && self.target[pos] == *terminal {
-                    let mut tail = self.match_rhs(rest, pos + 1, end, stack)?;
+                    let (mut tail, size) = self.match_rhs(rest, pos + 1, end, stack, memo)?;
                     tail.insert(0, ParseTree::Leaf(terminal.clone()));
-                    Some(tail)
+                    Some((tail, size + 1))
                 } else {
                     None
                 }
@@ -329,9 +362,13 @@ fn from_parse_tree(grammar: &GeneralGrammar, tree: &ParseTree, order: Derivation
         let id = frontier[position];
         let replacement: Vec<usize> =
             nodes[id].children.iter().copied().filter(|&c| nodes[c].kind != NodeKind::Epsilon).collect();
+        let erased = replacement.is_empty();
+        let erased_view = erased.then(|| text_with_epsilon(&nodes, &frontier, position, 1));
         frontier.splice(position..=position, replacement);
-        steps.push(DerivationStep { production: grammar.productions[production_of[&id]].to_string(), position });
-        forms.push(frontier_text(&nodes, &frontier));
+        let form = frontier_text(&nodes, &frontier);
+        let production = grammar.productions[production_of[&id]].to_string();
+        steps.push(DerivationStep { production, position, form: erased_view.unwrap_or_else(|| form.clone()) });
+        forms.push(form);
         production_of.remove(&id);
     }
     Derivation { outcome: DeriveOutcome::Accepted, reason: None, forms, steps, tree: Some(DerivationTree { nodes, root }) }
@@ -371,6 +408,12 @@ fn epsilon_node() -> TreeNode {
 fn push_node(nodes: &mut Vec<TreeNode>, node: TreeNode) -> usize {
     nodes.push(node);
     nodes.len() - 1
+}
+
+/// The form with `ε` standing where `len` symbols at `at` were erased.
+fn text_with_epsilon(nodes: &[TreeNode], frontier: &[usize], at: usize, len: usize) -> String {
+    let labels = |ids: &[usize]| ids.iter().map(|&id| nodes[id].label.as_str()).collect::<String>();
+    format!("{}ε{}", labels(&frontier[..at]), labels(&frontier[at + len..]))
 }
 
 fn frontier_text(nodes: &[TreeNode], frontier: &[usize]) -> String {
@@ -483,16 +526,21 @@ fn from_steps(grammar: &GeneralGrammar, path: &[(usize, usize)]) -> Derivation {
     let mut steps = Vec::new();
     for &(p, position) in path {
         let production = &grammar.productions[p];
-        steps.push(DerivationStep { production: production.to_string(), position });
         if let Some(i) = context_split(production) {
             let (x, y) = (i, production.lhs.len() - i - 1);
             let z = &production.rhs[x..production.rhs.len() - y];
             let new_ids: Vec<usize> = z.iter().map(|s| push_node(&mut nodes, symbol_node(s))).collect();
             nodes[frontier[position + i]].children = new_ids.clone();
             frontier.splice(position + i..=position + i, new_ids);
-            forms.push(frontier_text(&nodes, &frontier));
+            let form = frontier_text(&nodes, &frontier);
+            steps.push(DerivationStep { production: production.to_string(), position, form: form.clone() });
+            forms.push(form);
             continue;
         }
+        let erased_view = production
+            .rhs
+            .is_empty()
+            .then(|| text_with_epsilon(&nodes, &frontier, position, production.lhs.len()));
         let new_ids: Vec<usize> = if production.rhs.is_empty() {
             vec![push_node(&mut nodes, epsilon_node())]
         } else {
@@ -513,7 +561,9 @@ fn from_steps(grammar: &GeneralGrammar, path: &[(usize, usize)]) -> Derivation {
         }
         let visible: Vec<usize> = new_ids.into_iter().filter(|&id| nodes[id].kind != NodeKind::Epsilon).collect();
         frontier.splice(position..position + production.lhs.len(), visible);
-        forms.push(frontier_text(&nodes, &frontier));
+        let form = frontier_text(&nodes, &frontier);
+        steps.push(DerivationStep { production: production.to_string(), position, form: erased_view.unwrap_or_else(|| form.clone()) });
+        forms.push(form);
     }
     Derivation { outcome: DeriveOutcome::Accepted, reason: None, forms, steps, tree: Some(DerivationTree { nodes, root: 0 }) }
 }
@@ -568,7 +618,7 @@ mod tests {
         let d = run(EXERCISE_2, "ab");
         assert_eq!(d.forms, vec!["S", "aB", "ab"]);
         assert_eq!(d.steps[0].production, "S → aB");
-        assert_eq!(d.steps[1], DerivationStep { production: "B → b".into(), position: 1 });
+        assert_eq!(d.steps[1], DerivationStep { production: "B → b".into(), position: 1, form: "ab".into() });
     }
 
     #[test]
@@ -592,6 +642,28 @@ mod tests {
         let a = &tree.nodes[root.children[0]];
         assert_eq!(a.children.len(), 1);
         assert_eq!(tree.nodes[a.children[0]].kind, NodeKind::Epsilon);
+    }
+
+    #[test]
+    fn an_ambiguous_grammar_gets_its_smallest_tree_the_one_written_by_hand() {
+        // Ejemplos gramáticas.pdf, -25: the inner <entero> is <digito><entero>,
+        // not <signo><digito><entero> with an empty sign.
+        let d = run("E -> GDE | DE | ε\nD -> 0|1|…|9\nG -> +|-|ε", "-25");
+        let shown: Vec<&str> = d.steps.iter().map(|s| s.form.as_str()).collect();
+        assert_eq!(shown, vec!["GDE", "-DE", "-2E", "-2DE", "-25E", "-25ε"]);
+        let tree = d.tree.unwrap();
+        let root = &tree.nodes[tree.root];
+        let inner = &tree.nodes[root.children[2]];
+        assert_eq!(inner.children.len(), 2);
+    }
+
+    #[test]
+    fn a_highly_ambiguous_grammar_still_answers_quickly() {
+        // S -> SS | a has a Catalan number of trees for a^n; picking the
+        // smallest must not try them all.
+        let started = std::time::Instant::now();
+        assert!(accepts("S -> SS | a", &"a".repeat(30)));
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "took {:?}", started.elapsed());
     }
 
     #[test]
@@ -694,7 +766,24 @@ mod tests {
     #[test]
     fn epsilon_input_can_be_typed_as_epsilon() {
         assert!(accepts("S -> aS | ε", "ε"));
+        assert!(accepts("S -> aS | ε", "є"));
         assert!(accepts("S -> aS | ε", ""));
+    }
+
+    #[test]
+    fn each_step_shows_its_form_with_epsilon_where_a_symbol_was_erased() {
+        // Ejemplos gramáticas.pdf: <entero> ::= <digito><entero> ::= 5<entero> ::= 5 є
+        let d = run("E -> DE | ε\nD -> 0|1|…|9", "5");
+        let shown: Vec<&str> = d.steps.iter().map(|s| s.form.as_str()).collect();
+        assert_eq!(shown, vec!["DE", "5E", "5ε"]);
+        assert_eq!(d.forms.last().unwrap(), "5");
+    }
+
+    #[test]
+    fn erasing_in_the_middle_shows_epsilon_in_place() {
+        let d = run("S -> AB\nA -> ε\nB -> b", "b");
+        let shown: Vec<&str> = d.steps.iter().map(|s| s.form.as_str()).collect();
+        assert_eq!(shown, vec!["AB", "εB", "b"]);
     }
 
     #[test]

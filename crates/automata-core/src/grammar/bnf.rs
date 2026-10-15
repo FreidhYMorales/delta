@@ -1,7 +1,15 @@
-//! BNF / EBNF notation (`idea/nuevos_agregados/notacion_bnf_mr_110-112.pdf`)
-//! read into a `GeneralGrammar`, with the EBNF constructs expanded into
-//! plain BNF rules so the rest of the "Gramática" tab (classification,
-//! derivations, trees) works on it unchanged.
+//! BNF / EBNF notation read into a `GeneralGrammar`, with the EBNF
+//! constructs expanded into plain BNF rules so the rest of the "Gramática"
+//! tab (classification, derivations, trees) works on it unchanged.
+//!
+//! Two styles, told apart by how rules are named:
+//! - With `<name>` rule heads (`idea/nuevos_agregados/Ejemplos
+//!   gramáticas.pdf`, the course's main notation): non-terminals are
+//!   `<name>` (spaces inside are ignored), every other character is a
+//!   terminal on its own (`<signo> ::= +|-| є`), one rule per line, no final
+//!   dot needed, ranges written `0|1|…|9`.
+//! - With bare rule names (`notacion_bnf_mr_110-112.pdf`): bare names are
+//!   non-terminals and terminals are quoted, as described below.
 //!
 //! Metasymbols:
 //! - `::=` "se define como", `|` alternatives, `.` end of rule (optional: a
@@ -9,7 +17,7 @@
 //! - `( a | b )` grouping, `[ algo ]` zero or one, `{ algo }` zero or more.
 //! - `'xyz'` (or `"xyz"`) terminal symbols; bare names (`entero_sin_signo`)
 //!   are non-terminals. `ε` (or an empty alternative) is the empty string.
-//! - `'0' | '1' | .. | '9'`: an unquoted `..` alternative between two
+//! - `'0' | '1' | .. | '9'` (or `…`): a range alternative between two
 //!   single-character terminals stands for every character between them.
 //!
 //! EBNF → BNF: `[x]` becomes a new non-terminal `N ::= x | ε`, `{x}` becomes
@@ -20,7 +28,7 @@
 
 use serde::Serialize;
 
-use super::general::{GeneralGrammar, GeneralProduction, GrammarError, Symbol};
+use super::general::{GeneralGrammar, GeneralProduction, GrammarError, Symbol, EPSILONS};
 
 /// The parsed grammar plus the plain-BNF rules it expands to, as text
 /// (`entero ::= entero_opc1 entero_sin_signo .`).
@@ -32,7 +40,8 @@ pub struct BnfGrammar {
 
 pub fn parse_bnf(text: &str) -> Result<BnfGrammar, GrammarError> {
     let mut warnings = Vec::new();
-    let tokens = lex(text, &mut warnings)?;
+    let angle = uses_angle_brackets(text);
+    let tokens = lex(text, angle, &mut warnings)?;
     let rules = Parser { tokens: &tokens, pos: 0 }.rules()?;
     if rules.is_empty() {
         return Err(error(1, "no hay reglas — escribí una por definición, p. ej. signo ::= '+' | '-' ."));
@@ -45,10 +54,10 @@ pub fn parse_bnf(text: &str) -> Result<BnfGrammar, GrammarError> {
         let mut helpers = Vec::new();
         let mut counters = [0usize; 3];
         let alternatives = lower(&rule.name, &rule.expr, &mut counters, &mut helpers);
-        expansion.push(rule_text(&rule.name, &alternatives));
+        expansion.push(rule_text(&rule.name, &alternatives, angle));
         expanded.push((rule.name.clone(), rule.line, alternatives));
         for (name, alternatives) in helpers {
-            expansion.push(rule_text(&name, &alternatives));
+            expansion.push(rule_text(&name, &alternatives, angle));
             expanded.push((name, rule.line, alternatives));
         }
     }
@@ -119,7 +128,12 @@ fn is_name_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-fn lex(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Token>, GrammarError> {
+/// Rules named `<name> ::= …` (rather than `name ::= …`).
+fn uses_angle_brackets(text: &str) -> bool {
+    text.match_indices("::=").any(|(at, _)| text[..at].trim_end().ends_with('>'))
+}
+
+fn lex(text: &str, angle: bool, warnings: &mut Vec<String>) -> Result<Vec<Token>, GrammarError> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let mut line = 1;
@@ -131,7 +145,13 @@ fn lex(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Token>, GrammarErro
         match c {
             '\n' => line += 1,
             c if c.is_whitespace() => {}
-            'ε' | 'λ' | '∈' => {}
+            c if EPSILONS.contains(&c) => {}
+            '…' => push(&mut tokens, Tok::Range),
+            '.' if rest.starts_with(&['.', '.', '.']) => {
+                push(&mut tokens, Tok::Range);
+                i += 3;
+                continue;
+            }
             '/' if rest.get(1) == Some(&'/') => {
                 while i < chars.len() && chars[i] != '\n' {
                     i += 1;
@@ -148,7 +168,25 @@ fn lex(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Token>, GrammarErro
                 i += 2;
                 continue;
             }
+            // With <name> rules a dot only ends a rule at the end of its
+            // line; anywhere else it is a terminal.
+            '.' if angle && !rest[1..].iter().take_while(|&&c| c != '\n').all(|c| c.is_whitespace()) => {
+                push(&mut tokens, Tok::Quoted(".".into()));
+            }
             '.' => push(&mut tokens, Tok::Dot),
+            '<' if angle => {
+                let start_line = line;
+                let mut name = String::new();
+                i += 1;
+                while i < chars.len() && chars[i] != '>' && chars[i] != '\n' {
+                    name.push(chars[i]);
+                    i += 1;
+                }
+                if chars.get(i) != Some(&'>') || name.trim().is_empty() {
+                    return Err(error(start_line, "falta '>' para cerrar el nombre del no terminal, p. ej. <digito>"));
+                }
+                tokens.push(Token { tok: Tok::Name(name.trim().to_string()), line: start_line });
+            }
             '|' => push(&mut tokens, Tok::Bar),
             '(' | '[' | '{' => push(&mut tokens, Tok::Open(c)),
             ')' | ']' | '}' => push(&mut tokens, Tok::Close(c)),
@@ -171,6 +209,8 @@ fn lex(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Token>, GrammarErro
                 }
                 tokens.push(Token { tok: Tok::Quoted(word), line: start_line });
             }
+            // With <name> rules, any other character is a terminal on its own.
+            c if angle => push(&mut tokens, Tok::Quoted(c.to_string())),
             c if is_name_char(c) => {
                 let mut name = String::new();
                 while i < chars.len() && is_name_char(chars[i]) {
@@ -394,21 +434,28 @@ fn helper(
     Sym::N(name)
 }
 
-fn rule_text(name: &str, alternatives: &[Vec<Sym>]) -> String {
+/// A rule as text, in the style it was written in: `<n> ::= <d><n_rep1>`
+/// with <name> rules, `n ::= d n_rep1 .` with bare names.
+fn rule_text(name: &str, alternatives: &[Vec<Sym>], angle: bool) -> String {
+    let quoted = |t: &str| if t.contains('\'') { format!("\"{t}\"") } else { format!("'{t}'") };
     let alternative_text = |a: &Vec<Sym>| {
         if a.is_empty() {
             return "ε".to_string();
         }
-        a.iter()
-            .map(|s| match s {
-                Sym::N(n) => n.clone(),
-                Sym::T(t) if t.contains('\'') => format!("\"{t}\""),
-                Sym::T(t) => format!("'{t}'"),
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
+        let parts = a.iter().map(|s| match s {
+            Sym::N(n) if angle => format!("<{n}>"),
+            Sym::N(n) => n.clone(),
+            Sym::T(t) if angle && t.chars().count() == 1 && !"|()[]{}<>'\" ".contains(t.as_str()) => t.clone(),
+            Sym::T(t) => quoted(t),
+        });
+        parts.collect::<Vec<_>>().join(if angle { "" } else { " " })
     };
-    format!("{name} ::= {} .", alternatives.iter().map(alternative_text).collect::<Vec<_>>().join(" | "))
+    let body = alternatives.iter().map(alternative_text).collect::<Vec<_>>().join(" | ");
+    if angle {
+        format!("<{name}> ::= {body}")
+    } else {
+        format!("{name} ::= {body} .")
+    }
 }
 
 #[cfg(test)]
@@ -431,6 +478,53 @@ mod tests {
                            signo ::= '+' | '-' .\n\
                            entero_sin_signo ::= digito { digito }.\n\
                            entero ::= [ signo ] entero_sin_signo.";
+
+    // `Ejemplos gramáticas.pdf`: <name> non-terminals, bare characters as
+    // terminals, one rule per line, `…` ranges and `є`.
+    const PERSON_NAME: &str = "<nombre> ::= <pnombre><pnombre>\n\
+                               <pnombre> ::= <lmayus><lminus>\n\
+                               <lmayus> ::= A|B|C|…|Z\n\
+                               <lminus> ::= <letra><lminus> | є\n\
+                               <letra> ::= a|b|c|…|z";
+
+    #[test]
+    fn angle_bracket_bnf_from_the_course_example_person_name() {
+        let b = parse_bnf(PERSON_NAME).unwrap();
+        assert_eq!(b.grammar.start, "nombre");
+        assert!(accepts(&b.grammar, "nombre", "Juan Perez"));
+        assert!(accepts(&b.grammar, "nombre", "JuanPerez"));
+        assert!(!accepts(&b.grammar, "nombre", "juan Perez"));
+        assert!(!accepts(&b.grammar, "nombre", "Juan"));
+        assert!(b.grammar.warnings.is_empty(), "{:?}", b.grammar.warnings);
+    }
+
+    #[test]
+    fn angle_bracket_bnf_integers_with_and_without_sign() {
+        let unsigned = parse_bnf("<entero> ::= <digito><entero> |є\n<digito> ::= 0|1|…|9").unwrap();
+        for w in ["5", "15", "250"] {
+            assert!(accepts(&unsigned.grammar, "entero", w), "{w}");
+        }
+        let signed =
+            parse_bnf("<entero> ::= <signo><digito><entero> |<digito><entero>|є\n<digito> ::= 0|1|…|9\n<signo> ::= +|-| є")
+                .unwrap();
+        assert!(accepts(&signed.grammar, "entero", "-25"));
+        assert!(accepts(&signed.grammar, "entero", "25"));
+        assert!(!accepts(&signed.grammar, "entero", "2-"));
+    }
+
+    #[test]
+    fn spaces_inside_angle_brackets_do_not_matter() {
+        let b = parse_bnf("<nombre> ::= < pnombre >\n<pnombre> ::= x").unwrap();
+        assert!(accepts(&b.grammar, "nombre", "x"));
+    }
+
+    #[test]
+    fn angle_bracket_ebnf_expands_in_the_same_notation() {
+        let b = parse_bnf("<n> ::= <d> { <d> }\n<d> ::= 0|1").unwrap();
+        assert!(b.expansion.contains(&"<n> ::= <d><n_rep1>".to_string()), "{:?}", b.expansion);
+        assert!(b.expansion.contains(&"<n_rep1> ::= <d><n_rep1> | ε".to_string()), "{:?}", b.expansion);
+        assert!(b.expansion.contains(&"<d> ::= 0 | 1".to_string()), "{:?}", b.expansion);
+    }
 
     #[test]
     fn plain_bnf_rules_with_alternatives() {

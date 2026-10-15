@@ -20,10 +20,11 @@ const NOTATIONS = {
   },
   bnf: {
     label: "BNF / EBNF",
-    placeholder: "entero ::= [ signo ] digito { digito } .\nsigno ::= '+' | '-' .\ndigito ::= '0' | .. | '9' .",
+    placeholder: "<entero> ::= <signo><digito><entero> | <digito><entero> | є\n<digito> ::= 0|1|…|9\n<signo> ::= +|-| є",
     hint:
-      "::= se define como · | alternativa · ( ) agrupa · [ ] 0 o 1 vez · { } 0 o más veces · 'xyz' terminal · " +
-      ". fin de regla · '0' | .. | '9' rango · los nombres sueltos son no terminales; la primera regla es el símbolo inicial",
+      "Una regla por línea · <nombre> no terminal · cualquier otro carácter es un terminal · ::= se define como · " +
+      "| alternativa · є vacío · 0|1|…|9 rango · EBNF: ( ) agrupa, [ ] 0 o 1 vez, { } 0 o más veces · " +
+      "la primera regla es el símbolo inicial · también se acepta el estilo con nombres sueltos y 'terminales' entre comillas",
   },
 };
 
@@ -112,6 +113,7 @@ export class GrammarTabView {
     this.hint.textContent = NOTATIONS[notation].hint;
     const analysis = this.store.analysis ?? { grammar: null, classification: null, error: null };
     this.derivationPanel.setNonterminals(analysis.grammar?.nonterminals ?? []);
+    this.derivationPanel.setNotation(notation);
 
     // Shown only for BNF/EBNF (and its heading with it).
     this.expansion.replaceChildren();

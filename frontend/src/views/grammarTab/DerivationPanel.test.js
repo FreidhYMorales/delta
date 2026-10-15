@@ -10,8 +10,8 @@ function accepted() {
     reason: null,
     forms: ["S", "aS", "ab"],
     steps: [
-      { production: "S → aS", position: 0 },
-      { production: "S → b", position: 1 },
+      { production: "S → aS", position: 0, form: "aS" },
+      { production: "S → b", position: 1, form: "ab" },
     ],
     tree: {
       root: 0,
@@ -48,8 +48,10 @@ describe("DerivationPanel — one string", () => {
     await deriveSingle(container, panel);
     expect(store.derive).toHaveBeenCalledWith("ab", "leftmost", null);
     expect(container.querySelector(".derive-outcome").textContent).toBe("✓ Aceptada");
-    const steps = [...container.querySelectorAll(".derive-steps li")].map((li) => li.textContent);
-    expect(steps).toEqual(["S", "⇒ aS  (S → aS)", "⇒ ab  (S → b)"]);
+    const steps = [...container.querySelectorAll(".derive-steps li .derive-form")].map((el) => el.textContent);
+    expect(steps).toEqual(["S", "⇒ aS", "⇒ ab"]);
+    const rules = [...container.querySelectorAll(".derive-steps li .derive-rule")].map((el) => el.textContent);
+    expect(rules).toEqual(["S → aS", "S → b"]);
     const svg = container.querySelector("svg.derivation-tree");
     expect(svg.querySelectorAll(".derivation-node")).toHaveLength(4);
     expect(svg.querySelectorAll(".derivation-edge")).toHaveLength(3);
@@ -94,6 +96,33 @@ describe("DerivationPanel — one string", () => {
     expect(container.querySelector(".derive-start").value).toBe("signo");
     panel.setNonterminals(["entero"]);
     expect(container.querySelector(".derive-start").value).toBe("");
+  });
+
+  it("in BNF notation writes the derivation the course's way: <s> ::= … then ::= …, with ε where a symbol is erased", async () => {
+    const bnf = {
+      outcome: "accepted",
+      reason: null,
+      forms: ["<entero>", "<digito><entero>", "5<entero>", "5"],
+      steps: [
+        { production: "<entero> → <digito><entero>", position: 0, form: "<digito><entero>" },
+        { production: "<digito> → 5", position: 0, form: "5<entero>" },
+        { production: "<entero> → ε", position: 1, form: "5ε" },
+      ],
+      tree: { root: 0, nodes: [node("<entero>", "nonterminal", [1]), node("5", "terminal")] },
+    };
+    const { container, panel } = setup(vi.fn().mockResolvedValue(bnf));
+    panel.setNotation("bnf");
+    await deriveSingle(container, panel, "5");
+    const lines = [...container.querySelectorAll(".derive-steps li .derive-form")].map((el) => el.textContent);
+    expect(lines).toEqual(["<entero> ::= <digito><entero>", "::= 5<entero>", "::= 5ε"]);
+  });
+
+  it("draws the tree as boxes, like the course's, with the leaves marked", async () => {
+    const { container, panel } = setup();
+    await deriveSingle(container, panel);
+    const svg = container.querySelector("svg.derivation-tree");
+    expect(svg.querySelectorAll(".derivation-node rect")).toHaveLength(4);
+    expect(svg.querySelectorAll(".derivation-terminal")).toHaveLength(2);
   });
 
   it("can derive rightmost", async () => {

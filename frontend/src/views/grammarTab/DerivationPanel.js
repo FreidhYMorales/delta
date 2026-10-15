@@ -20,7 +20,14 @@ export class DerivationPanel {
    */
   constructor(container, store) {
     this.store = store;
+    /** @type {"productions"|"bnf"} how the derivation is written */
+    this.notation = "productions";
     this._build(container);
+  }
+
+  /** @param {"productions"|"bnf"} notation */
+  setNotation(notation) {
+    this.notation = notation;
   }
 
   _build(container) {
@@ -142,15 +149,39 @@ export class DerivationPanel {
     this.outcome.textContent = outcomeLabel(derivation.outcome);
     this.outcome.dataset.outcome = derivation.outcome;
     this.reason.textContent = derivation.reason ?? "";
-    derivation.forms.forEach((form, i) => {
+    for (const line of this._derivationLines(derivation)) {
       const li = document.createElement("li");
-      li.textContent = i === 0 ? form : `⇒ ${form}  (${derivation.steps[i - 1].production})`;
+      const form = document.createElement("span");
+      form.className = "derive-form";
+      form.textContent = line.form;
+      li.appendChild(form);
+      if (line.rule) {
+        const rule = document.createElement("span");
+        rule.className = "derive-rule";
+        rule.textContent = line.rule;
+        li.appendChild(rule);
+      }
       this.steps.appendChild(li);
-    });
+    }
     if (derivation.tree) {
       this.steps.title = derivationText(derivation);
       this.treeHost.appendChild(drawDerivationTree(derivation.tree));
     }
+  }
+
+  /** One line per step, as the course writes it: in BNF the start symbol
+   * and the first step share a line (`<entero> ::= <digito><entero>`) and
+   * every next one starts with `::=`; with productions each step is `⇒ …`.
+   * Each line notes the rule it applied. */
+  _derivationLines({ forms, steps }) {
+    if (!forms.length) return [];
+    if (this.notation === "bnf" && steps.length) {
+      return steps.map((step, i) => ({
+        form: i === 0 ? `${forms[0]} ::= ${step.form}` : `::= ${step.form}`,
+        rule: step.production,
+      }));
+    }
+    return [{ form: forms[0], rule: null }, ...steps.map((step) => ({ form: `⇒ ${step.form}`, rule: step.production }))];
   }
 
   async _runBatch() {
@@ -238,9 +269,12 @@ function drawDerivationTree(tree) {
       svg.appendChild(g);
       return;
     }
+    // A box per symbol, as the course draws it; leaves are marked by CSS.
     const g = svgEl("g", { class: `derivation-node derivation-${node.kind}` });
-    const rx = Math.max(NODE_RADIUS, ([...node.label].length * CHAR_WIDTH) / 2 + 6);
-    g.appendChild(svgEl("ellipse", { cx: at[i].x, cy: at[i].y, rx, ry: NODE_RADIUS }));
+    const width = Math.max(2 * NODE_RADIUS, [...node.label].length * CHAR_WIDTH + 14);
+    g.appendChild(
+      svgEl("rect", { x: at[i].x - width / 2, y: at[i].y - NODE_RADIUS, width, height: 2 * NODE_RADIUS, rx: 3 }),
+    );
     const text = svgEl("text", { x: at[i].x, y: at[i].y + 5, "text-anchor": "middle" });
     text.textContent = node.label;
     g.appendChild(text);

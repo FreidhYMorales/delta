@@ -1370,6 +1370,11 @@ body {
   font-size: 12.5px;
 }
 
+.derive-rule {
+  margin-left: var(--space-sm);
+  color: var(--text-muted);
+}
+
 .derive-tree-host {
   overflow-x: auto;
 }
@@ -1383,16 +1388,17 @@ body {
   stroke-width: 1.5;
 }
 
-.derivation-tree ellipse {
+.derivation-tree rect {
   fill: var(--surface);
   stroke: var(--text);
-  stroke-width: 1.5;
+  stroke-width: 1;
 }
 
-/* Terminals and ε are the leaves: no outline, so the yield reads plainly. */
-.derivation-tree .derivation-terminal ellipse,
-.derivation-tree .derivation-epsilon ellipse {
-  stroke: none;
+/* Terminals and ε are the leaves: highlighted, as in the course's trees,
+ * so the yield reads at a glance. */
+.derivation-tree .derivation-terminal rect,
+.derivation-tree .derivation-epsilon rect {
+  fill: color-mix(in srgb, var(--accent) 18%, var(--surface));
 }
 
 .derivation-tree text {
