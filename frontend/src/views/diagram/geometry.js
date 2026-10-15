@@ -43,250 +43,99 @@ export function circleLayout(states, { centerX, centerY, radius }) {
 }
 
 /**
- * Force-directed ("spring embedder", Fruchterman-Reingold-style) layout:
- * every pair of states repels, and each edge pulls its two endpoints
- * together, so states with more transitions between them end up close and
- * unrelated states drift apart — unlike `circleLayout`, which spaces every
- * state by the same fixed angle regardless of how it connects to anything,
- * and degrades into a crowded ring as state count grows.
- * @param {{id:number}[]} states
- * @param {{from:number, to:number}[]} edges self-loops (`from === to`) are dropped — pulling a state toward itself does nothing but waste an iteration
- * @param {{centerX:number, centerY:number, minSeparation?:number, idealEdgeLength?:number, iterations?:number}} opts
- *   `minSeparation`: hard floor between any two states' centers, enforced in
- *   a cleanup pass after the simulation settles — a small fully-connected
- *   graph can still converge closer than this on its own.
- *   `idealEdgeLength`: target spacing for a *connected* pair, held constant
- *   regardless of state count (deriving it from state count, as an earlier
- *   version did, made it balloon for larger automatons — a 58-state graph
- *   would want ~800px between connected states, which is exactly why loosely
- *   linked clusters used to end up as far-flung islands joined by long
- *   crossing edges instead of one compact diagram).
- * @returns {{id:number, x:number, y:number}[]}
- */
-export function forceDirectedLayout(
-  states,
-  edges,
-  { centerX, centerY, minSeparation = 90, idealEdgeLength = 130, iterations = 300 },
-) {
-  const n = states.length;
-  if (n === 0) return [];
-  if (n === 1) return [{ id: states[0].id, x: centerX, y: centerY }];
-
-  // Seed from `circleLayout` itself: a deterministic, already-spread
-  // starting point (no RNG to make results flaky/hard to test) that never
-  // starts two states on the exact same point — repulsion divides by
-  // distance, and a zero distance would make the first iteration's
-  // direction undefined. This seed radius growing with `n` is fine — it's
-  // only a starting point the simulation immediately reworks — unlike `k`
-  // below, which drives the actual equilibrium spacing.
-  const seedRadius = Math.max(minSeparation, (idealEdgeLength * n) / (2 * Math.PI));
-  const pos = circleLayout(states, { centerX, centerY, radius: seedRadius }).map((p) => ({ ...p }));
-  const index = new Map(pos.map((p, i) => [p.id, i]));
-  const links = edges.filter((e) => e.from !== e.to && index.has(e.from) && index.has(e.to));
-
-  const k = idealEdgeLength;
-  // A gentle, constant pull toward the center for every state, independent
-  // of edges: helps the simulation settle into one cohesive blob rather
-  // than several instead of relying on it alone — the hard guarantee
-  // against far-flung, loosely-linked clusters is `compactToTarget` below,
-  // since gravity's pull can only ever compete with, not reliably beat,
-  // however much repulsion a particular graph shape happens to generate.
-  const gravity = 0.05;
-
-  let temperature = Math.min(seedRadius / 2, idealEdgeLength);
-  for (let iter = 0; iter < iterations; iter++) {
-    const disp = pos.map(() => ({ x: 0, y: 0 }));
-
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const dx = pos[i].x - pos[j].x;
-        const dy = pos[i].y - pos[j].y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-        const force = (k * k) / dist;
-        const ux = dx / dist;
-        const uy = dy / dist;
-        disp[i].x += ux * force;
-        disp[i].y += uy * force;
-        disp[j].x -= ux * force;
-        disp[j].y -= uy * force;
-      }
-    }
-
-    for (const e of links) {
-      const i = index.get(e.from);
-      const j = index.get(e.to);
-      const dx = pos[i].x - pos[j].x;
-      const dy = pos[i].y - pos[j].y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-      const force = (dist * dist) / k;
-      const ux = dx / dist;
-      const uy = dy / dist;
-      disp[i].x -= ux * force;
-      disp[i].y -= uy * force;
-      disp[j].x += ux * force;
-      disp[j].y += uy * force;
-    }
-
-    for (let i = 0; i < n; i++) {
-      disp[i].x += (centerX - pos[i].x) * gravity;
-      disp[i].y += (centerY - pos[i].y) * gravity;
-    }
-
-    // Cap each state's move to the current temperature, which cools every
-    // iteration — without this the layout oscillates instead of settling.
-    for (let i = 0; i < n; i++) {
-      const dLen = Math.sqrt(disp[i].x ** 2 + disp[i].y ** 2) || 0.01;
-      const capped = Math.min(dLen, temperature);
-      pos[i].x += (disp[i].x / dLen) * capped;
-      pos[i].y += (disp[i].y / dLen) * capped;
-    }
-    temperature *= 0.95;
-  }
-
-  resolveOverlaps(pos, minSeparation);
-  const centered = recenter(pos, centerX, centerY);
-  return compactToTarget(centered, centerX, centerY, minSeparation, idealEdgeLength);
-}
-
-/** Push apart any pair still closer than `minSeparation` after the spring
- * simulation settles (its own equilibrium can still land there for a small,
- * densely-connected graph). A handful of relaxation passes rather than one
- * shot, since fixing one pair can nudge another back under the floor. */
-function resolveOverlaps(pos, minSeparation) {
-  for (let pass = 0; pass < 10; pass++) {
-    let moved = false;
-    for (let i = 0; i < pos.length; i++) {
-      for (let j = i + 1; j < pos.length; j++) {
-        const dx = pos[j].x - pos[i].x;
-        const dy = pos[j].y - pos[i].y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-        if (dist < minSeparation) {
-          const push = (minSeparation - dist) / 2;
-          const ux = dx / dist;
-          const uy = dy / dist;
-          pos[i].x -= ux * push;
-          pos[i].y -= uy * push;
-          pos[j].x += ux * push;
-          pos[j].y += uy * push;
-          moved = true;
-        }
-      }
-    }
-    if (!moved) break;
-  }
-}
-
-function recenter(pos, centerX, centerY) {
-  const avgX = pos.reduce((sum, p) => sum + p.x, 0) / pos.length;
-  const avgY = pos.reduce((sum, p) => sum + p.y, 0) / pos.length;
-  return pos.map((p) => ({ id: p.id, x: p.x + (centerX - avgX), y: p.y + (centerY - avgY) }));
-}
-
-/**
- * Iteratively pulls the whole layout toward `(centerX, centerY)` when it
- * spread further than a "how big should this diagram reasonably be" budget
- * — the deterministic guarantee against far-flung, loosely-linked clusters
- * (the spring simulation's own gravity term helps but, being just another
- * force competing with however much repulsion a given graph shape happens
- * to generate, can't promise a bound on its own). A *single* uniform shrink
- * can't safely close that gap: a tightly-packed clique already sits right
- * at `minSeparation`, so scaling everything down by the same factor needed
- * to pull two loose clusters together would just as much crush the clique
- * below the floor. Shrinking a little at a time and re-running
- * `resolveOverlaps` after each step fixes that — a clique's pairs bounce
- * straight back to the floor (net no change there), while genuinely loose
- * space between clusters, having nothing to bounce back from, keeps
- * compacting step over step.
- */
-function compactToTarget(pos, centerX, centerY, minSeparation, idealEdgeLength) {
-  const n = pos.length;
-  if (n < 2) return pos;
-
-  // Same area-budget idea as `circleLayout`'s seed radius: enough room for
-  // `n` states at roughly `idealEdgeLength` spacing, packed into a disk.
-  const targetRadius = Math.max(minSeparation, (idealEdgeLength * Math.sqrt(n)) / 2);
-
-  let current = pos.map((p) => ({ ...p }));
-  for (let pass = 0; pass < 40; pass++) {
-    let maxRadius = 0;
-    for (const p of current) {
-      const dx = p.x - centerX;
-      const dy = p.y - centerY;
-      maxRadius = Math.max(maxRadius, Math.sqrt(dx * dx + dy * dy));
-    }
-    if (maxRadius <= targetRadius) break;
-
-    current = current.map((p) => ({
-      id: p.id,
-      x: centerX + (p.x - centerX) * 0.95,
-      y: centerY + (p.y - centerY) * 0.95,
-    }));
-    resolveOverlaps(current, minSeparation);
-  }
-  return current;
-}
-
-/**
- * Horizontal, "layered"/Sugiyama-style layout: every state is placed in a
- * left-to-right column by its longest-path distance from `initialId`, so
- * the overall flow reads left-to-right even when the automaton has a cycle
- * — unlike `forceDirectedLayout`'s free-floating blob. A cycle is handled
- * by classifying edges via one DFS from `initialId`: whichever edge closes
- * a cycle (points back to a state still on the current DFS path) is
- * excluded only from the column assignment — same as a hand-drawn diagram, where
- * the "return" arm of a loop is naturally drawn curving backward rather
- * than reshuffling the whole layout around it. The edge itself is still
- * drawn normally; only its *layering* is ignored.
+ * Grid layout for "Organizar": every state lands on an integer (column, row)
+ * cell, columns flowing left-to-right by longest-path distance from
+ * `initialId`, rows chosen so the diagram stays readable with every edge
+ * drawn as ONE straight segment (or the renderer's arc pair for A<->B).
  *
- * Layering uses LONGEST path over the remaining (now acyclic) edges, not
- * shortest (BFS): a shortcut edge under shortest-path layering can land
- * entirely within one column, which is exactly the crossing this layout
- * exists to avoid. A state with no incoming (non-back) edges — including
- * one disconnected from `initialId` entirely, which this app already flags
- * as "unreachable" elsewhere — starts its own column-0 chain rather than
- * being dropped.
+ * No waypoints, no bends: an edge's shape depends only on its two endpoint
+ * states, so dragging a state afterwards can never leave a stale kink
+ * behind — the problem the old dummy-waypoint routing had.
+ *
+ * Readability guarantee: rows are optimized so no straight edge runs over a
+ * state that is not one of its own endpoints. That alone rules out two
+ * edges lying on top of each other: two collinear segments can only share
+ * a stretch if one of them passes over the other's endpoint state. Edges
+ * may still CROSS (penalized, not forbidden) — crossing at an angle reads
+ * fine; lying on top of each other does not.
+ *
+ * Shape: the diagram reads like a hand-drawn Thompson construction — a
+ * straight spine from the initial state, each union a symmetric diamond
+ * (fork and join centered between their branches), and loop-back/bypass
+ * edges running level along a row nothing else sits on.
+ *
+ * Steps:
+ * 1. Columns: longest-path layering over the edges left after one DFS drops
+ *    each cycle's back edge (the back edge is still drawn, it just doesn't
+ *    push columns around). A 2-cycle whose second state has another,
+ *    earlier predecessor is stacked in one column instead (A->B, A->C,
+ *    B<->C draws as B over C, joined by two arcs).
+ * 2. Initial row order: Sugiyama barycenter sweep (dummy nodes stand in for
+ *    long edges ONLY during this ordering step, never in the output).
+ * 3. Rows, on a half-row grid: start each column symmetric around the
+ *    spine's row, then a deterministic local search — move or swap one
+ *    state within its column, or shift a whole block of columns — keeping
+ *    any move that lowers the cost (see the COST_* weights). If an edge
+ *    still runs over a state, a bounded escape step kicks it off and
+ *    re-settles the neighborhood.
+ * 4. Drop empty rows whenever doing so doesn't make the layout worse.
+ *
  * @param {{id:number}[]} states
- * @param {{from:number, to:number}[]} edges self-loops ignored, same convention as `forceDirectedLayout`
- * @param {number} initialId
- * @param {{centerX:number, centerY:number, columnSpacing?:number, rowSpacing?:number, edgeSpacing?:number}} opts
- *   `edgeSpacing`: gap between two adjacent row slots when either one is a
- *   dummy/routing waypoint rather than a real state (see below) — smaller
- *   than `rowSpacing` so a skip edge's own lane doesn't balloon the
- *   diagram's height just to keep it separate from real states.
- * @returns {{positions: {id:number, x:number, y:number}[], edgeWaypoints: Map<string, {x:number,y:number}[]>}}
+ * @param {{from:number, to:number}[]} edges self-loops ignored
+ * @param {number|undefined} initialId column 0's preferred root; optional
+ * @param {{centerX:number, centerY:number, columnSpacing?:number, rowSpacing?:number, clearance?:number}} opts
+ *   `clearance`: minimum distance between a state's center and any edge
+ *   not attached to it (state radius plus a visible margin).
+ * @returns {{positions: {id:number, x:number, y:number}[]}}
  */
 export function layeredLayout(
   states,
   edges,
   initialId,
-  { centerX, centerY, columnSpacing = 160, rowSpacing = 90, edgeSpacing = 28 },
+  { centerX, centerY, columnSpacing = 160, rowSpacing = 90, clearance = 32 },
 ) {
   const n = states.length;
-  if (n === 0) return { positions: [], edgeWaypoints: new Map() };
-  if (n === 1) return { positions: [{ id: states[0].id, x: centerX, y: centerY }], edgeWaypoints: new Map() };
+  if (n === 0) return { positions: [] };
+  if (n === 1) return { positions: [{ id: states[0].id, x: centerX, y: centerY }] };
 
   const ids = states.map((s) => s.id);
   const idSet = new Set(ids);
-  const rawAdj = new Map(ids.map((id) => [id, []]));
-  for (const e of edges) {
-    if (e.from === e.to || !idSet.has(e.from) || !idSet.has(e.to)) continue;
-    rawAdj.get(e.from).push(e.to);
-  }
+  const links = edges.filter((e) => e.from !== e.to && idSet.has(e.from) && idSet.has(e.to));
 
-  // One iterative (explicit stack) 3-color DFS, `initialId` visited first so
-  // its own component's cycles get broken relative to it — this app's other
-  // from-scratch graph traversals (Tarjan's SCC in `engine/fa.rs`) avoid
-  // recursion the same way: a long chain of states must never risk blowing
-  // the JS stack. Every tree/forward/cross edge (destination UNVISITED or
-  // already DONE) is kept for layering; only a true back edge (destination
-  // still IN_PROGRESS, i.e. an ancestor on the current path) is dropped.
+  const layer = assignLayers(ids, links, initialId);
+  const rowOrder = orderLayers(ids, links, layer);
+  const row = assignRows(ids, links, layer, rowOrder, { columnSpacing, rowSpacing, clearance });
+
+  const layerCount = Math.max(...ids.map((id) => layer.get(id))) + 1;
+  const rows = ids.map((id) => row.get(id));
+  const midRow = (Math.min(...rows) + Math.max(...rows)) / 2;
+  const positions = ids.map((id) => ({
+    id,
+    x: centerX + (layer.get(id) - (layerCount - 1) / 2) * columnSpacing,
+    y: centerY + (row.get(id) - midRow) * (rowSpacing / 2), // rows are half-row units
+  }));
+  return { positions };
+}
+
+/**
+ * Column per state: longest path over the edges that survive one DFS's
+ * back-edge removal. Longest (not shortest) path, so a shortcut edge never
+ * lands inside a single column. The DFS starts at `initialId` so its own
+ * cycles break relative to it; a state with no incoming kept edge (including
+ * one unreachable from `initialId`) roots its own column-0 chain. Iterative
+ * (explicit stack): a long chain of states must never blow the JS stack.
+ */
+function assignLayers(ids, links, initialId) {
+  const rawAdj = new Map(ids.map((id) => [id, []]));
+  for (const e of links) rawAdj.get(e.from).push(e.to);
+
   const UNVISITED = 0;
   const IN_PROGRESS = 1;
   const DONE = 2;
   const color = new Map(ids.map((id) => [id, UNVISITED]));
   const forwardAdj = new Map(ids.map((id) => [id, []]));
   const inDegree = new Map(ids.map((id) => [id, 0]));
-  const visitStarts = idSet.has(initialId) ? [initialId, ...ids] : ids;
+  const visitStarts = rawAdj.has(initialId) ? [initialId, ...ids] : ids;
   for (const start of visitStarts) {
     if (color.get(start) !== UNVISITED) continue;
     const stack = [{ id: start, next: 0 }];
@@ -300,7 +149,7 @@ export function layeredLayout(
         continue;
       }
       const neighbor = neighbors[frame.next++];
-      if (color.get(neighbor) === IN_PROGRESS) continue; // back edge: skip for layering
+      if (color.get(neighbor) === IN_PROGRESS) continue; // back edge
       forwardAdj.get(frame.id).push(neighbor);
       inDegree.set(neighbor, inDegree.get(neighbor) + 1);
       if (color.get(neighbor) === UNVISITED) {
@@ -310,173 +159,537 @@ export function layeredLayout(
     }
   }
 
-  // Kahn's algorithm for a topological order over `forwardAdj` — guaranteed
-  // acyclic (back edges were excluded above) — `initialId` dequeued first
-  // among equally-ready (in-degree 0) roots so its own chain claims column 0
-  // ahead of any other disconnected root.
-  const remainingInDegree = new Map(inDegree);
-  const queue = ids.filter((id) => remainingInDegree.get(id) === 0);
+  // Kahn's topological order, `initialId` first among the ready roots.
+  const remaining = new Map(inDegree);
+  const queue = ids.filter((id) => remaining.get(id) === 0);
   queue.sort((a, b) => (a === initialId ? -1 : b === initialId ? 1 : 0));
-  const order = [];
+  const layer = new Map(ids.map((id) => [id, 0]));
   while (queue.length) {
     const id = queue.shift();
-    order.push(id);
-    for (const next of forwardAdj.get(id)) {
-      remainingInDegree.set(next, remainingInDegree.get(next) - 1);
-      if (remainingInDegree.get(next) === 0) queue.push(next);
-    }
-  }
-
-  const layer = new Map(ids.map((id) => [id, 0]));
-  for (const id of order) {
     for (const next of forwardAdj.get(id)) {
       layer.set(next, Math.max(layer.get(next), layer.get(id) + 1));
+      remaining.set(next, remaining.get(next) - 1);
+      if (remaining.get(next) === 0) queue.push(next);
     }
   }
 
+  // Stack a 2-cycle u<->v vertically (same column, drawn as two arcs) when
+  // longest-path layering pushed v one column past u only because of u->v:
+  // v's other forward predecessors all sit left of u, and nothing forward
+  // of v would end up in or left of v's new column. Without another
+  // predecessor, v stays after u — a lone loop (a*) still reads as a step.
+  const predecessors = new Map(ids.map((id) => [id, []]));
+  for (const [id, nexts] of forwardAdj) for (const next of nexts) predecessors.get(next).push(id);
+  for (const [u, nexts] of forwardAdj) {
+    for (const v of nexts) {
+      if (!rawAdj.get(v).includes(u) || layer.get(v) !== layer.get(u) + 1) continue;
+      const others = predecessors.get(v).filter((p) => p !== u);
+      if (!others.length || others.some((p) => layer.get(p) >= layer.get(u))) continue;
+      if (forwardAdj.get(v).some((w) => w !== u && layer.get(w) <= layer.get(u))) continue;
+      layer.set(v, layer.get(u));
+    }
+  }
+  return layer;
+}
+
+/**
+ * Barycenter sweep (Sugiyama's crossing-reduction step): an initial row
+ * ORDER per column, which the local search in `assignRows` then refines.
+ * Edges spanning >=2 columns are temporarily split into dummy chains so
+ * they take part in the sweep; dummies are dropped from the result.
+ * @returns {Map<number, number[]>} column -> real state ids, top to bottom
+ */
+function orderLayers(ids, links, layer) {
   const byLayer = new Map();
-  for (const id of ids) {
-    const l = layer.get(id);
+  const add = (l, id) => {
     if (!byLayer.has(l)) byLayer.set(l, []);
     byLayer.get(l).push(id);
-  }
+  };
+  for (const id of ids) add(layer.get(id), id);
 
-  const realLayerNums = [...byLayer.keys()].sort((a, b) => a - b);
-  const layerCount = realLayerNums[realLayerNums.length - 1] + 1;
-  const startX = centerX - ((layerCount - 1) * columnSpacing) / 2;
-
-  // Edge normalization (Sugiyama's own term): an edge spanning >=2 layers
-  // gets a chain of dummy waypoints, one per intermediate layer it
-  // crosses — every OTHER phase below (row ordering, coordinate
-  // assignment) then treats a dummy exactly like a real state, so a skip
-  // edge gets its own row/lane instead of being drawn as one plain line
-  // straight across whatever real states happen to sit in between. This
-  // is what actually fixes the reported "hasta 5 líneas superpuestas" —
-  // without dummies, a distant `from`/`to` pair never even participates in
-  // the barycenter sweep below (its two endpoints are never in adjacent
-  // layers to each other), so nothing was ever pulling separate skip edges
-  // apart. Uses `layer` (every state's already-resolved layer number)
-  // rather than `forwardAdj`, so this applies uniformly whether the DFS
-  // above classified this particular edge as forward or back — a
-  // long-range back edge deserves its own lane too, same reasoning.
-  const dummyChains = new Map(); // edgeKey (`${from}:${to}`) -> ordered dummy id[]
-  for (const e of edges) {
-    if (e.from === e.to || !idSet.has(e.from) || !idSet.has(e.to)) continue;
-    const layerFrom = layer.get(e.from);
-    const layerTo = layer.get(e.to);
-    if (Math.abs(layerTo - layerFrom) < 2) continue;
-    const step = layerTo > layerFrom ? 1 : -1;
-    const chain = [];
-    for (let l = layerFrom + step; l !== layerTo; l += step) {
+  const adj = new Map();
+  const connect = (a, b) => {
+    if (!adj.has(a)) adj.set(a, new Set());
+    if (!adj.has(b)) adj.set(b, new Set());
+    adj.get(a).add(b);
+    adj.get(b).add(a);
+  };
+  for (const e of links) {
+    const from = layer.get(e.from);
+    const to = layer.get(e.to);
+    const step = to > from ? 1 : -1;
+    let prev = e.from;
+    for (let l = from + step; Math.abs(to - from) >= 2 && l !== to; l += step) {
       const dummyId = `dummy:${e.from}->${e.to}@${l}`;
-      chain.push(dummyId);
-      if (!byLayer.has(l)) byLayer.set(l, []);
-      byLayer.get(l).push(dummyId);
+      add(l, dummyId);
+      connect(prev, dummyId);
+      prev = dummyId;
     }
-    dummyChains.set(`${e.from}:${e.to}`, chain);
+    connect(prev, e.to);
   }
-  const isDummyId = (id) => typeof id === "string";
-  // Recomputed AFTER dummy insertion — a chain never reaches outside
-  // [0, layerCount-1] (both endpoints already live in that range), so
-  // `layerCount`/`startX` above stay correct; this just also picks up any
-  // layer that had zero real states but now holds a dummy passing through.
+
   const layerNums = [...byLayer.keys()].sort((a, b) => a - b);
+  const index = new Map();
+  for (const l of layerNums) byLayer.get(l).forEach((id, i) => index.set(id, { layer: l, i }));
 
-  // Barycenter/median sweep (Sugiyama's own row-ordering step, the same
-  // idea Graphviz `dot` uses) — the column assignment above says nothing
-  // about ROW order within a layer, so two branches sharing a column
-  // otherwise just keep whatever order they happened to be declared in,
-  // which is exactly what left a Thompson-construction-style diamond (a
-  // parallel pair of states, or a state re-merging after a bypass) looking
-  // arbitrarily staggered instead of reading as one clean shape. Row
-  // adjacency deliberately uses the full (undirected) `edges` list, not
-  // just `forwardAdj` — a back edge excluded from layering above (e.g. a
-  // Kleene-star's loop-back) still pulls its row toward whatever it
-  // connects to. A routed (>=2-layer) edge contributes its CHAIN links
-  // (from<->dummy_1<->...<->to) instead of the raw far-apart pair — that
-  // raw pair was never usable by the sweep anyway (its endpoints are never
-  // in "the adjacent layer" to each other), so this only adds signal, it
-  // never removes any real-state alignment that existed before.
-  const adjAll = new Map();
-  for (const l of layerNums) {
-    for (const id of byLayer.get(l)) adjAll.set(id, new Set());
-  }
-  for (const e of edges) {
-    if (e.from === e.to || !idSet.has(e.from) || !idSet.has(e.to)) continue;
-    const chain = dummyChains.get(`${e.from}:${e.to}`);
-    const sequence = chain && chain.length ? [e.from, ...chain, e.to] : [e.from, e.to];
-    for (let i = 0; i < sequence.length - 1; i++) {
-      adjAll.get(sequence[i]).add(sequence[i + 1]);
-      adjAll.get(sequence[i + 1]).add(sequence[i]);
-    }
-  }
-
-  const rowOrder = new Map(layerNums.map((l) => [l, [...byLayer.get(l)]]));
-  const position = new Map();
-  for (const l of layerNums) {
-    rowOrder.get(l).forEach((id, i) => position.set(id, { layer: l, index: i }));
-  }
-
-  const SWEEPS = 4;
-  for (let pass = 0; pass < SWEEPS; pass++) {
+  for (let pass = 0; pass < 4; pass++) {
     const forward = pass % 2 === 0;
-    const sweepOrder = forward ? layerNums : [...layerNums].reverse();
-    for (const l of sweepOrder) {
-      const currentIds = rowOrder.get(l);
-      if (currentIds.length < 2) continue;
-      const adjacentLayer = forward ? l - 1 : l + 1;
-      const withBarycenter = currentIds.map((id, i) => {
-        const neighborRows = [];
-        for (const neighbor of adjAll.get(id)) {
-          const pos = position.get(neighbor);
-          if (pos && pos.layer === adjacentLayer) neighborRows.push(pos.index);
-        }
-        // No neighbor in the adjacent layer this pass looks at (a dead end,
-        // or nothing placed there yet): keep this state's own current index
-        // as its sort key, so it holds its relative spot instead of every
-        // unaligned state collapsing to the front together.
-        const barycenter = neighborRows.length
-          ? neighborRows.reduce((sum, r) => sum + r, 0) / neighborRows.length
-          : i;
+    for (const l of forward ? layerNums : [...layerNums].reverse()) {
+      const current = byLayer.get(l);
+      if (current.length < 2) continue;
+      const adjacent = forward ? l - 1 : l + 1;
+      const keyed = current.map((id, i) => {
+        const rows = [...(adj.get(id) ?? [])]
+          .map((other) => index.get(other))
+          .filter((p) => p.layer === adjacent)
+          .map((p) => p.i);
+        // No neighbor on that side: keep its own index so it holds its spot.
+        const barycenter = rows.length ? rows.reduce((s, r) => s + r, 0) / rows.length : i;
         return { id, i, barycenter };
       });
-      withBarycenter.sort((a, b) => a.barycenter - b.barycenter || a.i - b.i);
-      const newOrder = withBarycenter.map((w) => w.id);
-      rowOrder.set(l, newOrder);
-      newOrder.forEach((id, i) => position.set(id, { layer: l, index: i }));
+      keyed.sort((a, b) => a.barycenter - b.barycenter || a.i - b.i);
+      const next = keyed.map((k) => k.id);
+      byLayer.set(l, next);
+      next.forEach((id, i) => index.set(id, { layer: l, i }));
     }
   }
 
-  // Coordinate assignment: a running cumulative offset rather than a flat
-  // `i * rowSpacing`, since adjacent slots no longer share one uniform
-  // gap — two real states keep `rowSpacing`, but a gap touching a dummy
-  // (dagre's "edgeSep", vs. "nodeSep" for real states) uses the tighter
-  // `edgeSpacing`, so a skip edge's own routing lane doesn't inflate the
-  // whole diagram's height just to stay separate from real content.
-  const positions = [];
-  const dummyPositions = new Map();
-  for (const l of layerNums) {
-    const idsInLayer = rowOrder.get(l);
-    const x = startX + l * columnSpacing;
-    const cumulative = [0];
-    for (let i = 1; i < idsInLayer.length; i++) {
-      const gap = isDummyId(idsInLayer[i - 1]) || isDummyId(idsInLayer[i]) ? edgeSpacing : rowSpacing;
-      cumulative.push(cumulative[i - 1] + gap);
+  const result = new Map();
+  for (const l of layerNums) result.set(l, byLayer.get(l).filter((id) => typeof id !== "string"));
+  return result;
+}
+
+// Cost weights for `assignRows`. An edge running over a foreign state is
+// what makes a diagram unreadable, so it dominates everything else; two
+// edges leaving one state almost in the same direction read as one line
+// near that state, so that is nearly as bad; a crossing is acceptable but
+// worth avoiding. The two shape terms are what draw Thompson-style
+// diagrams: row span keeps the spine and each branch straight, and balance
+// centers a fork (or join) between its branches, so a union reads as a
+// symmetric diamond instead of one branch continuing the spine.
+const COST_RUNS_OVER_STATE = 1000;
+const COST_NEAR_PARALLEL = 300;
+const COST_CROSSING = 20;
+const COST_ROW_SPAN = 3;
+const COST_UNBALANCED = 4;
+const MIN_EDGE_ANGLE = (15 * Math.PI) / 180;
+// An A<->B pair is drawn as two arcs (`curvedEdgePath`, default offset 36)
+// rather than one line: each arc leaves its state angled away from the
+// chord and bulges up to half that offset from it, so the cost treats such
+// a pair as wider than a single straight edge.
+const PAIR_ARC_OFFSET = 36;
+const MAX_SEARCH_PASSES = 30;
+const MAX_ESCAPES = 8;
+const ESCAPE_SEARCH_PASSES = 3;
+const ESCAPE_REACH = 2; // columns around a kick that re-settle
+const MAX_SHIFT = 12; // largest block shift tried, in half-row units
+// A block shift only pays off across a narrow cut (a spine, a loop's
+// return edge); across a wide one some edge always gets worse.
+const MAX_SHIFT_CUT = 8;
+
+/**
+ * Row per state, in half-row units (`rowSpacing / 2`): two states of one
+ * column stay at least a full `rowSpacing` apart, but a column can sit
+ * half a row off its neighbor, which is what lets a fork sit exactly
+ * between its two branches. Starts from `rowOrder`, then hill-climbs: for
+ * each state, try every nearby row of its column (moving there, or
+ * swapping with the state already there), then try shifting whole blocks
+ * of columns; keep any strictly-improving option until nothing improves.
+ * Deterministic — no RNG.
+ * @returns {Map<number, number>} state id -> row, in half-row units
+ */
+function assignRows(ids, links, layer, rowOrder, { columnSpacing, rowSpacing, clearance }) {
+  // Everything below works on dense indices (0..n-1) and flat arrays: the
+  // search evaluates the cost thousands of times, so it avoids Maps and
+  // per-call object allocation in its inner loops.
+  const n = ids.length;
+  const unit = rowSpacing / 2;
+  const MIN_GAP = 2; // same-column spacing, in units
+  const indexOf = new Map(ids.map((id, i) => [id, i]));
+  const col = Int32Array.from(ids, (id) => layer.get(id));
+  const px = Float64Array.from(col, (c) => c * columnSpacing);
+  const py = new Float64Array(n);
+  const row = new Int32Array(n);
+  const setRow = (i, r) => {
+    row[i] = r;
+    py[i] = r * unit;
+  };
+
+  const segmentByKey = new Map();
+  for (const e of links) {
+    const from = indexOf.get(e.from);
+    const to = indexOf.get(e.to);
+    const key = Math.min(from, to) * n + Math.max(from, to);
+    const existing = segmentByKey.get(key);
+    // A->B and B->A share one segment, flagged as a two-arc pair.
+    if (existing) existing.pair ||= existing.from !== from;
+    else segmentByKey.set(key, { from, to, pair: false });
+  }
+  const segments = [...segmentByKey.values()];
+  const segA = Int32Array.from(segments, (s) => s.from);
+  const segB = Int32Array.from(segments, (s) => s.to);
+  const isPair = Uint8Array.from(segments, (s) => (s.pair ? 1 : 0));
+  const segmentCount = segA.length;
+  // How far (radians) a segment's drawing fans out from its chord at each
+  // end: 0 for a straight edge, the arc's tangent angle for a pair.
+  const spread = (s) =>
+    isPair[s] ? Math.atan((2 * PAIR_ARC_OFFSET) / Math.hypot(px[segB[s]] - px[segA[s]], py[segB[s]] - py[segA[s]])) : 0;
+
+  // Neighbors in the column just left / just right of each state — the
+  // ones `COST_UNBALANCED` centers it between.
+  const left = Array.from({ length: n }, () => []);
+  const right = Array.from({ length: n }, () => []);
+  for (let s = 0; s < segmentCount; s++) {
+    const a = segA[s];
+    const b = segB[s];
+    if (col[b] === col[a] + 1) {
+      right[a].push(b);
+      left[b].push(a);
+    } else if (col[a] === col[b] + 1) {
+      right[b].push(a);
+      left[a].push(b);
     }
-    const startY = centerY - cumulative[cumulative.length - 1] / 2;
-    idsInLayer.forEach((id, i) => {
-      const y = startY + cumulative[i];
-      if (isDummyId(id)) dummyPositions.set(id, { x, y });
-      else positions.push({ id, x, y });
+  }
+  const balanceNeighbors = Array.from({ length: n }, (_, i) => [...new Set([...left[i], ...right[i]])]);
+  const imbalance = (side, i) => {
+    if (side.length < 2) return 0;
+    let sum = 0;
+    for (const j of side) sum += row[j];
+    return Math.abs(row[i] - sum / side.length);
+  };
+
+  const columns = new Map(); // column -> member indices
+  for (let i = 0; i < n; i++) {
+    if (!columns.has(col[i])) columns.set(col[i], []);
+    columns.get(col[i]).push(i);
+  }
+  // Initial rows: each column's order, symmetric around row 0, leaving a
+  // gap at row 0 wide enough for whatever runs past the column there — a
+  // straight edge needs half a row each side, an arc pair a full row. So a
+  // union already starts as a diamond around its fork's row, with the
+  // spine and any bypass along it clear between the branches. An odd
+  // column keeps one state on row 0; the search moves it if it's in the
+  // way. The search range follows the layout, so there is no fixed height.
+  const centerGap = new Int32Array(Math.max(...col) + 1).fill(1);
+  for (let s = 0; s < segmentCount; s++) {
+    const reach = isPair[s] ? clearance + PAIR_ARC_OFFSET / 2 : clearance;
+    const gap = Math.max(1, Math.ceil(reach / unit));
+    const lo = Math.min(col[segA[s]], col[segB[s]]);
+    const hi = Math.max(col[segA[s]], col[segB[s]]);
+    for (let c = lo + 1; c < hi; c++) centerGap[c] = Math.max(centerGap[c], gap);
+  }
+  for (const [c, column] of rowOrder) {
+    const k = column.length;
+    const half = Math.floor(k / 2);
+    column.forEach((id, j) => {
+      const r =
+        k % 2 === 1
+          ? MIN_GAP * (j - half)
+          : j < half
+            ? -(centerGap[c] + MIN_GAP * (half - 1 - j))
+            : centerGap[c] + MIN_GAP * (j - half);
+      setRow(indexOf.get(id), r);
     });
   }
 
-  const edgeWaypoints = new Map();
-  for (const [key, chain] of dummyChains) {
-    edgeWaypoints.set(key, chain.map((dummyId) => dummyPositions.get(dummyId)));
-  }
+  const runsOver = (s, i) => {
+    const a = segA[s];
+    const b = segB[s];
+    if (i === a || i === b) return false;
+    const x = px[i];
+    const y = py[i];
+    const reach = isPair[s] ? clearance + PAIR_ARC_OFFSET / 2 : clearance;
+    // Cheap reject: outside the segment's bounding box grown by `reach`.
+    if (x < Math.min(px[a], px[b]) - reach || x > Math.max(px[a], px[b]) + reach) return false;
+    if (y < Math.min(py[a], py[b]) - reach || y > Math.max(py[a], py[b]) + reach) return false;
+    return distanceToSegment2(x, y, px[a], py[a], px[b], py[b]) < reach * reach;
+  };
 
-  return { positions, edgeWaypoints };
+  const pairCost = (s, t) => {
+    const a = segA[s];
+    const b = segB[s];
+    const c = segA[t];
+    const d = segB[t];
+    const shared = a === c || a === d ? a : b === c || b === d ? b : -1;
+    if (shared < 0) return segmentsCross(px[a], py[a], px[b], py[b], px[c], py[c], px[d], py[d]) ? COST_CROSSING : 0;
+    const u = shared === a ? b : a;
+    const w = shared === c ? d : c;
+    const angle = angleAt(px[shared], py[shared], px[u], py[u], px[w], py[w]);
+    return angle < MIN_EDGE_ANGLE + spread(s) + spread(t) ? COST_NEAR_PARALLEL : 0;
+  };
+
+  // Sum of every cost term that involves at least one state in `moved` —
+  // the only terms a move of those states can change, so comparing this
+  // before/after a move gives the exact change in total cost.
+  const isMoved = new Uint8Array(n);
+  const isBalanced = new Uint8Array(n);
+  const costInvolving = (moved) => {
+    for (const i of moved) isMoved[i] = 1;
+    const touches = (s) => isMoved[segA[s]] === 1 || isMoved[segB[s]] === 1;
+    let cost = 0;
+    for (let s = 0; s < segmentCount; s++) {
+      if (!touches(s)) {
+        for (const i of moved) if (runsOver(s, i)) cost += COST_RUNS_OVER_STATE;
+        continue;
+      }
+      cost += COST_ROW_SPAN * Math.abs(row[segA[s]] - row[segB[s]]);
+      for (let i = 0; i < n; i++) if (runsOver(s, i)) cost += COST_RUNS_OVER_STATE;
+      for (let t = 0; t < segmentCount; t++) {
+        if (t === s || (t < s && touches(t))) continue; // count each pair once
+        cost += pairCost(s, t);
+      }
+    }
+    // A state's balance depends on its own row and its side neighbors'.
+    const affected = [];
+    for (const i of moved) for (const j of [i, ...balanceNeighbors[i]]) if (!isBalanced[j]) {
+      isBalanced[j] = 1;
+      affected.push(j);
+    }
+    for (const j of affected) {
+      cost += COST_UNBALANCED * (imbalance(left[j], j) + imbalance(right[j], j));
+      isBalanced[j] = 0;
+    }
+    for (const i of moved) isMoved[i] = 0;
+    return cost;
+  };
+
+  // Where state `i` could go in row `r`: a plain move if nothing in its
+  // column is within MIN_GAP, a swap with the one state sitting exactly at
+  // `r` if that state fits at `i`'s old row, otherwise nowhere.
+  const partnerAt = (i, r) => {
+    let partner = -1;
+    for (const j of columns.get(col[i])) {
+      if (j === i || Math.abs(row[j] - r) >= MIN_GAP) continue;
+      if (row[j] !== r || partner >= 0) return null;
+      partner = j;
+    }
+    if (partner >= 0) {
+      for (const j of columns.get(col[i])) {
+        if (j !== i && j !== partner && Math.abs(row[j] - row[i]) < MIN_GAP) return null;
+      }
+    }
+    return partner;
+  };
+  const moveOrSwap = (i, r, partner) => {
+    if (partner >= 0) setRow(partner, row[i]);
+    setRow(i, r);
+  };
+
+  // Cost terms a block shift can change, given `affected`: every segment
+  // not entirely inside the block whose column span overlaps it. The block
+  // and the rest occupy disjoint x ranges (a full `columnSpacing` apart,
+  // wider than any clearance), so a segment entirely inside keeps its
+  // shape and can't reach a state outside, and a segment entirely outside
+  // can only interact with the block if it passes over it — which puts it
+  // in `affected`. So only affected segments change: their own span, what
+  // they run over or cross, and the balance of their endpoints.
+  const costAffected = (affected) => {
+    let cost = 0;
+    const endpoints = new Set();
+    for (const s of affected) {
+      cost += COST_ROW_SPAN * Math.abs(row[segA[s]] - row[segB[s]]);
+      for (let i = 0; i < n; i++) if (runsOver(s, i)) cost += COST_RUNS_OVER_STATE;
+      for (let t = 0; t < segmentCount; t++) {
+        if (t === s || (t < s && affected.includes(t))) continue; // count each pair once
+        cost += pairCost(s, t);
+      }
+      endpoints.add(segA[s]);
+      endpoints.add(segB[s]);
+    }
+    for (const j of endpoints) cost += COST_UNBALANCED * (imbalance(left[j], j) + imbalance(right[j], j));
+    return cost;
+  };
+
+  // Block move: shift every state in columns [c1, c2] by the same amount.
+  // One state at a time can't straighten a spine whose two halves settled
+  // at different heights, or re-center a whole union between its fork and
+  // join (every single step in between costs more before it pays off);
+  // shifting the block at once can.
+  const maxColumn = Math.max(...col);
+  const shiftBlock = (c1, c2) => {
+    const inBlock = (i) => col[i] >= c1 && col[i] <= c2;
+    const affected = [];
+    for (let s = 0; s < segmentCount; s++) {
+      const a = segA[s];
+      const b = segB[s];
+      if (inBlock(a) && inBlock(b)) continue;
+      if (Math.max(col[a], col[b]) >= c1 && Math.min(col[a], col[b]) <= c2) affected.push(s);
+      if (affected.length > MAX_SHIFT_CUT) return false;
+    }
+    const moved = [];
+    for (let i = 0; i < n; i++) if (inBlock(i)) moved.push(i);
+    const shift = (d) => {
+      for (const i of moved) setRow(i, row[i] + d);
+    };
+    const before = costAffected(affected);
+    let bestShift = 0;
+    let bestDelta = -1e-9;
+    for (let d = -MAX_SHIFT; d <= MAX_SHIFT; d++) {
+      if (d === 0) continue;
+      shift(d);
+      const delta = costAffected(affected) - before;
+      shift(-d);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestShift = d;
+      }
+    }
+    if (bestShift === 0) return false;
+    shift(bestShift);
+    return true;
+  };
+  // Suffix blocks only: a column range in the middle would also need its
+  // far side re-aligned, which the next suffix shift already covers.
+  const shiftBlocks = () => {
+    let improved = false;
+    for (let c = 1; c <= maxColumn; c++) if (shiftBlock(c, maxColumn)) improved = true;
+    return improved;
+  };
+
+  // Last resort for an edge still running over a state: a local optimum
+  // where clearing it takes two moves, each worse on its own. Kick the
+  // state off the edge (nearest clear rows above and below), let the
+  // search settle again, and keep the result only if the total cost
+  // dropped. Bounded, and only runs while a violation remains.
+  const everyone = [...Array(n).keys()];
+  const firstRunOver = () => {
+    for (let s = 0; s < segmentCount; s++) for (let i = 0; i < n; i++) if (runsOver(s, i)) return { s, i };
+    return null;
+  };
+  // First row in direction `dir` (within a few rows) where state `x` fits
+  // its column and segment `s` sits clear of state `i` (x is either `i`
+  // itself or one of the segment's endpoints), or null.
+  const nearestClearRow = (x, s, i, dir) => {
+    const start = row[x];
+    for (let r = start + dir; Math.abs(r - start) <= 4 * MIN_GAP; r += dir) {
+      const partner = partnerAt(x, r);
+      if (partner === null) continue;
+      moveOrSwap(x, r, partner);
+      const clear = !runsOver(s, i);
+      moveOrSwap(x, start, partner);
+      if (clear) return { r, partner };
+    }
+    return null;
+  };
+  const escapeRunOvers = () => {
+    for (let attempt = 0; attempt < MAX_ESCAPES; attempt++) {
+      const hit = firstRunOver();
+      if (!hit) return;
+      const total = costInvolving(everyone);
+      const saved = Int32Array.from(row);
+      let escaped = false;
+      // Kick the covered state, or either end of the edge covering it.
+      for (const x of [hit.i, segA[hit.s], segB[hit.s]]) {
+        for (const dir of [-1, 1]) {
+          const kick = nearestClearRow(x, hit.s, hit.i, dir);
+          if (!kick) continue;
+          moveOrSwap(x, kick.r, kick.partner);
+          // Only the kick's neighborhood needs to settle again.
+          const near = new Set([hit.i, segA[hit.s], segB[hit.s]]);
+          for (let k = 0; k < n; k++) if (Math.abs(col[k] - col[x]) <= ESCAPE_REACH) near.add(k);
+          hillClimb(ESCAPE_SEARCH_PASSES, near);
+          if (costInvolving(everyone) < total) {
+            escaped = true;
+            break;
+          }
+          saved.forEach((r0, k) => setRow(k, r0));
+        }
+        if (escaped) break;
+      }
+      if (!escaped) return;
+    }
+  };
+
+  const searchOrder = [...rowOrder.values()].flat().map((id) => indexOf.get(id));
+  // `only`: restrict to these states and skip block shifts (used to
+  // re-settle just the neighborhood of an escape kick).
+  const hillClimb = (maxPasses = MAX_SEARCH_PASSES, only = null) => {
+    const order = only ? searchOrder.filter((i) => only.has(i)) : searchOrder;
+    for (let pass = 0; pass < maxPasses; pass++) {
+      let improved = false;
+      for (const i of order) {
+        const start = row[i];
+        let best = null;
+        let bestDelta = -1e-9;
+        const beforeAlone = costInvolving([i]); // same for every plain move
+        const lo = Math.min(...row) - 2 * MIN_GAP;
+        const hi = Math.max(...row) + 2 * MIN_GAP;
+        for (let r = lo; r <= hi; r++) {
+          if (r === start) continue;
+          const partner = partnerAt(i, r);
+          if (partner === null) continue;
+          const moved = partner < 0 ? [i] : [i, partner];
+          const before = partner < 0 ? beforeAlone : costInvolving(moved);
+          moveOrSwap(i, r, partner);
+          const delta = costInvolving(moved) - before;
+          moveOrSwap(i, start, partner);
+          if (delta < bestDelta) {
+            bestDelta = delta;
+            best = { r, partner };
+          }
+        }
+        if (best) {
+          moveOrSwap(i, best.r, best.partner);
+          improved = true;
+        }
+      }
+      if (!only && shiftBlocks()) improved = true;
+      if (!improved) break;
+    }
+  };
+
+  hillClimb();
+  escapeRunOvers();
+
+  // Collapse rows no state uses, top to bottom, whenever that keeps the
+  // total cost from rising (an empty row between two busy ones may be what
+  // keeps an edge off a state). Collapsing never breaks MIN_GAP: nothing
+  // sat on row `r`, so no same-column pair straddles it at distance < 2...
+  // except a pair exactly 2 apart around it, which the check below skips.
+  let total = costInvolving(everyone);
+  for (let r = Math.max(...row) - 1; r > Math.min(...row); r--) {
+    if (row.includes(r)) continue;
+    const straddled = [...columns.values()].some((members) =>
+      members.some((i) => row[i] === r - 1 && members.some((j) => row[j] === r + 1)),
+    );
+    if (straddled) continue;
+    const saved = Int32Array.from(row);
+    for (let i = 0; i < n; i++) if (row[i] > r) setRow(i, row[i] - 1);
+    const collapsed = costInvolving(everyone);
+    if (collapsed <= total) total = collapsed;
+    else saved.forEach((r0, i) => setRow(i, r0));
+  }
+  return new Map(ids.map((id, i) => [id, row[i]]));
+}
+
+/** Squared distance from (x, y) to the segment (ax, ay)-(bx, by). */
+function distanceToSegment2(x, y, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
+  const ex = x - (ax + t * dx);
+  const ey = y - (ay + t * dy);
+  return ex * ex + ey * ey;
+}
+
+/** Angle (radians) at vertex v between the rays v->u and v->w. */
+function angleAt(vx, vy, ux, uy, wx, wy) {
+  const ax = ux - vx;
+  const ay = uy - vy;
+  const bx = wx - vx;
+  const by = wy - vy;
+  const cos = (ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by) || 1);
+  return Math.acos(Math.max(-1, Math.min(1, cos)));
+}
+
+/** Proper crossing of segments a-b and c-d (no shared endpoint). */
+function segmentsCross(ax, ay, bx, by, cx, cy, dx, dy) {
+  const orient = (x1, y1, x2, y2, x3, y3) => Math.sign((x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1));
+  return (
+    orient(ax, ay, bx, by, cx, cy) * orient(ax, ay, bx, by, dx, dy) < 0 &&
+    orient(cx, cy, dx, dy, ax, ay) * orient(cx, cy, dx, dy, bx, by) < 0
+  );
 }
 
 /**
@@ -615,68 +828,6 @@ export function curvedEdgePath(from, to, r, side, offset = 36, labelGap = 12) {
   };
 }
 
-/**
- * A smooth curve through an ordered point sequence (a routed skip edge's
- * dummy-node waypoints, `from`/`to` already trimmed to their circle
- * boundaries by the caller) — a clamped Catmull-Rom spline converted to
- * cubic-bezier segments, so a multi-waypoint route reads as one continuous
- * curve (matching `curvedEdgePath`'s arcs) instead of sharp angular joints
- * at each dummy node. "Clamped" means the sequence's own first/last point
- * stands in for the missing neighbor a real Catmull-Rom tangent would need
- * at the ends, rather than extrapolating a virtual one — simple and correct
- * for the short chains (3-5 points) a routed edge actually produces.
- * @param {{x:number,y:number}[]} points already-trimmed, >= 2 points
- * @param {number} [labelGap]
- * @returns {{d: string, labelX: number, labelY: number}}
- */
-export function routedEdgePath(points, labelGap = 12) {
-  const n = points.length;
-  if (n === 2) {
-    const [p0, p1] = points;
-    const mx = (p0.x + p1.x) / 2;
-    const my = (p0.y + p1.y) / 2;
-    const ddx = p1.x - p0.x;
-    const ddy = p1.y - p0.y;
-    const dist = Math.hypot(ddx, ddy) || 1;
-    return {
-      d: `M${p0.x},${p0.y} L${p1.x},${p1.y}`,
-      labelX: mx + (-ddy / dist) * labelGap,
-      labelY: my + (ddx / dist) * labelGap,
-    };
-  }
-
-  let d = `M${points[0].x},${points[0].y}`;
-  const segments = [];
-  for (let i = 0; i < n - 1; i++) {
-    const p0 = points[i - 1] ?? points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2] ?? points[i + 1];
-    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
-    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
-    d += ` C${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}`;
-    segments.push({ start: p1, c1, c2, end: p2 });
-  }
-
-  // Middle segment's own true midpoint (same "close enough" reasoning as
-  // the rest of this route: segments are short and similar in length, not
-  // worth true arc-length parameterization) — direction for the label
-  // offset comes from that segment's own endpoints (a secant), same
-  // convention the rest of this file already uses for a straight/curved
-  // edge's label push.
-  const midIndex = Math.min(Math.floor((n - 1) / 2), segments.length - 1);
-  const mid = segments[midIndex];
-  const midpoint = cubicMidpoint(mid.start, mid.c1, mid.c2, mid.end);
-  const ddx = mid.end.x - mid.start.x;
-  const ddy = mid.end.y - mid.start.y;
-  const dist = Math.hypot(ddx, ddy) || 1;
-  return {
-    d,
-    labelX: midpoint.x + (-ddy / dist) * labelGap,
-    labelY: midpoint.y + (ddx / dist) * labelGap,
-  };
-}
-
 function pointTowards(center, target, r) {
   const dx = target.x - center.x;
   const dy = target.y - center.y;
@@ -696,6 +847,116 @@ function quadMidpoint(p0, control, p1) {
     x: 0.25 * p0.x + 0.5 * control.x + 0.25 * p1.x,
     y: 0.25 * p0.y + 0.5 * control.y + 0.25 * p1.y,
   };
+}
+
+/**
+ * Heuristic (DOM-free) bounding-box estimate for one edge label, sized for
+ * the 12px system-ui `.edge-label` font (style.css). Deliberately NOT a
+ * real `getBBox()`/`measureText()` measurement: that would force a
+ * synchronous layout read per label on every full render, which is exactly
+ * the per-element reflow cost `DiagramView._patchDragPosition` exists to
+ * avoid (a full-render label pass reading real metrics for every edge would
+ * reintroduce it one level up). A transition label is always a short
+ * comma-joined symbol list ("a,b,ε"), never free-form prose, so a fixed
+ * average-char-width estimate is close enough — it only needs to be
+ * consistent with itself, since the same estimate sizes both the
+ * background halo rect and the `resolveLabelOverlaps` collision math below,
+ * so the two never disagree with each other even where both differ
+ * slightly from the true glyph metrics. `paddingX`/`paddingY` default well
+ * past the glyph's own ink — a single-character label like "ε" has almost
+ * no true bounding box, so a tight estimate would tell `resolveLabelOverlaps`
+ * two nearby single-char labels barely overlap even when they read as
+ * crowded on screen (found live: two routed edges' "ε" labels sitting a few
+ * px apart, technically non-overlapping boxes but not clearly two separate
+ * labels either). The padding is what gives every label a "personal space"
+ * radius, not just a hitbox.
+ * @param {string} text
+ * @param {{charWidth?:number, paddingX?:number, lineHeight?:number, paddingY?:number}} [opts]
+ * @returns {{width:number, height:number}}
+ */
+export function estimateLabelSize(text, { charWidth = 7, paddingX = 10, lineHeight = 14, paddingY = 4 } = {}) {
+  const length = Math.max(text.length, 1);
+  return {
+    width: length * charWidth + paddingX * 2,
+    height: lineHeight + paddingY * 2,
+  };
+}
+
+/**
+ * Iterative relaxation pass that nudges apart any two label rectangles
+ * that overlap. Every edge's label position (`curvedEdgePath`/
+ * `selfLoopPath`'s `labelX/labelY`, or the plain-edge
+ * midpoint math in `DiagramView._computeEdgeGeometry`) is computed against
+ * that ONE edge's own geometry only — nothing before this function ever
+ * compares one edge's label to another's, so two independently-placed
+ * labels can land on top of each other once an automaton is dense enough
+ * (see docs/wip-organizar-layout.md — the gap the rest of this "Organizar"
+ * work was paused on).
+ *
+ * Same relaxation-pass shape as `resolveOverlaps` for states above, but:
+ * (a) label rectangles, not circles, so overlap is an axis-aligned
+ * bounding-box test, not a distance check, and separation picks whichever
+ * axis has LESS overlap (the smaller nudge that actually clears the two
+ * rectangles, same "minimum translation vector" idea most 2D physics
+ * engines use for AABB separation) rather than a single fixed axis; (b)
+ * bounded by `maxDrift` from each label's OWN original anchor, re-clamped
+ * every pass so an intermediate push is never undone later — unlike a
+ * state (free to end up anywhere the spring simulation likes), a label
+ * that drifts too far from its own edge stops reading as belonging to that
+ * edge, or wanders into a neighboring routing lane's own space. Returns a
+ * NEW array (`layeredLayout`'s immutability convention — `resolveOverlaps`
+ * mutates in place, but that one is an internal-only helper, while this is
+ * a public export other code reasons about the return value of).
+ * @param {{key:string, x:number, y:number, width:number, height:number}[]} labels
+ * @param {{maxDrift?:number, passes?:number}} [opts]
+ *   `maxDrift`: hard cap on how far a label may move from its own original
+ *   `(x,y)`.
+ * @returns {{key:string, x:number, y:number}[]}
+ */
+export function resolveLabelOverlaps(labels, { maxDrift = 10, passes = 6 } = {}) {
+  const anchors = new Map(labels.map((l) => [l.key, { x: l.x, y: l.y }]));
+  const sizes = new Map(labels.map((l) => [l.key, { width: l.width, height: l.height }]));
+  const current = labels.map((l) => ({ key: l.key, x: l.x, y: l.y }));
+
+  const clampToAnchor = (p) => {
+    const anchor = anchors.get(p.key);
+    const dx = p.x - anchor.x;
+    const dy = p.y - anchor.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist <= maxDrift || dist === 0) return p;
+    const scale = maxDrift / dist;
+    return { key: p.key, x: anchor.x + dx * scale, y: anchor.y + dy * scale };
+  };
+
+  for (let pass = 0; pass < passes; pass++) {
+    let moved = false;
+    for (let i = 0; i < current.length; i++) {
+      for (let j = i + 1; j < current.length; j++) {
+        const a = current[i];
+        const b = current[j];
+        const sizeA = sizes.get(a.key);
+        const sizeB = sizes.get(b.key);
+        const overlapX = (sizeA.width + sizeB.width) / 2 - Math.abs(a.x - b.x);
+        const overlapY = (sizeA.height + sizeB.height) / 2 - Math.abs(a.y - b.y);
+        if (overlapX <= 0 || overlapY <= 0) continue; // AABBs don't overlap
+
+        if (overlapX < overlapY) {
+          const push = overlapX / 2 + 0.5;
+          const dir = a.x <= b.x ? -1 : 1;
+          current[i] = clampToAnchor({ key: a.key, x: a.x + dir * push, y: a.y });
+          current[j] = clampToAnchor({ key: b.key, x: b.x - dir * push, y: b.y });
+        } else {
+          const push = overlapY / 2 + 0.5;
+          const dir = a.y <= b.y ? -1 : 1;
+          current[i] = clampToAnchor({ key: a.key, x: a.x, y: a.y + dir * push });
+          current[j] = clampToAnchor({ key: b.key, x: b.x, y: b.y - dir * push });
+        }
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return current;
 }
 
 /**

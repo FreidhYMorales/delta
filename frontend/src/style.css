@@ -642,6 +642,16 @@ body {
   pointer-events: none;
 }
 
+/* Sits behind an `.edge-label`, sized from the same estimate that also
+ * feeds `resolveLabelOverlaps` (geometry.js) — clears whichever line or
+ * neighboring label the text would otherwise sit directly on top of.
+ * `--bg` (not `--surface`) matches the canvas's own background, since
+ * `.diagram-canvas` never sets one of its own and shows `body`'s through. */
+.edge-label-bg {
+  fill: var(--bg);
+  pointer-events: none;
+}
+
 /* Moore-only: a state's output, shown as a smaller muted line under its
  * circle — no equivalent for FA/Mealy (see MooreDiagramView.js). */
 .state-output-label {

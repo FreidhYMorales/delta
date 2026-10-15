@@ -30,7 +30,7 @@ import { RegexView } from "../../views/regex/RegexView.js";
 import { GrammarView } from "../../views/grammar/GrammarView.js";
 import { TestingView } from "../../views/testing/TestingView.js";
 import { Toolbar } from "../../views/toolbar/Toolbar.js";
-import { forceDirectedLayout, layeredLayout } from "../../views/diagram/geometry.js";
+import { layeredLayout } from "../../views/diagram/geometry.js";
 import { promptModal } from "../../ui/promptModal.js";
 import { pickOpenPath, pickSavePath } from "../../ui/nativeDialog.js";
 import { showNotice } from "../../ui/notice.js";
@@ -51,23 +51,11 @@ async function autoLayoutAction(docStore, ctx) {
   const states = docStore.getStates();
   if (!states.length) return undefined;
   const edges = docStore.getEdges();
-  // The horizontal layered layout handles cycles on its own (it breaks them
-  // via DFS for column-assignment purposes only, see its own doc comment) —
-  // it only needs a designated initial state to lay out from. Without one
-  // (mid-edit, before any state is marked initial) there's no meaningful
-  // "left-to-right from where" to lay out around, so fall back to the
-  // free-floating spring layout instead.
+  // Grid layout with straight, non-overlapping edges (see `layeredLayout`).
+  // The initial state, when there is one, anchors column 0; without one,
+  // every state with no incoming edge roots its own column-0 chain.
   const initial = states.find((s) => s.initial);
-  const { positions, edgeWaypoints } = initial
-    ? layeredLayout(states, edges, initial.id, { centerX: 300, centerY: 200 })
-    : { positions: forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 }), edgeWaypoints: new Map() };
-  // Routed skip-edge waypoints (only the layered layout produces any) are
-  // handed to the view so it can draw those edges as a multi-segment path
-  // instead of a plain straight line — see `ViewContext.setEdgeRoutes`.
-  // Always set, even to an empty map on the spring-layout branch, so a
-  // stale route from a PREVIOUS Organizar doesn't linger once positions
-  // change again.
-  ctx.setEdgeRoutes(edgeWaypoints);
+  const { positions } = layeredLayout(states, edges, initial?.id, { centerX: 300, centerY: 200 });
   const result = await docStore.apply(positions.map((p) => ({ op: "MoveState", id: p.id, x: p.x, y: p.y })));
   ctx.viewport.fitToWindow();
   return result;

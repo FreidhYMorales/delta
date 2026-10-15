@@ -14,9 +14,10 @@ import {
   circleLayout,
   curvedEdgePath,
   edgeEndpoints,
+  estimateLabelSize,
   nextStateLabel,
   preferredLoopAngle,
-  routedEdgePath,
+  resolveLabelOverlaps,
   selfLoopPath,
   statusSummary,
 } from "./geometry.js";
@@ -25,18 +26,29 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const STATE_RADIUS = 20;
 const BASE_WIDTH = 600;
 const BASE_HEIGHT = 400;
-/** How far a transition's label sits off the line/curve, so it reads next
- * to the arrow instead of sitting on top of it (matches `curvedEdgePath`/
- * `selfLoopPath`'s own `labelGap` default in geometry.js). */
-const EDGE_LABEL_GAP = 12;
-/** A routed skip edge's own lane (`edgeSpacing`, default 28 in
- * `layeredLayout`) is much tighter than the `rowSpacing` gap between real
- * states — its label needs to push further out than `EDGE_LABEL_GAP` to
- * clear a neighboring lane's own line/label, without pushing so far it
- * drifts INTO that neighboring lane instead (found live: labels from a
- * routed edge and a nearby curved pair overlapping). Scoped to routed edges
- * only — every other edge kind keeps `EDGE_LABEL_GAP`. */
-const ROUTED_EDGE_LABEL_GAP = 20;
+/** How far a transition's label sits off the line/curve — `0`, i.e. the
+ * label sits right on the curve's own true midpoint, not pushed to either
+ * side. Before `edge-label-bg` existed, a `0` gap read as a bug (the line
+ * visibly crossed straight through the glyph — see `curvedEdgePath`/
+ * `selfLoopPath`'s own tests in geometry.test.js, still named after that
+ * bug), which is why a nonzero push existed at all. The halo now paints the
+ * line invisible under the text regardless of exact alignment, so that
+ * failure mode is gone — and a nonzero push turned out to trade it for a
+ * DIFFERENT one: pushed sideways, a label's halo can reach far enough to
+ * clip a *different*, nearby edge's line instead of its own (found live:
+ * a routed edge's tight lane a few px from another label). Sitting exactly
+ * on its own line/curve means whatever the halo covers is always that same
+ * label's own line — never a neighbor's. */
+const EDGE_LABEL_GAP = 0;
+/** Hard cap (`resolveLabelOverlaps`'s `maxDrift`) on how far a full-render
+ * label pass may nudge a label away from its own edge to clear another
+ * label — big enough to separate two typical short symbol-list labels, not
+ * so big a label drifts into a neighboring routing lane or stops reading as
+ * belonging to its own edge. Only used on a full `_renderCanvas` pass (see
+ * that method) — never during `_patchDragPosition`'s per-mousemove patch,
+ * which would reintroduce the whole-diagram-recompute cost that patch
+ * exists to avoid. */
+const LABEL_MAX_DRIFT = 18;
 
 export class DiagramView {
   /**
@@ -300,13 +312,6 @@ export class DiagramView {
     if (this.ctx.activeTool === "select" && stateId != null) {
       const state = this.docStore.getState(stateId);
       if (!state) return;
-      // Any cached post-Organizar routing (`ctx.edgeRoutes`) is presumed
-      // stale the instant the user starts moving a state by hand — cleared
-      // wholesale (every route, not just ones touching this state) rather
-      // than partially invalidated, since "you're back to plain edges
-      // until you reorganize again" is simple to reason about and honest,
-      // not a silently wrong-looking bent line frozen mid-drag.
-      this.ctx.clearEdgeRoutes();
       this._dragState = {
         id: stateId,
         startClientX: event.clientX,
@@ -521,15 +526,6 @@ export class DiagramView {
     const to = positions.get(edge.to);
     if (!from || !to) return null;
 
-    // A skip edge routed through dummy waypoints by the most recent
-    // "Organizar" (`ctx.edgeRoutes`, set from `layeredLayout`'s
-    // `edgeWaypoints`) takes priority over the self-loop/mutual-pair/
-    // straight-line cases below — those never apply to a routed edge
-    // anyway (a route only ever exists for an edge spanning >=2 layers,
-    // never a self-loop or an adjacent-layer pair).
-    const route = this.ctx.edgeRoutes.get(`${edge.from}:${edge.to}`);
-    if (route && route.length) return this._computeRoutedEdgeGeometry(from, to, route);
-
     let d = null;
     let labelX;
     let labelY;
@@ -540,10 +536,10 @@ export class DiagramView {
         .map((id) => positions.get(id))
         .filter(Boolean);
       const angleDeg = preferredLoopAngle(from, neighborPositions);
-      ({ d, labelX, labelY } = selfLoopPath(from, STATE_RADIUS, { angleDeg }));
+      ({ d, labelX, labelY } = selfLoopPath(from, STATE_RADIUS, { angleDeg, labelGap: EDGE_LABEL_GAP }));
     } else if (hasReverse(edge)) {
       const side = edge.from < edge.to ? 1 : -1;
-      ({ d, labelX, labelY } = curvedEdgePath(from, to, STATE_RADIUS, side));
+      ({ d, labelX, labelY } = curvedEdgePath(from, to, STATE_RADIUS, side, undefined, EDGE_LABEL_GAP));
     }
 
     let x1, y1, x2, y2;
@@ -564,30 +560,6 @@ export class DiagramView {
       labelY = (from.y + to.y) / 2 + (ddx / dist) * EDGE_LABEL_GAP;
     }
     return { d, x1, y1, x2, y2, labelX, labelY, isSelfLoop };
-  }
-
-  /**
-   * A skip edge's dummy-node waypoints as one smooth curve (`routedEdgePath`,
-   * geometry.js — a clamped Catmull-Rom spline, matching how
-   * `curvedEdgePath`'s mutual-pair arcs already look rather than sharp
-   * angular joints at each waypoint). Only the first and last point get
-   * trimmed to the circle boundary (`edgeEndpoints` already does exactly
-   * that math for a plain 2-point edge, reused here for just those two
-   * segments) — the waypoints themselves aren't circles, nothing trims
-   * around them. Uses `ROUTED_EDGE_LABEL_GAP`, not `EDGE_LABEL_GAP` — a
-   * routed edge's lane is tighter than normal row spacing (see that
-   * constant's own comment).
-   * @param {{x:number,y:number}} from
-   * @param {{x:number,y:number}} to
-   * @param {{x:number,y:number}[]} route ordered waypoints, `from` -> `to`
-   */
-  _computeRoutedEdgeGeometry(from, to, route) {
-    const points = [from, ...route, to];
-    const start = edgeEndpoints(points[0], points[1], STATE_RADIUS);
-    const end = edgeEndpoints(points[points.length - 2], points[points.length - 1], STATE_RADIUS);
-    const trimmed = [{ x: start.x1, y: start.y1 }, ...route, { x: end.x2, y: end.y2 }];
-    const { d, labelX, labelY } = routedEdgePath(trimmed, ROUTED_EDGE_LABEL_GAP);
-    return { d, labelX, labelY, isSelfLoop: false };
   }
 
   _renderCanvas() {
@@ -630,14 +602,47 @@ export class DiagramView {
     this._edgesByState = new Map(states.map((s) => [s.id, []]));
     this._geometryCtx = { positions, neighborsOf, hasReverse };
 
+    // Phase 1: every edge's raw geometry + its label's estimated size,
+    // before touching the DOM at all — `resolveLabelOverlaps` (phase 2)
+    // needs the COMPLETE set of labels at once, since the whole point is
+    // comparing one edge's label against every other edge's, which none of
+    // `_computeEdgeGeometry`'s per-edge math ever does on its own.
+    const edgeRenders = [];
     for (const edge of edges) {
       const geo = this._computeEdgeGeometry(edge, positions, neighborsOf, hasReverse);
       if (!geo) continue;
-      const { d, x1, y1, x2, y2, labelX, labelY, isSelfLoop } = geo;
+      const text = edge.epsilon ? ["ε", ...edge.symbols].join(",") : edge.symbols.join(",");
+      const { width, height } = estimateLabelSize(text);
+      edgeRenders.push({ edge, geo, text, width, height });
+    }
+
+    // Phase 2: resolve every label's position against the complete set in
+    // one pass (see `resolveLabelOverlaps`'s own doc comment for why this
+    // can't happen per-edge). `maxDrift` keeps a resolved label from ever
+    // drifting far enough to stop reading as belonging to its own edge.
+    const resolvedLabels = resolveLabelOverlaps(
+      edgeRenders.map(({ edge, geo, width, height }) => ({
+        key: `${edge.from}:${edge.to}`,
+        x: geo.labelX,
+        y: geo.labelY,
+        width,
+        height,
+      })),
+      { maxDrift: LABEL_MAX_DRIFT },
+    );
+    const resolvedLabelByKey = new Map(resolvedLabels.map((l) => [l.key, l]));
+
+    // Phase 3: build the DOM using the resolved label positions.
+    for (const { edge, geo, text, width, height } of edgeRenders) {
+      const { d, x1, y1, x2, y2, isSelfLoop } = geo;
+      const edgeKey = `${edge.from}:${edge.to}`;
+      const resolvedLabel = resolvedLabelByKey.get(edgeKey);
+      const labelX = resolvedLabel.x;
+      const labelY = resolvedLabel.y;
 
       const tag = d ? "path" : "line";
       const el = document.createElementNS(SVG_NS, tag);
-      el.dataset.edge = `${edge.from}:${edge.to}`;
+      el.dataset.edge = edgeKey;
       el.setAttribute("marker-end", "url(#arrow)");
       if (d) {
         el.setAttribute("d", d);
@@ -667,17 +672,36 @@ export class DiagramView {
       hit.addEventListener("mouseenter", () => el.classList.add("edge-hover"));
       hit.addEventListener("mouseleave", () => el.classList.remove("edge-hover"));
 
+      // A background halo behind the label text, sized from the SAME
+      // `estimateLabelSize` call that fed `resolveLabelOverlaps` above (not
+      // recomputed independently — the halo and the collision math must
+      // never disagree on how big a label is). Painted between the edge
+      // line and the label text so it visually clears whatever line/label
+      // sits behind it — an aesthetic fix independent of the overlap math,
+      // since a label sitting right on top of a line/curve read poorly even
+      // when nothing else overlapped it.
+      const labelBg = document.createElementNS(SVG_NS, "rect");
+      labelBg.setAttribute("x", String(labelX - width / 2));
+      labelBg.setAttribute("y", String(labelY - height / 2));
+      labelBg.setAttribute("width", String(width));
+      labelBg.setAttribute("height", String(height));
+      // Fully rounded ends (a "pill", not just softened corners) — reads as
+      // a deliberate label chip sitting on the line rather than a stray
+      // rectangle. `height / 2` rather than a fixed px radius so it stays
+      // proportional if `estimateLabelSize`'s `lineHeight`/`paddingY` ever
+      // change.
+      labelBg.setAttribute("rx", String(height / 2));
+      labelBg.setAttribute("ry", String(height / 2));
+      labelBg.setAttribute("class", "edge-label-bg");
+
       const label = document.createElementNS(SVG_NS, "text");
-      label.textContent = edge.epsilon
-        ? ["ε", ...edge.symbols].join(",")
-        : edge.symbols.join(",");
+      label.textContent = text;
       label.setAttribute("x", String(labelX));
       label.setAttribute("y", String(labelY));
       label.setAttribute("class", "edge-label");
-      this.svg.append(hit, el, label);
+      this.svg.append(hit, el, labelBg, label);
 
-      const edgeKey = el.dataset.edge;
-      this._edgeEls.set(edgeKey, { edge, el, hit, label });
+      this._edgeEls.set(edgeKey, { edge, el, hit, labelBg, label, labelWidth: width, labelHeight: height });
       this._edgesByState.get(edge.from)?.push(edgeKey);
       if (edge.to !== edge.from) this._edgesByState.get(edge.to)?.push(edgeKey);
     }
@@ -814,6 +838,16 @@ export class DiagramView {
       }
       entry.label.setAttribute("x", String(labelX));
       entry.label.setAttribute("y", String(labelY));
+      // Not re-run through `resolveLabelOverlaps` here — only the edges
+      // touching the dragged state are patched (see this method's own doc
+      // comment on why), so there's no complete label set to resolve
+      // against mid-drag; any transient overlap this causes is corrected by
+      // the full `_render()` the drag's `MoveState` commit triggers on
+      // release (`docStore.subscribe`, constructor).
+      if (entry.labelBg) {
+        entry.labelBg.setAttribute("x", String(labelX - entry.labelWidth / 2));
+        entry.labelBg.setAttribute("y", String(labelY - entry.labelHeight / 2));
+      }
     }
   }
 

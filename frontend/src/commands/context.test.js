@@ -43,30 +43,6 @@ describe("ViewContext", () => {
     expect(ctx.selection).toBeNull();
   });
 
-  it("starts with no cached edge routes; setEdgeRoutes replaces them and notifies", () => {
-    const ctx = new ViewContext({});
-    expect(ctx.edgeRoutes.size).toBe(0);
-    const listener = vi.fn();
-    ctx.subscribe(listener);
-
-    const routes = new Map([["1:4", [{ x: 10, y: 20 }]]]);
-    ctx.setEdgeRoutes(routes);
-
-    expect(ctx.edgeRoutes).toBe(routes);
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it("clearEdgeRoutes empties any cached routes and notifies", () => {
-    const ctx = new ViewContext({});
-    ctx.setEdgeRoutes(new Map([["1:4", [{ x: 10, y: 20 }]]]));
-    const listener = vi.fn();
-    ctx.subscribe(listener);
-
-    ctx.clearEdgeRoutes();
-
-    expect(ctx.edgeRoutes.size).toBe(0);
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
 
   it("unsubscribe stops further notifications", () => {
     const ctx = new ViewContext({});

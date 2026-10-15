@@ -47,12 +47,14 @@ describe("DiagramView rendering (task 7.4)", () => {
     expect(container.querySelectorAll(".edge[data-edge]")).toHaveLength(1);
   });
 
-  it("offsets a straight edge's label off the line instead of sitting on top of it (bug: label sat exactly on the stroke)", async () => {
+  it("centers a straight edge's label on the line itself, behind its background halo (EDGE_LABEL_GAP=0 — an offset used to be needed to keep the bare line from crossing the glyph, but `.edge-label-bg` now paints over the line under the text, so the old offset just meant a label could clip a DIFFERENT nearby edge's line instead of its own)", async () => {
     const { container } = await setup();
-    // Both states sit at y=10 (a horizontal line), so a label perpendicular
-    // to it must move away in y — sitting "on the line" would keep y at 10.
+    // Both states sit at y=10 (a horizontal line): the label should sit
+    // exactly there too, not pushed to either side.
     const label = container.querySelector(".edge-label");
-    expect(Number(label.getAttribute("y"))).not.toBeCloseTo(10, 1);
+    expect(Number(label.getAttribute("y"))).toBeCloseTo(10, 1);
+    expect(Number(label.getAttribute("x"))).toBeCloseTo(55, 1);
+    expect(container.querySelector(".edge-label-bg")).not.toBeNull();
   });
 
   it("renders a double-circle ring for an accepting state and an arrow stub for the initial state", async () => {
@@ -254,60 +256,6 @@ describe("DiagramView drag-to-move performs a targeted DOM patch, not a full reb
     expect(container.querySelector('circle[data-state-id="1"]')).toBe(draggedCircle);
     expect(draggedCircle.getAttribute("cx")).toBe("60");
     expect(draggedCircle.getAttribute("cy")).toBe("40");
-  });
-});
-
-describe("DiagramView renders a skip edge's dummy-node route (ctx.edgeRoutes, set by Organizar)", () => {
-  function threeStateChainSnapshot() {
-    return {
-      revision: 1,
-      states: [
-        { id: 1, label: "q0", x: 0, y: 0, initial: true, accepting: false },
-        { id: 2, label: "q1", x: 100, y: 0, initial: false, accepting: false },
-        { id: 3, label: "q2", x: 200, y: 0, initial: false, accepting: true },
-      ],
-      edges: [{ from: 1, to: 3, epsilon: false, symbols: ["a"] }],
-      derived: { classification: "Dfa", alphabet: ["a"], unreachable: [] },
-    };
-  }
-
-  it("draws a routed edge as a multi-segment path through its waypoints instead of a plain 2-point line", async () => {
-    const { container, ctx } = await setup(threeStateChainSnapshot());
-    ctx.setEdgeRoutes(new Map([["1:3", [{ x: 100, y: 60 }]]]));
-    ctx.setSelection(null); // trigger a re-render so the new route takes effect
-
-    const edgeEl = container.querySelector('path.edge[data-edge="1:3"]');
-    expect(edgeEl).not.toBeNull();
-    expect(edgeEl.getAttribute("d")).toContain("100,60");
-  });
-
-  it("draws the route as a smooth curve (cubic-bezier segments), not sharp polyline joints at each waypoint", async () => {
-    const { container, ctx } = await setup(threeStateChainSnapshot());
-    ctx.setEdgeRoutes(new Map([["1:3", [{ x: 100, y: 60 }]]]));
-    ctx.setSelection(null);
-
-    const edgeEl = container.querySelector('path.edge[data-edge="1:3"]');
-    const d = edgeEl.getAttribute("d");
-    expect(d).toContain("C");
-    expect(d).not.toContain("L");
-  });
-
-  it("falls back to a plain line once no route exists for that edge", async () => {
-    const { container } = await setup(threeStateChainSnapshot());
-    expect(container.querySelector('line.edge[data-edge="1:3"]')).not.toBeNull();
-    expect(container.querySelector('path.edge[data-edge="1:3"]')).toBeNull();
-  });
-
-  it("clears any cached route the instant a real drag starts, so a stale route never survives a manual move", async () => {
-    const { container, ctx } = await setup(threeStateChainSnapshot());
-    ctx.setEdgeRoutes(new Map([["1:3", [{ x: 100, y: 60 }]]]));
-    expect(ctx.edgeRoutes.size).toBe(1);
-
-    container
-      .querySelector('circle[data-state-id="1"]')
-      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 0, clientY: 0 }));
-
-    expect(ctx.edgeRoutes.size).toBe(0);
   });
 });
 

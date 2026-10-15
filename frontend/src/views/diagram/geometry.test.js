@@ -3,11 +3,11 @@ import {
   circleLayout,
   curvedEdgePath,
   edgeEndpoints,
-  forceDirectedLayout,
+  estimateLabelSize,
   layeredLayout,
   nextStateLabel,
   preferredLoopAngle,
-  routedEdgePath,
+  resolveLabelOverlaps,
   selfLoopPath,
   statusSummary,
 } from "./geometry.js";
@@ -49,94 +49,6 @@ describe("circleLayout", () => {
 
   it("returns an empty array for zero states", () => {
     expect(circleLayout([], { centerX: 0, centerY: 0, radius: 10 })).toEqual([]);
-  });
-});
-
-describe("forceDirectedLayout", () => {
-  it("returns an empty array for zero states", () => {
-    expect(forceDirectedLayout([], [], { centerX: 0, centerY: 0 })).toEqual([]);
-  });
-
-  it("puts a single state at the center", () => {
-    const positions = forceDirectedLayout([{ id: 1 }], [], { centerX: 100, centerY: 50 });
-    expect(positions).toEqual([{ id: 1, x: 100, y: 50 }]);
-  });
-
-  it("never leaves two states closer than minSeparation, even fully connected", () => {
-    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
-    const edges = [];
-    for (const a of states) for (const b of states) if (a.id < b.id) edges.push({ from: a.id, to: b.id });
-    const minSeparation = 70;
-    const positions = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200, minSeparation });
-    for (let i = 0; i < positions.length; i++) {
-      for (let j = i + 1; j < positions.length; j++) {
-        const dx = positions[i].x - positions[j].x;
-        const dy = positions[i].y - positions[j].y;
-        expect(Math.sqrt(dx * dx + dy * dy)).toBeGreaterThanOrEqual(minSeparation - 0.5);
-      }
-    }
-  });
-
-  it("ignores self-loops when pulling states together", () => {
-    const states = [{ id: 1 }, { id: 2 }];
-    const positions = forceDirectedLayout(states, [{ from: 1, to: 1 }], { centerX: 0, centerY: 0 });
-    expect(positions).toHaveLength(2);
-    expect(Number.isFinite(positions[0].x)).toBe(true);
-    expect(Number.isFinite(positions[1].x)).toBe(true);
-  });
-
-  it("pulls a connected pair closer together than two disconnected states given the same state count", () => {
-    // Star graph: state 1 connects to everything else, 4 is only linked
-    // through that hub — the directly-connected pair (1,2) should end up
-    // closer than the two-hop pair (2,4).
-    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
-    const edges = [
-      { from: 1, to: 2 },
-      { from: 1, to: 3 },
-      { from: 1, to: 4 },
-    ];
-    const positions = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
-    const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-    const byId = new Map(positions.map((p) => [p.id, p]));
-    const directPairDist = dist(byId.get(1), byId.get(2));
-    const twoHopDist = dist(byId.get(2), byId.get(4));
-    expect(directPairDist).toBeLessThan(twoHopDist);
-  });
-
-  it("is deterministic for the same input", () => {
-    const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
-    const edges = [{ from: 1, to: 2 }];
-    const a = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
-    const b = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
-    expect(a).toEqual(b);
-  });
-
-  it("keeps two loosely-linked clusters from drifting apart without bound (regression: a real 58-state NFA rendered as far-flung islands joined by long crossing edges)", () => {
-    // Two 10-state cliques joined by a single bridge edge: repulsion between
-    // the two dense clusters has nothing pulling them back together except
-    // that one bridge, which is exactly the shape that made whole clusters
-    // fly far apart before a centering force was added.
-    const clusterA = Array.from({ length: 10 }, (_, i) => ({ id: i }));
-    const clusterB = Array.from({ length: 10 }, (_, i) => ({ id: 10 + i }));
-    const states = [...clusterA, ...clusterB];
-    const edges = [];
-    for (const a of clusterA) for (const b of clusterA) if (a.id < b.id) edges.push({ from: a.id, to: b.id });
-    for (const a of clusterB) for (const b of clusterB) if (a.id < b.id) edges.push({ from: a.id, to: b.id });
-    edges.push({ from: 0, to: 10 }); // the single bridge
-
-    const positions = forceDirectedLayout(states, edges, { centerX: 300, centerY: 200 });
-    let maxDist = 0;
-    for (let i = 0; i < positions.length; i++) {
-      for (let j = i + 1; j < positions.length; j++) {
-        const dx = positions[i].x - positions[j].x;
-        const dy = positions[i].y - positions[j].y;
-        maxDist = Math.max(maxDist, Math.sqrt(dx * dx + dy * dy));
-      }
-    }
-    // 20 states at a ~130px ideal edge length should span at most a few
-    // hundred px across, not the thousands a purely repulsive, unbounded
-    // layout would produce.
-    expect(maxDist).toBeLessThan(900);
   });
 });
 
@@ -271,77 +183,219 @@ describe("layeredLayout", () => {
     expect(byId.get(4).y).toBeLessThan(byId.get(3).y);
   });
 
-  it("routes a skip edge (spanning >=2 layers) through dummy waypoints, one per intermediate layer, but gives an adjacent-layer edge no route at all", () => {
-    // 1 -> 2 -> 3 -> 4 (chain, one layer apart each) plus a direct 1 -> 4
-    // skip that jumps 3 layers — the skip must get a waypoint for layer 1
-    // (2's column) and layer 2 (3's column), landing at those columns'
-    // exact x, while the adjacent-layer edges (1:2, 2:3, 3:4) get no route
-    // at all — they keep today's plain rendering untouched.
+  it("returns positions only — every edge is drawn straight, so there are no waypoints to go stale on a later drag", () => {
     const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
-    const edges = [
-      { from: 1, to: 2 },
-      { from: 2, to: 3 },
-      { from: 3, to: 4 },
-      { from: 1, to: 4 },
-    ];
-    const { positions, edgeWaypoints } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const edges = [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }, { from: 1, to: 4 }];
+    const result = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    expect(Object.keys(result)).toEqual(["positions"]);
+  });
+
+  it("lays out without an initial state (every root starts its own column-0 chain)", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const edges = [{ from: 1, to: 2 }, { from: 2, to: 3 }];
+    const { positions } = layeredLayout(states, edges, undefined, { centerX: 0, centerY: 0 });
     const byId = new Map(positions.map((p) => [p.id, p]));
-
-    expect(edgeWaypoints.has("1:2")).toBe(false);
-    expect(edgeWaypoints.has("2:3")).toBe(false);
-    expect(edgeWaypoints.has("3:4")).toBe(false);
-
-    const route = edgeWaypoints.get("1:4");
-    expect(route).toHaveLength(2);
-    expect(route[0].x).toBe(byId.get(2).x);
-    expect(route[1].x).toBe(byId.get(3).x);
+    expect(byId.get(1).x).toBeLessThan(byId.get(2).x);
+    expect(byId.get(2).x).toBeLessThan(byId.get(3).x);
   });
 
-  it("gives two independent skip edges through the same intermediate layers distinct dummy rows, not one collapsed lane", () => {
-    // Two parallel 3-hop paths from the same initial state (1->2->3->4 and
-    // 1->5->6->7), each with its own direct skip (1->4, 1->7) crossing the
-    // exact same intermediate layers (1 and 2) — the two skips' dummy
-    // chains must stay distinguishable rows at every shared layer, not
-    // collide into the same slot (the actual "5 overlapping lines" bug
-    // reported: several distinct edges landing on the same visual lane).
-    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }, { id: 6 }, { id: 7 }];
-    const edges = [
-      { from: 1, to: 2 },
-      { from: 2, to: 3 },
-      { from: 3, to: 4 },
-      { from: 1, to: 5 },
-      { from: 5, to: 6 },
-      { from: 6, to: 7 },
-      { from: 1, to: 4 },
-      { from: 1, to: 7 },
-    ];
-    const { edgeWaypoints } = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
-    const routeA = edgeWaypoints.get("1:4");
-    const routeB = edgeWaypoints.get("1:7");
-    expect(routeA).toHaveLength(2);
-    expect(routeB).toHaveLength(2);
-    expect(routeA[0].y).not.toBe(routeB[0].y);
-    expect(routeA[1].y).not.toBe(routeB[1].y);
-  });
+  describe("never lets a straight edge run over a state or another edge", () => {
+    const STATE_CLEARANCE = 26; // state radius (20) plus a visible margin
 
-  it("spaces a dummy waypoint from a neighboring real state more tightly than two real states would be spaced, so routing lanes don't balloon the diagram's height", () => {
-    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
-    const edges = [
-      { from: 1, to: 2 },
-      { from: 2, to: 3 },
-      { from: 3, to: 4 },
-      { from: 1, to: 4 },
-    ];
-    const { positions, edgeWaypoints } = layeredLayout(states, edges, 1, {
-      centerX: 0,
-      centerY: 0,
-      rowSpacing: 90,
+    function distanceToSegment(p, a, b) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+      return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    }
+
+    function uniquePairs(edges) {
+      const seen = new Map();
+      for (const e of edges) {
+        if (e.from === e.to) continue;
+        const key = e.from < e.to ? `${e.from}:${e.to}` : `${e.to}:${e.from}`;
+        seen.set(key, [Math.min(e.from, e.to), Math.max(e.from, e.to)]);
+      }
+      return [...seen.values()];
+    }
+
+    function collinearOverlap(a, b, c, d) {
+      const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+      if (Math.abs(cross(a, b, c)) > 1e-6 || Math.abs(cross(a, b, d)) > 1e-6) return false;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const project = (p) => ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / len;
+      const lo = Math.max(0, Math.min(project(c), project(d)));
+      const hi = Math.min(len, Math.max(project(c), project(d)));
+      return hi - lo > 1e-6;
+    }
+
+    function assertReadable(states, edges, initialId) {
+      const { positions } = layeredLayout(states, edges, initialId, { centerX: 0, centerY: 0 });
+      const byId = new Map(positions.map((p) => [p.id, p]));
+      const pairs = uniquePairs(edges);
+
+      for (const [a, b] of pairs) {
+        for (const s of states) {
+          if (s.id === a || s.id === b) continue;
+          const d = distanceToSegment(byId.get(s.id), byId.get(a), byId.get(b));
+          expect(d, `edge ${a}-${b} runs over state ${s.id}`).toBeGreaterThanOrEqual(STATE_CLEARANCE);
+        }
+      }
+      for (let i = 0; i < pairs.length; i++) {
+        for (let j = i + 1; j < pairs.length; j++) {
+          const [a, b] = pairs[i];
+          const [c, d] = pairs[j];
+          const overlap = collinearOverlap(byId.get(a), byId.get(b), byId.get(c), byId.get(d));
+          expect(overlap, `edges ${a}-${b} and ${c}-${d} overlap`).toBe(false);
+        }
+      }
+      return byId;
+    }
+
+    it("a chain closed by a long back edge (the back edge used to run straight over every middle state)", () => {
+      const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+      const edges = [
+        { from: 1, to: 2 },
+        { from: 2, to: 3 },
+        { from: 3, to: 4 },
+        { from: 4, to: 5 },
+        { from: 5, to: 1 },
+      ];
+      assertReadable(states, edges, 1);
     });
-    const byId = new Map(positions.map((p) => [p.id, p]));
-    const route = edgeWaypoints.get("1:4");
-    // Layer 1 holds exactly state 2 and this route's dummy waypoint.
-    const gap = Math.abs(byId.get(2).y - route[0].y);
-    expect(gap).toBeLessThan(90);
+
+    it("several skip edges over the same chain", () => {
+      const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+      const edges = [
+        { from: 1, to: 2 },
+        { from: 2, to: 3 },
+        { from: 3, to: 4 },
+        { from: 4, to: 5 },
+        { from: 1, to: 3 },
+        { from: 1, to: 4 },
+        { from: 2, to: 5 },
+        { from: 1, to: 5 },
+      ];
+      assertReadable(states, edges, 1);
+    });
+
+    it("the (a|b)*abb DFA, with its back edges and a bidirectional pair", () => {
+      const states = [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }];
+      const edges = [
+        { from: 0, to: 1 },
+        { from: 0, to: 0 },
+        { from: 1, to: 1 },
+        { from: 1, to: 2 },
+        { from: 2, to: 1 },
+        { from: 2, to: 3 },
+        { from: 3, to: 1 },
+        { from: 3, to: 0 },
+      ];
+      assertReadable(states, edges, 0);
+    });
+
+    it("the Thompson NFA for (a|b)*abb", () => {
+      const states = Array.from({ length: 11 }, (_, id) => ({ id }));
+      const edges = [
+        { from: 0, to: 1 },
+        { from: 0, to: 7 },
+        { from: 1, to: 2 },
+        { from: 1, to: 4 },
+        { from: 2, to: 3 },
+        { from: 4, to: 5 },
+        { from: 3, to: 6 },
+        { from: 5, to: 6 },
+        { from: 6, to: 1 },
+        { from: 6, to: 7 },
+        { from: 7, to: 8 },
+        { from: 8, to: 9 },
+        { from: 9, to: 10 },
+      ];
+      assertReadable(states, edges, 0);
+    });
+
+    it("a dense pseudo-random 14-state automaton", () => {
+      let seed = 7;
+      const rand = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+      };
+      const states = Array.from({ length: 14 }, (_, id) => ({ id }));
+      const edges = [];
+      for (let i = 0; i < 13; i++) edges.push({ from: i, to: i + 1 });
+      for (let k = 0; k < 16; k++) {
+        edges.push({ from: Math.floor(rand() * 14), to: Math.floor(rand() * 14) });
+      }
+      assertReadable(states, edges, 0);
+    });
+
+    it("keeps every state on a grid of columns and rows", () => {
+      const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+      const edges = [
+        { from: 1, to: 2 },
+        { from: 1, to: 3 },
+        { from: 2, to: 4 },
+        { from: 3, to: 4 },
+        { from: 4, to: 5 },
+        { from: 5, to: 1 },
+      ];
+      const byId = assertReadable(states, edges, 1);
+      const columnSpacing = 160;
+      const rowSpacing = 90;
+      const origin = byId.get(1);
+      for (const p of byId.values()) {
+        expect(Math.abs(((p.x - origin.x) / columnSpacing) % 1)).toBeCloseTo(0, 6);
+        expect(Math.abs(((p.y - origin.y) / (rowSpacing / 2)) % 1)).toBeCloseTo(0, 6);
+      }
+    });
+  });
+
+  describe("draws Thompson-style shapes: a straight spine with symmetric branches", () => {
+    const layout = (n, pairs, initialId = 0) => {
+      const states = Array.from({ length: n }, (_, id) => ({ id }));
+      const edges = pairs.map(([from, to]) => ({ from, to }));
+      const { positions } = layeredLayout(states, edges, initialId, { centerX: 0, centerY: 0 });
+      return new Map(positions.map((p) => [p.id, p]));
+    };
+
+    it("a union (a|b) is a symmetric diamond: fork and join centered between both branches", () => {
+      // 0 -> 1 forks to 2/4, 2 -> 3, 4 -> 5, both join at 6 -> 7.
+      const at = layout(8, [[0, 1], [1, 2], [1, 4], [2, 3], [4, 5], [3, 6], [5, 6], [6, 7]]);
+      expect(at.get(2).y).toBe(at.get(3).y);
+      expect(at.get(4).y).toBe(at.get(5).y);
+      expect(at.get(2).y).not.toBe(at.get(4).y);
+      expect(at.get(1).y).toBeCloseTo((at.get(2).y + at.get(4).y) / 2, 6);
+      expect(at.get(6).y).toBeCloseTo((at.get(3).y + at.get(5).y) / 2, 6);
+      // The spine stays one straight row.
+      for (const id of [0, 1, 6, 7]) expect(at.get(id).y).toBe(at.get(0).y);
+    });
+
+    it("a star (a|b)* around a union keeps fork, join and the rest of the spine on one row", () => {
+      // t6 -> t4, t4 forks to t0/t2, t0 -> t1, t2 -> t3, join at t5,
+      // t5 -> t4 loops back, t4 -> t5 bypasses, t5 -> t7 -> t8.
+      const at = layout(9, [[6, 4], [4, 0], [4, 2], [0, 1], [2, 3], [1, 5], [3, 5], [5, 4], [4, 5], [5, 7], [7, 8]], 6);
+      for (const id of [4, 5, 7, 8]) expect(at.get(id).y).toBe(at.get(6).y);
+      expect(at.get(4).y).toBeCloseTo((at.get(0).y + at.get(2).y) / 2, 6);
+      expect(at.get(0).y).toBe(at.get(1).y);
+      expect(at.get(2).y).toBe(at.get(3).y);
+    });
+
+    it("a DFA fanning out to two states sits centered between them", () => {
+      // A -> B, B -> C, B -> D, C <-> D, plus self-loops.
+      const at = layout(4, [[0, 1], [1, 2], [1, 3], [2, 3], [3, 2], [2, 2], [3, 3]]);
+      expect(at.get(0).y).toBe(at.get(1).y);
+      expect(at.get(1).y).toBeCloseTo((at.get(2).y + at.get(3).y) / 2, 6);
+      expect(at.get(2).x).toBe(at.get(3).x);
+    });
+  });
+
+  it("is deterministic for the same input", () => {
+    const states = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+    const edges = [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }, { from: 4, to: 1 }, { from: 1, to: 3 }];
+    const a = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    const b = layeredLayout(states, edges, 1, { centerX: 0, centerY: 0 });
+    expect(a).toEqual(b);
   });
 });
 
@@ -490,37 +544,75 @@ describe("curvedEdgePath", () => {
   });
 });
 
-describe("routedEdgePath", () => {
-  it("degenerates to a straight line for exactly 2 points (no waypoints)", () => {
-    const { d } = routedEdgePath([{ x: 0, y: 0 }, { x: 200, y: 0 }]);
-    expect(d).toBe("M0,0 L200,0");
+describe("estimateLabelSize", () => {
+  it("returns a wider box for longer text", () => {
+    const short = estimateLabelSize("a");
+    const long = estimateLabelSize("a,b,c,d,e");
+    expect(long.width).toBeGreaterThan(short.width);
   });
 
-  it("produces smooth cubic-bezier segments (not sharp L joints) through 1+ waypoints", () => {
-    const points = [{ x: 0, y: 0 }, { x: 100, y: 40 }, { x: 200, y: 0 }];
-    const { d } = routedEdgePath(points);
-    expect(d).not.toContain("L");
-    expect(d.match(/C/g)).toHaveLength(2);
+  it("height does not depend on text length (single-line labels only)", () => {
+    const short = estimateLabelSize("a");
+    const long = estimateLabelSize("a,b,c,d,e");
+    expect(long.height).toBe(short.height);
   });
 
-  it("the curve passes exactly through every original point, including interior waypoints", () => {
-    // A cubic bezier always starts at its own P0 and ends at its own P3 —
-    // only the tangents (control points) are approximated by the clamped
-    // Catmull-Rom conversion, so every input point must appear verbatim as
-    // either the initial M or some segment's end coordinates.
-    const points = [{ x: 0, y: 0 }, { x: 100, y: 40 }, { x: 200, y: -20 }, { x: 300, y: 0 }];
-    const { d } = routedEdgePath(points);
-    for (const p of points) {
-      expect(d).toContain(`${p.x},${p.y}`);
+  it("returns a positive size even for an empty string (an edge with no symbols yet can still be mid-render)", () => {
+    const { width, height } = estimateLabelSize("");
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+  });
+});
+
+describe("resolveLabelOverlaps", () => {
+  it("leaves a label alone when nothing else is nearby (no gratuitous jitter)", () => {
+    const labels = [
+      { key: "a", x: 0, y: 0, width: 20, height: 14 },
+      { key: "b", x: 500, y: 500, width: 20, height: 14 },
+    ];
+    const resolved = resolveLabelOverlaps(labels);
+    expect(resolved.find((l) => l.key === "a")).toEqual({ key: "a", x: 0, y: 0 });
+    expect(resolved.find((l) => l.key === "b")).toEqual({ key: "b", x: 500, y: 500 });
+  });
+
+  it("separates two labels forced onto the same point", () => {
+    const labels = [
+      { key: "a", x: 100, y: 100, width: 24, height: 14 },
+      { key: "b", x: 100, y: 100, width: 24, height: 14 },
+    ];
+    const resolved = resolveLabelOverlaps(labels, { maxDrift: 40 });
+    const a = resolved.find((l) => l.key === "a");
+    const b = resolved.find((l) => l.key === "b");
+    // Bounding boxes (24x14, centered) must no longer intersect on at least
+    // one axis once resolved.
+    const overlapX = 24 - Math.abs(a.x - b.x);
+    const overlapY = 14 - Math.abs(a.y - b.y);
+    expect(overlapX <= 0 || overlapY <= 0).toBe(true);
+  });
+
+  it("never moves a label further than maxDrift from its own original anchor", () => {
+    // Three labels crammed onto the same point — more overlap than a small
+    // maxDrift can ever fully resolve, so this exercises the clamp itself,
+    // not just a lucky case where resolving happens to land under it anyway.
+    const labels = [
+      { key: "a", x: 0, y: 0, width: 20, height: 14 },
+      { key: "b", x: 0, y: 0, width: 20, height: 14 },
+      { key: "c", x: 0, y: 0, width: 20, height: 14 },
+    ];
+    const resolved = resolveLabelOverlaps(labels, { maxDrift: 5 });
+    for (const l of resolved) {
+      expect(Math.hypot(l.x, l.y)).toBeLessThanOrEqual(5 + 1e-6);
     }
   });
 
-  it("labelGap pushes the label away from the curve, not directly on top of it", () => {
-    const points = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }];
-    const onCurve = routedEdgePath(points, 0);
-    const withGap = routedEdgePath(points, 12);
-    const dist = Math.hypot(withGap.labelX - onCurve.labelX, withGap.labelY - onCurve.labelY);
-    expect(dist).toBeCloseTo(12, 5);
+  it("does not mutate the input array (matches layeredLayout's return-a-new-array convention)", () => {
+    const labels = [
+      { key: "a", x: 100, y: 100, width: 24, height: 14 },
+      { key: "b", x: 100, y: 100, width: 24, height: 14 },
+    ];
+    const snapshot = JSON.parse(JSON.stringify(labels));
+    resolveLabelOverlaps(labels, { maxDrift: 40 });
+    expect(labels).toEqual(snapshot);
   });
 });
 
