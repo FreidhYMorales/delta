@@ -1,4 +1,5 @@
-//! `grammar_snapshot` / `grammar_set_source` — the "Gramática" tab's IPC
+//! `grammar_snapshot` / `grammar_set_source` / `grammar_derive` — the
+//! "Gramática" tab's IPC
 //! (`GrammarSession`). The document is just the grammar's source text
 //! (`automata_core::grammar_doc::GrammarDocument`); every snapshot also
 //! carries the text's analysis (parsed G = {Σ, N, S, P}, its Chomsky
@@ -7,6 +8,7 @@
 
 use serde::Serialize;
 
+use automata_core::grammar::derive::{derive as derive_string, Derivation, DerivationOrder};
 use automata_core::grammar_doc::{GrammarAnalysis, GrammarDocument};
 
 use crate::state::GrammarSession;
@@ -36,6 +38,26 @@ pub fn set_source(session: &GrammarSession, tab: TabId, source: String) -> Resul
     })
 }
 
+/// Derives `input` from the tab's current grammar (whether it is
+/// generated, the derivation and its tree). An unparsable grammar is an
+/// error carrying the parse message.
+pub fn derive(session: &GrammarSession, tab: TabId, input: String, order: DerivationOrder) -> Result<Derivation, String> {
+    session.try_with(tab, |doc| match doc.analysis().grammar {
+        Some(grammar) => Ok(derive_string(&grammar, &input, order)),
+        None => Err(doc.analysis().error.map_or_else(|| "la gramática no es válida".to_string(), |e| e.to_string())),
+    })?
+}
+
+#[tauri::command]
+pub fn grammar_derive(
+    session: tauri::State<'_, GrammarSession>,
+    tab_id: TabId,
+    input: String,
+    order: DerivationOrder,
+) -> Result<Derivation, String> {
+    derive(&session, tab_id, input, order)
+}
+
 #[tauri::command]
 pub fn grammar_snapshot(session: tauri::State<'_, GrammarSession>, tab_id: TabId) -> Result<GrammarSnapshot, String> {
     snapshot(&session, tab_id)
@@ -53,6 +75,7 @@ pub fn grammar_set_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use automata_core::grammar::derive::DeriveOutcome;
 
     fn session_with_tab(id: TabId) -> GrammarSession {
         let session = GrammarSession::new();
@@ -69,6 +92,25 @@ mod tests {
         assert_eq!(snap.source, "S -> aS | b");
         assert_eq!(snap.analysis.classification.unwrap().chomsky_type, 3);
         assert_eq!(snapshot(&session, tab).unwrap().source, "S -> aS | b");
+    }
+
+    #[test]
+    fn derive_uses_the_tabs_grammar() {
+        let tab = TabId(1);
+        let session = session_with_tab(tab);
+        set_source(&session, tab, "S -> aS | b".into()).unwrap();
+        let d = derive(&session, tab, "aab".into(), DerivationOrder::Leftmost).unwrap();
+        assert_eq!(d.outcome, DeriveOutcome::Accepted);
+        assert_eq!(d.forms, vec!["S", "aS", "aaS", "aab"]);
+    }
+
+    #[test]
+    fn derive_on_an_invalid_grammar_reports_the_parse_error() {
+        let tab = TabId(1);
+        let session = session_with_tab(tab);
+        set_source(&session, tab, "S a".into()).unwrap();
+        let err = derive(&session, tab, "a".into(), DerivationOrder::Leftmost).unwrap_err();
+        assert!(err.contains("línea 1"), "{err}");
     }
 
     #[test]

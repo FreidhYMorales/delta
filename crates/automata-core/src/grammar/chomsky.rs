@@ -138,7 +138,14 @@ fn check_context_sensitive(grammar: &GeneralGrammar) -> LevelCheck {
 /// `xAy → xzy`: some non-terminal A of the left side is rewritten into a
 /// non-empty z while everything around it (x, y) stays the same.
 fn keeps_context(p: &GeneralProduction) -> bool {
-    (0..p.lhs.len()).any(|i| {
+    context_split(p).is_some()
+}
+
+/// For a production of the form `xAy → xzy` (z not empty), the index of A
+/// in the left side — the one symbol it actually rewrites. Every
+/// context-free production `A → γ` (γ not empty) qualifies with index 0.
+pub(crate) fn context_split(p: &GeneralProduction) -> Option<usize> {
+    (0..p.lhs.len()).find(|&i| {
         let (x, y) = (&p.lhs[..i], &p.lhs[i + 1..]);
         p.lhs[i].is_nonterminal()
             && p.rhs.len() > x.len() + y.len()

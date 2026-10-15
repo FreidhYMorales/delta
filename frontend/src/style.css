@@ -1306,6 +1306,147 @@ body {
   font-weight: var(--font-weight-medium);
 }
 
+/* "Probar cadenas" (views/grammarTab/DerivationPanel): spans both columns
+ * of the grammar tab, below the editor and the analysis. */
+.grammar-derivations {
+  grid-column: 1 / -1;
+}
+
+.derivation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.derivation-panel h3,
+.derivation-panel h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+}
+
+.derive-row {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.derive-row .derive-input {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.derive-outcome {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.derive-outcome[data-outcome="rejected"] {
+  color: var(--danger);
+}
+
+.derive-reason {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.derive-outcome:empty,
+.derive-reason:empty {
+  display: none;
+}
+
+.derive-steps {
+  margin: 0;
+  padding-left: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.derive-tree-host {
+  overflow-x: auto;
+}
+
+.derivation-tree {
+  display: block;
+}
+
+.derivation-tree .derivation-edge {
+  stroke: var(--border-color-strong);
+  stroke-width: 1.5;
+}
+
+.derivation-tree ellipse {
+  fill: var(--surface);
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+/* Terminals and ε are the leaves: no outline, so the yield reads plainly. */
+.derivation-tree .derivation-terminal ellipse,
+.derivation-tree .derivation-epsilon ellipse {
+  stroke: none;
+}
+
+.derivation-tree text {
+  fill: var(--text);
+  font-size: 13px;
+}
+
+.derivation-tree .derivation-terminal text {
+  fill: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.derivation-tree .derivation-epsilon text {
+  fill: var(--text-muted);
+  font-style: italic;
+}
+
+.derivation-tree .derivation-rule circle {
+  fill: var(--text-muted);
+}
+
+.batch-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.batch-input {
+  width: 100%;
+  padding: var(--space-xs);
+  border: 1px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  resize: vertical;
+}
+
+.batch-run {
+  align-self: flex-start;
+}
+
+.batch-table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.batch-table th,
+.batch-table td {
+  border: 1px solid var(--border-color);
+  padding: var(--space-2xs) var(--space-sm);
+  text-align: left;
+}
+
+.batch-table thead th {
+  background: var(--surface-2);
+  font-weight: var(--font-weight-medium);
+}
+
 .formal-view {
   flex: 1;
   display: flex;

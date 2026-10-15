@@ -36,6 +36,7 @@ function fakeStore(source = "S -> aA\nA -> bAA", analysis = contextFreeAnalysis(
     analysis,
     subscribe: (l) => (listeners.add(l), () => listeners.delete(l)),
     setSource: vi.fn().mockResolvedValue(undefined),
+    derive: vi.fn(),
     emit(next) {
       Object.assign(this, next);
       for (const l of listeners) l();
@@ -120,5 +121,13 @@ describe("GrammarTabView", () => {
     const { container, store } = setup();
     store.emit({ analysis: { grammar: null, classification: null, error: { line: 2, message: "x" } } });
     expect(container.querySelector(".grammar-error").textContent).toBe("Línea 2: x");
+  });
+
+  it("includes the string-testing panel (one string or a batch), below the editor and the analysis", () => {
+    const { container } = setup();
+    const panel = container.querySelector(".grammar-tab > .grammar-derivations .derivation-panel");
+    expect(panel).toBeTruthy();
+    expect(panel.querySelector(".derive-input")).toBeTruthy();
+    expect(panel.querySelector(".batch-input")).toBeTruthy();
   });
 });

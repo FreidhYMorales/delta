@@ -44,4 +44,11 @@ describe("GrammarDocStore", () => {
     expect(store.source).toBe("S -> new");
     expect(store.revision).toBe(2);
   });
+
+  it("derive asks the core for this tab's derivation of a string", async () => {
+    const { client, store } = setup();
+    client.grammarDerive = vi.fn().mockResolvedValue({ outcome: "accepted" });
+    expect(await store.derive("ab", "rightmost")).toEqual({ outcome: "accepted" });
+    expect(client.grammarDerive).toHaveBeenCalledWith("ab", "rightmost", 7);
+  });
 });

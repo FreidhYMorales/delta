@@ -39,6 +39,16 @@ export class GrammarDocStore {
     if (token === this._requestToken) this._adopt(snapshot);
   }
 
+  /**
+   * The core's derivation of `input` from this tab's grammar (read-only:
+   * nothing in the document changes).
+   * @param {string} input
+   * @param {"leftmost"|"rightmost"} order
+   */
+  derive(input, order) {
+    return this.client.grammarDerive(input, order, this.tabId);
+  }
+
   _adopt(snapshot) {
     this.source = snapshot.source;
     this.revision = snapshot.revision;

@@ -111,4 +111,9 @@ describe("client.js grammar tab commands", () => {
     await client.grammarSetSource("S -> a", 4);
     expect(invoke).toHaveBeenCalledWith("grammar_set_source", { source: "S -> a", tabId: 4 });
   });
+
+  it("grammarDerive(input, order, tabId) calls grammar_derive with {input, order, tabId}", async () => {
+    await client.grammarDerive("aab", "leftmost", 4);
+    expect(invoke).toHaveBeenCalledWith("grammar_derive", { input: "aab", order: "leftmost", tabId: 4 });
+  });
 });

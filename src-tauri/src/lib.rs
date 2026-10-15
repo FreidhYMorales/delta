@@ -40,6 +40,7 @@ pub fn run() {
       convert::conv_regex_to_dfa_direct,
       grammar::grammar_snapshot,
       grammar::grammar_set_source,
+      grammar::grammar_derive,
       convert::conv_to_grammar,
       convert::conv_from_grammar,
       convert::conv_nfa_to_dfa,

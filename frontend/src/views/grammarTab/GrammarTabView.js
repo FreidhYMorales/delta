@@ -1,9 +1,11 @@
 // "Gramática" tab: a grammar editor plus what the core derives from it —
 // the formal definition G = {Σ, N, S, P}, its type in the Chomsky
-// hierarchy with the reason for each level, and the course's hierarchy
-// table with the grammar's row highlighted. The text box is the source of
+// hierarchy with the reason for each level, the course's hierarchy table
+// with the grammar's row highlighted, and string testing (`DerivationPanel`:
+// derivations and derivation trees, one string or a batch). The text box is the source of
 // truth while typing; each pause sends it to the core (`store.setSource`).
 
+import { DerivationPanel } from "./DerivationPanel.js";
 import { CHOMSKY_TABLE, formalDefinition, grammarTypeName } from "./grammarTabLogic.js";
 
 const SEND_DELAY_MS = 300;
@@ -59,7 +61,11 @@ export class GrammarTabView {
     this.table.className = "chomsky-table";
     analysisPane.appendChild(this.table);
 
-    this.root.append(editorPane, analysisPane);
+    const derivations = document.createElement("div");
+    derivations.className = "grammar-derivations";
+    new DerivationPanel(derivations, this.store);
+
+    this.root.append(editorPane, analysisPane, derivations);
     container.appendChild(this.root);
   }
 

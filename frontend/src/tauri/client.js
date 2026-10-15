@@ -457,3 +457,15 @@ export function grammarSnapshot(tabId) {
 export function grammarSetSource(source, tabId) {
   return call("grammar_set_source", { source, tabId });
 }
+
+/**
+ * Derives `input` from the grammar tab's current grammar: whether it is
+ * generated, the derivation step by step and its derivation tree. Rejects
+ * with the parse error if the grammar text is invalid.
+ * @param {string} input
+ * @param {"leftmost"|"rightmost"} order
+ * @param {number} tabId
+ */
+export function grammarDerive(input, order, tabId) {
+  return call("grammar_derive", { input, order, tabId });
+}
