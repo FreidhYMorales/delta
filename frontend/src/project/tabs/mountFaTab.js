@@ -28,6 +28,7 @@ import { TableView } from "../../views/table/TableView.js";
 import { FormalView } from "../../views/formal/FormalView.js";
 import { RegexView } from "../../views/regex/RegexView.js";
 import { AfnToAfdView } from "../../views/afnToAfd/AfnToAfdView.js";
+import { RegexDirectView } from "../../views/regexDirect/RegexDirectView.js";
 import { GrammarView } from "../../views/grammar/GrammarView.js";
 import { TestingView } from "../../views/testing/TestingView.js";
 import { Toolbar } from "../../views/toolbar/Toolbar.js";
@@ -110,6 +111,7 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
       { id: "regex", label: "Expresión regular" },
       { id: "grammar", label: "Gramática regular" },
       { id: "afnToAfd", label: "AFN → AFD" },
+      { id: "regexDirect", label: "ER → AFD" },
     ],
     { collapsible: true },
   );
@@ -218,6 +220,7 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
     simTrace: (word, budget) => boundClient.simTrace(word, budget),
     simBatch: (words, budget) => boundClient.simBatch(words, budget),
     toRegex: () => boundClient.convToRegex(),
+    regexToDfaDirect: (pattern) => client.convRegexToDfaDirect(pattern),
     fromRegex: async (pattern) => {
       const snapshot = await boundClient.convFromRegex(pattern);
       docStore.loadSnapshot(snapshot);
@@ -262,6 +265,7 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
   new RegexView(upperTabs.panels.get("regex"), docStore, ctx);
   new GrammarView(upperTabs.panels.get("grammar"), docStore, ctx);
   new AfnToAfdView(upperTabs.panels.get("afnToAfd"), docStore, ctx);
+  new RegexDirectView(upperTabs.panels.get("regexDirect"), ctx);
   const testingView = new TestingView(panelLower, docStore, ctx, {
     onCollapsedChange: (collapsed) => {
       panelLower.classList.toggle("tabs-collapsed", collapsed);

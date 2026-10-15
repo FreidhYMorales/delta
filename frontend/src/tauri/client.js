@@ -117,6 +117,18 @@ export function convFromRegex(pattern, tabId) {
   return call("conv_from_regex", { pattern, tabId });
 }
 
+/**
+ * Regex -> DFA by the direct method (augmented syntax tree, nullable/
+ * firstpos/lastpos, followpos, D states) with every intermediate table —
+ * for the "ER → AFD" tab. Reads no tab's document; rejects with the
+ * parser's Spanish, user-facing error message on invalid syntax.
+ * @param {string} pattern
+ * @returns {Promise<object>} `automata_core::convert::DirectDfa`
+ */
+export function convRegexToDfaDirect(pattern) {
+  return call("conv_regex_to_dfa_direct", { pattern });
+}
+
 /** @param {number} [tabId] @returns {Promise<string>} the right-linear grammar equivalent to the
  * session's current automaton, in `grammar::format`'s syntax (not
  * `RegularGrammar`'s more compact `Display` — see the Rust doc comment on

@@ -16,7 +16,8 @@
 //! `to_regex`/`to_grammar`.
 
 use automata_core::convert::{
-    fa_to_regex, fa_to_regular_grammar, minimize_dfa, nfa_to_dfa, regex_to_nfa, regular_grammar_to_nfa,
+    fa_to_regex, fa_to_regular_grammar, minimize_dfa, nfa_to_dfa, regex_to_dfa_direct, regex_to_nfa,
+    regular_grammar_to_nfa, DirectDfa,
 };
 use automata_core::doc::{Document, History};
 use automata_core::grammar::RegularGrammar;
@@ -101,6 +102,20 @@ pub fn conv_from_regex(
     from_regex(&session, tab_id, pattern)
 }
 
+/// Regex -> DFA by the direct method (syntax tree, followpos, D states),
+/// with every intermediate table — for the "ER → AFD" tab. Independent of
+/// any tab's document: it only reads `pattern`. Errors are the parser's (or
+/// the reserved-`#` check's) Spanish, user-facing messages.
+pub fn regex_to_dfa_direct_preview(pattern: String) -> Result<DirectDfa, String> {
+    let regex: Regex = pattern.parse().map_err(|e: automata_core::regex::ParseError| e.to_string())?;
+    regex_to_dfa_direct(&regex)
+}
+
+#[tauri::command]
+pub fn conv_regex_to_dfa_direct(pattern: String) -> Result<DirectDfa, String> {
+    regex_to_dfa_direct_preview(pattern)
+}
+
 #[tauri::command]
 pub fn conv_to_grammar(session: tauri::State<'_, Session>, tab_id: TabId) -> Result<String, String> {
     to_grammar(&session, tab_id)
@@ -142,4 +157,22 @@ pub fn conv_nfa_to_dfa(session: tauri::State<'_, Session>, tab_id: TabId) -> Res
 #[tauri::command]
 pub fn conv_minimize_dfa(session: tauri::State<'_, Session>, tab_id: TabId) -> Result<DocSnapshot, String> {
     minimize_dfa_preview(&session, tab_id)
+}
+
+#[cfg(test)]
+mod direct_dfa_tests {
+    use super::*;
+
+    #[test]
+    fn computes_the_direct_method_tables_for_a_valid_regex() {
+        let result = regex_to_dfa_direct_preview("(a|b)*abb".into()).unwrap();
+        assert_eq!(result.end_position, 6);
+        assert_eq!(result.states.len(), 4);
+    }
+
+    #[test]
+    fn reports_a_syntax_error_in_spanish() {
+        let err = regex_to_dfa_direct_preview("(a|b".into()).unwrap_err();
+        assert!(err.contains("falta ')'"), "{err}");
+    }
 }

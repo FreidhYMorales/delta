@@ -45,7 +45,7 @@ beforeEach(() => {
 describe("AfnToAfdView", () => {
   it("shows the three steps, each as a titled table with its own copy button", async () => {
     const { container } = await setup();
-    const sections = [...container.querySelectorAll(".afn-afd-step")];
+    const sections = [...container.querySelectorAll(".conversion-step")];
     expect(sections.map((s) => s.querySelector("h3").textContent)).toEqual([
       "Paso 1: clausuras ε",
       "Paso 2: tabla de transiciones del AFN-ε",
@@ -59,7 +59,7 @@ describe("AfnToAfdView", () => {
 
   it("fills the tables from the current automaton", async () => {
     const { container } = await setup();
-    const [closures, nfa, dfa] = container.querySelectorAll(".afn-afd-step table");
+    const [closures, nfa, dfa] = container.querySelectorAll(".conversion-step table");
     expect(cellTexts(closures)).toEqual([
       ["Estados", "Clausuras ε"],
       ["→ q0", "{q0}U{}"],
@@ -76,7 +76,7 @@ describe("AfnToAfdView", () => {
 
   it("creates the resulting DFA in a new tab", async () => {
     const { container, ctx } = await setup();
-    const button = container.querySelector(".afn-afd-create");
+    const button = container.querySelector(".conversion-create");
     button.click();
     expect(ctx.createDfaTab).toHaveBeenCalledWith({
       states: ["q0", "q1"],
@@ -88,13 +88,13 @@ describe("AfnToAfdView", () => {
 
   it("without an initial state, explains why and disables creating the DFA", async () => {
     const { container } = await setup(snapshot({ withInitial: false }));
-    expect(container.querySelector(".afn-afd-create").disabled).toBe(true);
-    expect(container.querySelector(".afn-afd-note").textContent).toMatch(/estado inicial/);
+    expect(container.querySelector(".conversion-create").disabled).toBe(true);
+    expect(container.querySelector(".conversion-note").textContent).toMatch(/estado inicial/);
   });
 
   it("recomputes when the automaton changes", async () => {
     const { container, docStore } = await setup();
     docStore.loadSnapshot(snapshot({ withInitial: false }));
-    expect(container.querySelector(".afn-afd-create").disabled).toBe(true);
+    expect(container.querySelector(".conversion-create").disabled).toBe(true);
   });
 });

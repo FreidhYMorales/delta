@@ -36,6 +36,7 @@ pub fn run() {
       jff::jff_export,
       convert::conv_to_regex,
       convert::conv_from_regex,
+      convert::conv_regex_to_dfa_direct,
       convert::conv_to_grammar,
       convert::conv_from_grammar,
       convert::conv_nfa_to_dfa,

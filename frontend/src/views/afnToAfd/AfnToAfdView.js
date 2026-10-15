@@ -32,14 +32,14 @@ export class AfnToAfdView {
 
   _build(container) {
     this.root = document.createElement("div");
-    this.root.className = "table-view afn-afd-view";
+    this.root.className = "table-view conversion-view";
 
     this.tables = new Map();
     for (const step of STEPS) {
       const section = document.createElement("section");
-      section.className = "afn-afd-step";
+      section.className = "conversion-step";
       const header = document.createElement("div");
-      header.className = "afn-afd-step-header";
+      header.className = "conversion-step-header";
       const title = document.createElement("h3");
       title.textContent = step.title;
       const table = document.createElement("table");
@@ -50,11 +50,11 @@ export class AfnToAfdView {
     }
 
     this.note = document.createElement("p");
-    this.note.className = "afn-afd-note";
+    this.note.className = "conversion-note";
 
     this.createButton = document.createElement("button");
     this.createButton.type = "button";
-    this.createButton.className = "btn-secondary afn-afd-create";
+    this.createButton.className = "btn-secondary conversion-create";
     this.createButton.textContent = "Crear AFD en nueva pestaña";
     this.createButton.addEventListener("click", () => {
       if (this._dfa) this._lastCreatePromise = this.ctx.createDfaTab(this._dfa);

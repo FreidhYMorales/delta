@@ -1078,14 +1078,14 @@ body {
  * typography (mono font, generous line-height) is copied from the
  * wireframe's `.formal-def`, since color-per-keyword isn't representable
  * inside native textarea content. */
-/* "AFN → AFD" tab (views/afnToAfd): three read-only step tables, each
- * titled with its own copy button, then the create-DFA action. Reuses
- * `.table-view`'s table look. */
-.afn-afd-view {
+/* Step-by-step conversion tabs ("AFN → AFD", "ER → AFD"): read-only step
+ * tables, each titled with its own copy button, then the create-DFA
+ * action. Reuses `.table-view`'s table look. */
+.conversion-view {
   gap: var(--space-md);
 }
 
-.afn-afd-step-header {
+.conversion-step-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1093,29 +1093,29 @@ body {
   margin-bottom: var(--space-xs);
 }
 
-.afn-afd-step-header h3 {
+.conversion-step-header h3 {
   margin: 0;
   font-size: 13px;
   font-weight: var(--font-weight-medium);
 }
 
-.afn-afd-view td,
-.afn-afd-view tbody th {
+.conversion-view td,
+.conversion-view tbody th {
   white-space: nowrap;
 }
 
-.afn-afd-step table {
+.conversion-step table {
   width: auto;
   min-width: 100%;
 }
 
-.afn-afd-note {
+.conversion-note {
   margin: 0;
   font-size: 12px;
   color: var(--text-muted);
 }
 
-.afn-afd-create {
+.conversion-create {
   align-self: flex-start;
 }
 
@@ -1123,6 +1123,58 @@ body {
   margin: 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* "ER → AFD" tab (views/regexDirect): regex input row and the augmented
+ * syntax tree (labels: PrimeraPos left, ÚltimaPos right, position below). */
+.regex-direct-row {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.regex-direct-row .regex-direct-input {
+  flex: 1;
+}
+
+.syntax-tree {
+  display: block;
+  max-width: none;
+}
+
+.regex-direct-steps .conversion-step:first-child {
+  overflow-x: auto;
+}
+
+.syntax-tree .tree-edge {
+  stroke: var(--border-color-strong);
+  stroke-width: 1.5;
+}
+
+.syntax-tree .tree-node circle {
+  fill: var(--surface);
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+/* Nullable nodes get a dashed outline, so "anulable" reads off the tree. */
+.syntax-tree .tree-node-nullable circle {
+  stroke-dasharray: 4 3;
+}
+
+.syntax-tree .tree-label {
+  fill: var(--text);
+  font-size: 14px;
+}
+
+.syntax-tree .tree-set {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+.syntax-tree .tree-position {
+  fill: var(--accent);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
 }
 
 .formal-view {

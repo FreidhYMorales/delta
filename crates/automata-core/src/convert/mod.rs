@@ -10,10 +10,12 @@ pub mod fa_to_grammar;
 pub mod fa_to_regex;
 pub mod minimize_dfa;
 pub mod nfa_to_dfa;
+pub mod regex_to_dfa_direct;
 pub mod regex_to_nfa;
 
 pub use fa_to_grammar::{fa_to_regular_grammar, regular_grammar_to_nfa};
 pub use fa_to_regex::fa_to_regex;
 pub use minimize_dfa::{minimize_dfa, MinimizeError};
 pub use nfa_to_dfa::nfa_to_dfa;
+pub use regex_to_dfa_direct::{regex_to_dfa_direct, DirectDfa};
 pub use regex_to_nfa::regex_to_nfa;

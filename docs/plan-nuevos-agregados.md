@@ -97,7 +97,7 @@ Pasos del PDF `ER a AFD.pdf`:
 ## Estado
 
 - [x] Unidad 0: sintaxis de regex
-- [ ] Unidad 1: ER → AFD (método directo)
+- [x] Unidad 1: ER → AFD (método directo)
 - [ ] Unidad 2: pestaña Gramática + Chomsky
 - [ ] Unidad 3: derivaciones + árbol
 - [ ] Unidad 4: BNF / EBNF

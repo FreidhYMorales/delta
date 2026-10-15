@@ -25,6 +25,7 @@ export class ViewContext {
    *   promptLabel?: (stateId: number) => Promise<string|null>,
    *   promptSymbol?: (message?: string) => Promise<string|null>, // "" = epsilon requested, null = cancelled, non-empty = real symbol
    *   insertPiece?: (kind: string) => Promise<boolean>,
+   *   regexToDfaDirect?: (pattern: string) => Promise<object>,
    *   createDfaTab?: (model: {states:string[], initial:string, accepting:string[], transitions:{from:string,symbol:string,to:string}[]}) => Promise<void>,
    *   importJff?: (path: string) => Promise<void>,
    *   exportJff?: (path: string) => Promise<void>,
@@ -93,6 +94,10 @@ export class ViewContext {
       hooks.convertToDfa ?? (async () => { throw new Error("No hay conversión AFN→AFD disponible."); });
     this.minimizeDfa =
       hooks.minimizeDfa ?? (async () => { throw new Error("No hay minimización de AFD disponible."); });
+    // "ER → AFD" tab: the direct method's full result for a typed regex
+    // (core command, no tab document involved). No safe default.
+    this.regexToDfaDirect =
+      hooks.regexToDfaDirect ?? (async () => { throw new Error("No hay conversión ER→AFD disponible."); });
     // "AFN → AFD" tab's "create the DFA in a new tab" — needs the project's
     // tab machinery, so no safe default (same reasoning as `fromRegex`).
     this.createDfaTab =

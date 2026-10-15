@@ -93,3 +93,10 @@ describe("client.js tabId plumbing on existing per-kind wrappers (PR9, design D1
     });
   });
 });
+
+describe("client.js direct-method regex conversion (ER → AFD tab)", () => {
+  it("convRegexToDfaDirect(pattern) calls conv_regex_to_dfa_direct with only {pattern} — it reads no tab", async () => {
+    await client.convRegexToDfaDirect("(a|b)*abb");
+    expect(invoke).toHaveBeenCalledWith("conv_regex_to_dfa_direct", { pattern: "(a|b)*abb" });
+  });
+});
