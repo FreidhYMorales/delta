@@ -61,6 +61,24 @@ fn build(doc: &mut FaDoc, r: &Regex) -> Fragment {
             doc.add_epsilon_transition(fb.exit, exit);
             Fragment { entry, exit }
         }
+        Regex::Plus(a) => {
+            // Thompson nomenclature `r+`: like `r*` without the bypass.
+            let fa = build(doc, a);
+            let (entry, exit) = fresh_pair(doc);
+            doc.add_epsilon_transition(entry, fa.entry);
+            doc.add_epsilon_transition(fa.exit, exit);
+            doc.add_epsilon_transition(fa.exit, fa.entry); // one more repetition
+            Fragment { entry, exit }
+        }
+        Regex::Optional(a) => {
+            // `r?` = `r|ε`: an ε bypass around r.
+            let fa = build(doc, a);
+            let (entry, exit) = fresh_pair(doc);
+            doc.add_epsilon_transition(entry, fa.entry);
+            doc.add_epsilon_transition(fa.exit, exit);
+            doc.add_epsilon_transition(entry, exit); // zero occurrences
+            Fragment { entry, exit }
+        }
         Regex::Star(a) => {
             let fa = build(doc, a);
             let (entry, exit) = fresh_pair(doc);
@@ -154,8 +172,35 @@ mod tests {
     }
 
     #[test]
+    fn plus_matches_one_or_more_repetitions() {
+        let doc = regex_to_nfa(&sym("a").plus());
+        assert!(!accepts(&doc, ""));
+        for w in ["a", "aa", "aaaa"] {
+            assert!(accepts(&doc, w), "expected {w:?} to be accepted");
+        }
+        assert!(!accepts(&doc, "b"));
+    }
+
+    #[test]
+    fn plus_has_the_nomenclature_shape_no_bypass() {
+        // r+ = i -ε-> [r] -ε-> f with a loop back from r's end to its start
+        // and no i -ε-> f bypass: 4 states, 4 ε-edges + r's own symbol edge.
+        let doc = regex_to_nfa(&sym("a").plus());
+        assert_eq!(doc.states().count(), 4);
+    }
+
+    #[test]
+    fn optional_matches_zero_or_one_occurrence() {
+        let doc = regex_to_nfa(&sym("a").optional());
+        assert!(accepts(&doc, ""));
+        assert!(accepts(&doc, "a"));
+        assert!(!accepts(&doc, "aa"));
+        assert!(!accepts(&doc, "b"));
+    }
+
+    #[test]
     fn a_compound_expression_matches_its_intended_language() {
-        // (a+b)*ab : any mix of a/b, then ends in exactly "ab".
+        // (a|b)*ab : any mix of a/b, then ends in exactly "ab".
         let r = sym("a").union(sym("b")).star().concat(sym("a")).concat(sym("b"));
         let doc = regex_to_nfa(&r);
         for (w, expected) in [("ab", true), ("aab", true), ("bab", true), ("abab", true), ("a", false), ("b", false), ("ba", false), ("", false)] {

@@ -42,11 +42,18 @@ describe("RegexView", () => {
     expect(output.readOnly).toBe(true);
   });
 
+  it("shows the regex syntax (the course's notation: | union, + one or more, ? optional)", async () => {
+    const { container } = await setup();
+    const hint = container.querySelector(".regex-syntax-hint").textContent;
+    for (const op of ["|", "*", "+", "?", "ε"]) expect(hint).toContain(op);
+    expect(container.querySelector(".regex-input").placeholder).toContain("|");
+  });
+
   it("fetches the regex via ctx.toRegex on construction and shows the result", async () => {
-    const toRegex = vi.fn().mockResolvedValue("a(b+c)*");
+    const toRegex = vi.fn().mockResolvedValue("a(b|c)*");
     const { container } = await setup(toRegex);
     expect(toRegex).toHaveBeenCalled();
-    expect(container.querySelector(".regex-output").value).toBe("a(b+c)*");
+    expect(container.querySelector(".regex-output").value).toBe("a(b|c)*");
   });
 
   it("re-fetches whenever the document changes", async () => {
@@ -106,11 +113,11 @@ describe("RegexView generate-from-regex", () => {
     const fromRegex = vi.fn().mockResolvedValue({ revision: 2, states: [], edges: [], derived: {} });
     const { container, view } = await setup(undefined, fromRegex);
 
-    container.querySelector(".regex-input").value = "a(b+c)*";
+    container.querySelector(".regex-input").value = "a(b|c)*";
     container.querySelector(".btn-primary").click();
     await view._lastGeneratePromise;
 
-    expect(fromRegex).toHaveBeenCalledWith("a(b+c)*");
+    expect(fromRegex).toHaveBeenCalledWith("a(b|c)*");
   });
 
   it("shows the rejection message in .regex-error and does not throw when the pattern is invalid", async () => {

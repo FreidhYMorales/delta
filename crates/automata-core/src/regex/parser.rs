@@ -1,8 +1,9 @@
 //! Hand-written recursive-descent parser for the regex text syntax —
 //! deliberately the exact inverse of `Display` (`../mod.rs`'s
-//! `fmt_prec`/`impl Display for Regex`): `+` for union (loosest), plain
-//! juxtaposition for concatenation, `*` for postfix Kleene star (tightest),
-//! parens for grouping, `ε`/`∅` as the epsilon/empty-language literals.
+//! `fmt_prec`/`impl Display for Regex`): `|` for union (loosest), plain
+//! juxtaposition for concatenation, postfix `*` (zero or more), `+` (one or
+//! more) and `?` (zero or one) binding tightest, parens for grouping, `ε`/`∅`
+//! as the epsilon/empty-language literals.
 //! Every other non-reserved, non-whitespace character is its own
 //! one-character `Symbol` — regex syntax over a single-character alphabet,
 //! same convention JFLAP itself uses. That restriction isn't arbitrary:
@@ -66,10 +67,10 @@ impl Parser {
         self.pos += 1;
     }
 
-    /// Union binds loosest: one or more `concat` terms separated by `+`.
+    /// Union binds loosest: one or more `concat` terms separated by `|`.
     fn union(&mut self) -> Result<Regex, ParseError> {
         let mut left = self.concat()?;
-        while self.peek() == Some('+') {
+        while self.peek() == Some('|') {
             self.advance();
             let right = self.concat()?;
             left = left.union(right);
@@ -77,29 +78,34 @@ impl Parser {
         Ok(left)
     }
 
-    /// Concatenation: one or more `star` terms with nothing between them —
-    /// stops at `+`, `)`, or end of input, since those can't start a term.
+    /// Concatenation: one or more `postfix` terms with nothing between them
+    /// — stops at `|`, `)`, or end of input, since those can't start a term.
     fn concat(&mut self) -> Result<Regex, ParseError> {
-        let mut left = self.star()?;
+        let mut left = self.postfix()?;
         while let Some(c) = self.peek() {
-            if c == '+' || c == ')' {
+            if c == '|' || c == ')' {
                 break;
             }
-            let right = self.star()?;
+            let right = self.postfix()?;
             left = left.concat(right);
         }
         Ok(left)
     }
 
-    /// Star binds tightest: one atom followed by zero or more `*` (`a**` is
-    /// harmless — `Regex::star` is already idempotent).
-    fn star(&mut self) -> Result<Regex, ParseError> {
+    /// Postfix operators bind tightest: one atom followed by any run of `*`,
+    /// `+` and `?`, applied left to right (`a**` is harmless — the smart
+    /// constructors are idempotent).
+    fn postfix(&mut self) -> Result<Regex, ParseError> {
         let mut r = self.atom()?;
-        while self.peek() == Some('*') {
+        loop {
+            r = match self.peek() {
+                Some('*') => r.star(),
+                Some('+') => r.plus(),
+                Some('?') => r.optional(),
+                _ => return Ok(r),
+            };
             self.advance();
-            r = r.star();
         }
-        Ok(r)
     }
 
     fn atom(&mut self) -> Result<Regex, ParseError> {
@@ -118,10 +124,10 @@ impl Parser {
                 }
             }
             Some(')') => Err(ParseError::at(pos, "')' inesperado — no hay ningún '(' abierto")),
-            Some('*') => {
-                Err(ParseError::at(pos, "'*' inesperado — falta el símbolo o grupo al que aplica"))
+            Some(op @ ('*' | '+' | '?')) => {
+                Err(ParseError::at(pos, format!("'{op}' inesperado — falta el símbolo o grupo al que aplica")))
             }
-            Some('+') => Err(ParseError::at(pos, "'+' inesperado — falta el término anterior")),
+            Some('|') => Err(ParseError::at(pos, "'|' inesperado — falta el término anterior")),
             Some(c) if c == EPSILON => {
                 self.advance();
                 Ok(Regex::Epsilon)
@@ -192,7 +198,36 @@ mod tests {
 
     #[test]
     fn parses_union() {
-        assert_eq!(parse("a+b"), Ok(sym("a").union(sym("b"))));
+        assert_eq!(parse("a|b"), Ok(sym("a").union(sym("b"))));
+    }
+
+    #[test]
+    fn parses_plus_as_one_or_more() {
+        assert_eq!(parse("a+"), Ok(sym("a").plus()));
+    }
+
+    #[test]
+    fn parses_optional() {
+        assert_eq!(parse("a?"), Ok(sym("a").optional()));
+    }
+
+    #[test]
+    fn plus_and_optional_bind_as_tightly_as_star() {
+        // ab+ means a(b+); ab? means a(b?).
+        assert_eq!(parse("ab+"), Ok(sym("a").concat(sym("b").plus())));
+        assert_eq!(parse("ab?"), Ok(sym("a").concat(sym("b").optional())));
+        assert_eq!(parse("(ab)+"), Ok(sym("a").concat(sym("b")).plus()));
+    }
+
+    #[test]
+    fn parses_the_course_examples() {
+        // `ER a AFD.pdf` notation: | union, + one-or-more, ? optional.
+        assert_eq!(
+            parse("(a|b)*abb"),
+            Ok(sym("a").union(sym("b")).star().concat(sym("a")).concat(sym("b")).concat(sym("b")))
+        );
+        assert_eq!(parse("0*1(0|1)*"), Ok(sym("0").star().concat(sym("1")).concat(sym("0").union(sym("1")).star())));
+        assert_eq!(parse("a+b?"), Ok(sym("a").plus().concat(sym("b").optional())));
     }
 
     #[test]
@@ -208,19 +243,19 @@ mod tests {
 
     #[test]
     fn concatenation_binds_tighter_than_union() {
-        // a+bc means a+(bc), not (a+b)c.
-        assert_eq!(parse("a+bc"), Ok(sym("a").union(sym("b").concat(sym("c")))));
+        // a|bc means a|(bc), not (a|b)c.
+        assert_eq!(parse("a|bc"), Ok(sym("a").union(sym("b").concat(sym("c")))));
     }
 
     #[test]
     fn parens_override_precedence() {
-        assert_eq!(parse("(a+b)*"), Ok(sym("a").union(sym("b")).star()));
-        assert_eq!(parse("(a+b)c"), Ok(sym("a").union(sym("b")).concat(sym("c"))));
+        assert_eq!(parse("(a|b)*"), Ok(sym("a").union(sym("b")).star()));
+        assert_eq!(parse("(a|b)c"), Ok(sym("a").union(sym("b")).concat(sym("c"))));
     }
 
     #[test]
     fn ignores_whitespace_anywhere() {
-        assert_eq!(parse("  a  +  b * c  "), parse("a+b*c"));
+        assert_eq!(parse("  a  |  b * c +  "), parse("a|b*c+"));
     }
 
     #[test]
@@ -236,7 +271,7 @@ mod tests {
 
     #[test]
     fn rejects_unclosed_paren() {
-        let err = parse("(a+b").unwrap_err();
+        let err = parse("(a|b").unwrap_err();
         assert!(err.message.contains("falta ')'"));
     }
 
@@ -264,14 +299,22 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_leading_plus() {
-        let err = parse("+a").unwrap_err();
-        assert!(err.message.contains("'+' inesperado"));
+    fn rejects_a_leading_postfix_operator() {
+        for (input, op) in [("+a", "'+'"), ("?a", "'?'")] {
+            let err = parse(input).unwrap_err();
+            assert!(err.message.contains(&format!("{op} inesperado")), "{input}: {}", err.message);
+        }
     }
 
     #[test]
-    fn rejects_a_trailing_plus() {
-        assert!(parse("a+").is_err());
+    fn rejects_a_leading_bar() {
+        let err = parse("|a").unwrap_err();
+        assert!(err.message.contains("'|' inesperado"));
+    }
+
+    #[test]
+    fn rejects_a_trailing_bar() {
+        assert!(parse("a|").is_err());
     }
 
     #[test]
@@ -317,7 +360,9 @@ mod tests {
                 prop_oneof![
                     (inner.clone(), inner.clone()).prop_map(|(a, b)| a.concat(b)),
                     (inner.clone(), inner.clone()).prop_map(|(a, b)| a.union(b)),
-                    inner.prop_map(|a| a.star()),
+                    inner.clone().prop_map(|a| a.star()),
+                    inner.clone().prop_map(|a| a.plus()),
+                    inner.prop_map(|a| a.optional()),
                 ]
             })
         }

@@ -1119,6 +1119,12 @@ body {
   align-self: flex-start;
 }
 
+.regex-syntax-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .formal-view {
   flex: 1;
   display: flex;

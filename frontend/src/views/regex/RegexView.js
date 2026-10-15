@@ -48,7 +48,13 @@ export class RegexView {
     this.genInput = document.createElement("input");
     this.genInput.type = "text";
     this.genInput.className = "regex-input string-input";
-    this.genInput.placeholder = "p.ej. a(b+c)*";
+    this.genInput.placeholder = "p.ej. a(b|c)*";
+
+    // `+` means one-or-more here (the course's notation), not union as in
+    // JFLAP — spelled out so nobody types `a+b` expecting a union.
+    const syntaxHint = document.createElement("p");
+    syntaxHint.className = "regex-syntax-hint";
+    syntaxHint.textContent = "| unión · * cero o más · + una o más · ? opcional · ε vacía · ∅ vacío";
 
     this.genButton = document.createElement("button");
     this.genButton.type = "button";
@@ -64,7 +70,7 @@ export class RegexView {
     this.genError = document.createElement("div");
     this.genError.className = "regex-error";
 
-    this.root.append(this.label, this.output, genLabel, this.genInput, genRow, this.genError);
+    this.root.append(this.label, this.output, genLabel, this.genInput, syntaxHint, genRow, this.genError);
     this.container.appendChild(this.root);
   }
 

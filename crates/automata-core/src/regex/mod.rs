@@ -1,6 +1,11 @@
 //! Regular expression AST — what `convert::fa_to_regex` produces and
 //! `convert::regex_to_nfa` consumes.
 //!
+//! Text syntax (the course's notation, `idea/nuevos_agregados/ER a AFD.pdf`):
+//! `|` union, juxtaposition concatenation, postfix `*` (zero or more), `+`
+//! (one or more) and `?` (zero or one). JFLAP itself writes union as `+`;
+//! this app does not, so `+` is free to mean the positive closure.
+//!
 //! JFLAP's own `FSAToRegularExpressionConverter` builds regexes as raw
 //! strings, tracking precedence by *scanning the string* for a bare `+`
 //! (`needsParens`) to decide whether to wrap it. That works but is fragile
@@ -26,6 +31,10 @@ pub enum Regex {
     Concat(Box<Regex>, Box<Regex>),
     Union(Box<Regex>, Box<Regex>),
     Star(Box<Regex>),
+    /// One or more repetitions, `r+` (positive closure).
+    Plus(Box<Regex>),
+    /// Zero or one occurrence, `r?`.
+    Optional(Box<Regex>),
 }
 
 impl Regex {
@@ -55,18 +64,37 @@ impl Regex {
         match self {
             Regex::Empty | Regex::Epsilon => Regex::Epsilon,
             Regex::Star(_) => self,
+            Regex::Plus(inner) | Regex::Optional(inner) => inner.star(),
             _ => Regex::Star(Box::new(self)),
+        }
+    }
+
+    pub fn plus(self) -> Regex {
+        match self {
+            Regex::Empty | Regex::Epsilon | Regex::Star(_) | Regex::Plus(_) => self,
+            _ => Regex::Plus(Box::new(self)),
+        }
+    }
+
+    pub fn optional(self) -> Regex {
+        match self {
+            Regex::Empty | Regex::Epsilon => Regex::Epsilon,
+            Regex::Star(_) | Regex::Optional(_) => self,
+            // ε or one-or-more r is exactly r*.
+            Regex::Plus(inner) => inner.star(),
+            _ => Regex::Optional(Box::new(self)),
         }
     }
 }
 
-/// Union binds loosest, then concat, then star; leaves never need parens.
+/// Union binds loosest, then concat, then the postfix operators (`*`, `+`,
+/// `?`); leaves never need parens.
 /// Higher number = binds tighter.
 fn precedence(r: &Regex) -> u8 {
     match r {
         Regex::Union(..) => 0,
         Regex::Concat(..) => 1,
-        Regex::Star(..) => 2,
+        Regex::Star(..) | Regex::Plus(..) | Regex::Optional(..) => 2,
         Regex::Empty | Regex::Epsilon | Regex::Symbol(_) => 3,
     }
 }
@@ -85,7 +113,7 @@ fn fmt_prec(r: &Regex, required: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result 
         Regex::Symbol(s) => write!(f, "{s}")?,
         Regex::Union(a, b) => {
             fmt_prec(a, 0, f)?;
-            write!(f, "+")?;
+            write!(f, "|")?;
             fmt_prec(b, 0, f)?;
         }
         Regex::Concat(a, b) => {
@@ -95,6 +123,14 @@ fn fmt_prec(r: &Regex, required: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result 
         Regex::Star(a) => {
             fmt_prec(a, 2, f)?;
             write!(f, "*")?;
+        }
+        Regex::Plus(a) => {
+            fmt_prec(a, 2, f)?;
+            write!(f, "+")?;
+        }
+        Regex::Optional(a) => {
+            fmt_prec(a, 2, f)?;
+            write!(f, "?")?;
         }
     }
     if wrap {
@@ -121,18 +157,41 @@ mod tests {
     fn concat_of_a_union_gets_parens_but_union_of_concats_does_not() {
         let union_ab = sym("a").union(sym("b"));
         let concat_with_union = union_ab.clone().concat(sym("c"));
-        assert_eq!(concat_with_union.to_string(), "(a+b)c");
+        assert_eq!(concat_with_union.to_string(), "(a|b)c");
 
         let concat_ab = sym("a").concat(sym("b"));
         let union_of_concats = concat_ab.clone().union(sym("c").concat(sym("d")));
-        assert_eq!(union_of_concats.to_string(), "ab+cd");
+        assert_eq!(union_of_concats.to_string(), "ab|cd");
     }
 
     #[test]
     fn star_wraps_concat_and_union_but_not_a_bare_symbol() {
         assert_eq!(sym("a").star().to_string(), "a*");
         assert_eq!(sym("a").concat(sym("b")).star().to_string(), "(ab)*");
-        assert_eq!(sym("a").union(sym("b")).star().to_string(), "(a+b)*");
+        assert_eq!(sym("a").union(sym("b")).star().to_string(), "(a|b)*");
+    }
+
+    #[test]
+    fn plus_and_optional_are_postfix_like_star() {
+        assert_eq!(sym("a").plus().to_string(), "a+");
+        assert_eq!(sym("a").optional().to_string(), "a?");
+        assert_eq!(sym("a").concat(sym("b")).plus().to_string(), "(ab)+");
+        assert_eq!(sym("a").union(sym("b")).optional().to_string(), "(a|b)?");
+        assert_eq!(sym("a").optional().concat(sym("b")).to_string(), "a?b");
+    }
+
+    #[test]
+    fn plus_and_optional_simplify_like_star() {
+        assert_eq!(Regex::Empty.plus(), Regex::Empty);
+        assert_eq!(Regex::Epsilon.plus(), Regex::Epsilon);
+        assert_eq!(sym("a").star().plus(), sym("a").star());
+        assert_eq!(sym("a").plus().plus(), sym("a").plus());
+        assert_eq!(Regex::Empty.optional(), Regex::Epsilon);
+        assert_eq!(Regex::Epsilon.optional(), Regex::Epsilon);
+        assert_eq!(sym("a").star().optional(), sym("a").star());
+        assert_eq!(sym("a").optional().optional(), sym("a").optional());
+        // (r+)? accepts ε plus one-or-more r: exactly r*.
+        assert_eq!(sym("a").plus().optional(), sym("a").star());
     }
 
     #[test]
