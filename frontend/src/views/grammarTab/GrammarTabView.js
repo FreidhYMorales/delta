@@ -91,7 +91,7 @@ export class GrammarTabView {
 
     const derivations = document.createElement("div");
     derivations.className = "grammar-derivations";
-    this.derivationPanel = new DerivationPanel(derivations, this.store);
+    this.derivationPanel = new DerivationPanel(derivations, this.store, { beforeDerive: () => this._flushSource() });
 
     this.root.append(editorPane, analysisPane, derivations);
     container.appendChild(this.root);
@@ -100,9 +100,23 @@ export class GrammarTabView {
   _onInput() {
     this._edited = true;
     clearTimeout(this._timer);
-    this._timer = setTimeout(() => {
-      this._lastSendPromise = this.store.setSource(this.editor.value);
-    }, SEND_DELAY_MS);
+    this._timer = setTimeout(() => this._send(), SEND_DELAY_MS);
+  }
+
+  _send() {
+    this._timer = null;
+    this._lastSendPromise = this.store.setSource(this.editor.value);
+    return this._lastSendPromise;
+  }
+
+  /** Sends an edit still waiting on its typing pause right away (and waits
+   * for any send in flight), so the core analyses what is on screen. */
+  _flushSource() {
+    if (this._timer) {
+      clearTimeout(this._timer);
+      return this._send();
+    }
+    return this._lastSendPromise ?? Promise.resolve();
   }
 
   _render() {

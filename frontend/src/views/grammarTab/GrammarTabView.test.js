@@ -158,4 +158,21 @@ describe("GrammarTabView", () => {
     const options = [...container.querySelectorAll(".derive-start option")].map((o) => o.value);
     expect(options).toEqual(["", "S", "A"]);
   });
+
+  it("sends pending edits to the core before deriving, so a quick Derivar never tests the old grammar", async () => {
+    const { container, store } = setup();
+    const calls = [];
+    store.setSource.mockImplementation(async (text) => calls.push(["setSource", text]));
+    store.derive.mockImplementation(async () => {
+      calls.push(["derive"]);
+      return { outcome: "rejected", reason: "x", forms: [], steps: [], tree: null };
+    });
+    const editor = container.querySelector(".grammar-source");
+    editor.value = "S -> ab";
+    editor.dispatchEvent(new Event("input"));
+    container.querySelector(".derive-input").value = "ab";
+    container.querySelector(".derive-run").click();
+    await vi.runAllTimersAsync();
+    expect(calls).toEqual([["setSource", "S -> ab"], ["derive"]]);
+  });
 });

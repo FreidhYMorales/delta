@@ -60,12 +60,46 @@ export function formText(symbols) {
   return symbols.length ? symbols.map(symbolText).join("") : "ε";
 }
 
+/** Runs of at least this many consecutive characters are written short. */
+const MIN_RUN = 4;
+
+/**
+ * Writes long runs of consecutive single characters (`A, B, C, …, Z`) as
+ * their first two, `…`, and the last — the way the course writes them, so a
+ * 52-letter alphabet stays one line instead of a wall of text.
+ * @param {string[]} items
+ * @returns {string[]}
+ */
+export function compressRuns(items) {
+  const code = (item) => ([...item].length === 1 ? item.codePointAt(0) : null);
+  const out = [];
+  let i = 0;
+  while (i < items.length) {
+    let end = i;
+    while (end + 1 < items.length && code(items[end]) !== null && code(items[end + 1]) === code(items[end]) + 1) end++;
+    if (end - i + 1 >= MIN_RUN) {
+      out.push(items[i], items[i + 1], "…", items[end]);
+    } else {
+      out.push(...items.slice(i, end + 1));
+    }
+    i = end + 1;
+  }
+  return out;
+}
+
 /** @param {{terminals:string[], nonterminals:string[], start:string, productions:{lhs:object[], rhs:object[]}[]}} grammar */
 export function formalDefinition(grammar) {
+  // One line per left side, alternatives joined with `|` (in first-seen order).
+  const alternativesOf = new Map();
+  for (const p of grammar.productions) {
+    const lhs = formText(p.lhs);
+    if (!alternativesOf.has(lhs)) alternativesOf.set(lhs, []);
+    alternativesOf.get(lhs).push(formText(p.rhs));
+  }
   return {
-    sigma: `Σ = {${grammar.terminals.join(", ")}}`,
+    sigma: `Σ = {${compressRuns(grammar.terminals).join(", ")}}`,
     n: `N = {${grammar.nonterminals.join(", ")}}`,
     s: `S = ${grammar.start}`,
-    productions: grammar.productions.map((p) => `${formText(p.lhs)} → ${formText(p.rhs)}`),
+    productions: [...alternativesOf].map(([lhs, alternatives]) => `${lhs} → ${compressRuns(alternatives).join(" | ")}`),
   };
 }

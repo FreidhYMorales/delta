@@ -17,9 +17,13 @@ export class DerivationPanel {
   /**
    * @param {HTMLElement} container
    * @param {{derive: (input: string, order: string, start: string|null) => Promise<object>}} store
+   * @param {{beforeDerive?: () => Promise<unknown>}} [options] `beforeDerive`
+   *   runs (and is awaited) before every derivation — the tab uses it to send
+   *   any edit still waiting on its typing pause.
    */
-  constructor(container, store) {
+  constructor(container, store, { beforeDerive } = {}) {
     this.store = store;
+    this.beforeDerive = beforeDerive ?? (async () => {});
     /** @type {"productions"|"bnf"} how the derivation is written */
     this.notation = "productions";
     this._build(container);
@@ -131,6 +135,7 @@ export class DerivationPanel {
   async _run() {
     this._clearResult();
     try {
+      await this.beforeDerive();
       const derivation = await this.store.derive(this.input.value, this.order.value, this._startSymbol());
       this._show(derivation);
     } catch (error) {
@@ -185,6 +190,7 @@ export class DerivationPanel {
   }
 
   async _runBatch() {
+    await this.beforeDerive();
     const inputs = parseBatch(this.batchInput.value);
     const results = [];
     for (const input of inputs) {
