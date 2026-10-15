@@ -40,6 +40,14 @@ pub enum MachineDoc {
     Moore(MooreDto),
     Pda(PdaDto),
     Tm(TmDto),
+    /// A "Gramática" tab: just the grammar's source text
+    /// (`crate::grammar_doc::GrammarDocument`).
+    Grammar(GrammarDto),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GrammarDto {
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -299,6 +307,7 @@ pub fn load_from_str(s: &str) -> Result<FaDoc, DtoError> {
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Moore" }),
         MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Pda" }),
         MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Tm" }),
+        MachineDoc::Grammar(_) => Err(DtoError::WrongKind { expected: "Fa", found: "Grammar" }),
     }
 }
 
@@ -378,6 +387,7 @@ pub fn mealy_load_from_str(s: &str) -> Result<MealyDoc, DtoError> {
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Moore" }),
         MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Pda" }),
         MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Tm" }),
+        MachineDoc::Grammar(_) => Err(DtoError::WrongKind { expected: "Mealy", found: "Grammar" }),
     }
 }
 
@@ -455,6 +465,7 @@ pub fn moore_load_from_str(s: &str) -> Result<MooreDoc, DtoError> {
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Mealy" }),
         MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Pda" }),
         MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Tm" }),
+        MachineDoc::Grammar(_) => Err(DtoError::WrongKind { expected: "Moore", found: "Grammar" }),
     }
 }
 
@@ -539,6 +550,7 @@ pub fn pda_load_from_str(s: &str) -> Result<PdaDoc, DtoError> {
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Mealy" }),
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Moore" }),
         MachineDoc::Tm(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Tm" }),
+        MachineDoc::Grammar(_) => Err(DtoError::WrongKind { expected: "Pda", found: "Grammar" }),
     }
 }
 
@@ -659,6 +671,7 @@ pub fn tm_load_from_str(s: &str) -> Result<TmDoc, DtoError> {
         MachineDoc::Mealy(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Mealy" }),
         MachineDoc::Moore(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Moore" }),
         MachineDoc::Pda(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Pda" }),
+        MachineDoc::Grammar(_) => Err(DtoError::WrongKind { expected: "Tm", found: "Grammar" }),
     }
 }
 
@@ -695,6 +708,9 @@ pub fn any_load_from_str(s: &str) -> Result<AnyMachineDoc, DtoError> {
         MachineDoc::Moore(dto) => moore_from_dto(&dto).map(AnyMachineDoc::Moore),
         MachineDoc::Pda(dto) => pda_from_dto(&dto).map(AnyMachineDoc::Pda),
         MachineDoc::Tm(dto) => tm_from_dto(&dto).map(AnyMachineDoc::Tm),
+        // A grammar only ever lives inside a project file, never as a
+        // single-document file.
+        MachineDoc::Grammar(_) => Err(DtoError::WrongKind { expected: "Fa, Mealy, Moore, Pda o Tm", found: "Grammar" }),
     }
 }
 

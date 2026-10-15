@@ -7,9 +7,9 @@ pub mod state;
 pub mod tabs;
 pub mod tm_ipc;
 
-use commands::{convert, doc, jff, mealy, moore, pda, project, sim, tm};
+use commands::{convert, doc, grammar, jff, mealy, moore, pda, project, sim, tm};
 use commands::project::ProjectState;
-use state::{MealySession, MooreSession, PdaSession, Session, TmSession};
+use state::{GrammarSession, MealySession, MooreSession, PdaSession, Session, TmSession};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,6 +22,7 @@ pub fn run() {
     .manage(MooreSession::new())
     .manage(PdaSession::new())
     .manage(TmSession::new())
+    .manage(GrammarSession::new())
     .manage(ProjectState::new())
     .invoke_handler(tauri::generate_handler![
       doc::doc_snapshot,
@@ -37,6 +38,8 @@ pub fn run() {
       convert::conv_to_regex,
       convert::conv_from_regex,
       convert::conv_regex_to_dfa_direct,
+      grammar::grammar_snapshot,
+      grammar::grammar_set_source,
       convert::conv_to_grammar,
       convert::conv_from_grammar,
       convert::conv_nfa_to_dfa,

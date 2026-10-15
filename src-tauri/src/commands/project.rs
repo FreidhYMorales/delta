@@ -30,15 +30,16 @@ use serde::Serialize;
 use automata_core::doc::Document;
 use automata_core::dto::{
     fa_from_dto, fa_to_dto, mealy_from_dto, mealy_to_dto, moore_from_dto, moore_to_dto, pda_from_dto, pda_to_dto,
-    tm_from_dto, tm_to_dto, MachineDoc,
+    tm_from_dto, tm_to_dto, GrammarDto, MachineDoc,
 };
+use automata_core::grammar_doc::GrammarDocument;
 use automata_core::mealy_doc::MealyDocument;
 use automata_core::moore_doc::MooreDocument;
 use automata_core::pda_doc::PdaDocument;
 use automata_core::project::{project_load_from_str, project_save_to_string, ProjectTab};
 use automata_core::tm_doc::TmDocument;
 
-use crate::state::{MealySession, MooreSession, PdaSession, Session, TmSession};
+use crate::state::{GrammarSession, MealySession, MooreSession, PdaSession, Session, TmSession};
 use crate::tabs::{MachineKind, ProjectSession, TabId};
 
 /// Tauri-managed wrapper around `ProjectSession` — see this module's doc
@@ -71,14 +72,15 @@ pub struct ProjectManifest {
     pub revision: u64,
 }
 
-/// Bundles the 5 per-kind sessions so every pure fn below can take one
-/// argument instead of 5 — plain borrows, no new locking behavior.
+/// Bundles the 6 per-kind sessions so every pure fn below can take one
+/// argument instead of 6 — plain borrows, no new locking behavior.
 pub struct Sessions<'a> {
     pub fa: &'a Session,
     pub mealy: &'a MealySession,
     pub moore: &'a MooreSession,
     pub pda: &'a PdaSession,
     pub tm: &'a TmSession,
+    pub grammar: &'a GrammarSession,
 }
 
 fn manifest_of(project: &ProjectSession, sessions: &Sessions) -> ProjectManifest {
@@ -93,6 +95,7 @@ fn manifest_of(project: &ProjectSession, sessions: &Sessions) -> ProjectManifest
                 MachineKind::Moore => sessions.moore.with(meta.id, |d| d.revision),
                 MachineKind::Pda => sessions.pda.with(meta.id, |d| d.revision),
                 MachineKind::Tm => sessions.tm.with(meta.id, |d| d.revision),
+                MachineKind::Grammar => sessions.grammar.with(meta.id, |d| d.revision),
             };
             total_revision += revision;
             TabManifestEntry { id: meta.id, kind: meta.kind, name: meta.name.clone(), revision }
@@ -107,6 +110,7 @@ fn clear_all_sessions(sessions: &Sessions) {
     sessions.moore.0.lock().expect("session mutex poisoned").clear();
     sessions.pda.0.lock().expect("session mutex poisoned").clear();
     sessions.tm.0.lock().expect("session mutex poisoned").clear();
+    sessions.grammar.0.lock().expect("session mutex poisoned").clear();
 }
 
 /// Resets the project to a fresh, empty state — no tabs. Tab creation is a
@@ -161,6 +165,7 @@ pub fn new_tab(
         MachineKind::Moore => sessions.moore.insert(id, MooreDocument::new()),
         MachineKind::Pda => sessions.pda.insert(id, PdaDocument::new()),
         MachineKind::Tm => sessions.tm.insert(id, TmDocument::new()),
+        MachineKind::Grammar => sessions.grammar.insert(id, GrammarDocument::new()),
     }
     Ok(manifest_of(&guard, sessions))
 }
@@ -191,6 +196,9 @@ pub fn close_tab(project: &Mutex<ProjectSession>, sessions: &Sessions, tab_id: T
         }
         MachineKind::Tm => {
             sessions.tm.remove(tab_id);
+        }
+        MachineKind::Grammar => {
+            sessions.grammar.remove(tab_id);
         }
     }
     Ok(manifest_of(&guard, sessions))
@@ -251,6 +259,7 @@ enum LoadedDoc {
     Moore(MooreDocument),
     Pda(PdaDocument),
     Tm(TmDocument),
+    Grammar(GrammarDocument),
 }
 
 fn load_doc(model: MachineDoc) -> Result<(MachineKind, LoadedDoc), String> {
@@ -279,6 +288,11 @@ fn load_doc(model: MachineDoc) -> Result<(MachineKind, LoadedDoc), String> {
             let mut doc = TmDocument::new();
             doc.model = tm_from_dto(&dto).map_err(|e| e.to_string())?;
             Ok((MachineKind::Tm, LoadedDoc::Tm(doc)))
+        }
+        MachineDoc::Grammar(dto) => {
+            let mut doc = GrammarDocument::new();
+            doc.source = dto.source;
+            Ok((MachineKind::Grammar, LoadedDoc::Grammar(doc)))
         }
     }
 }
@@ -311,6 +325,7 @@ pub fn open_project(project: &Mutex<ProjectSession>, sessions: &Sessions, path: 
             LoadedDoc::Moore(d) => sessions.moore.insert(id, d),
             LoadedDoc::Pda(d) => sessions.pda.insert(id, d),
             LoadedDoc::Tm(d) => sessions.tm.insert(id, d),
+            LoadedDoc::Grammar(d) => sessions.grammar.insert(id, d),
         }
     }
     Ok(manifest_of(&guard, sessions))
@@ -328,6 +343,9 @@ pub fn save_project(project: &Mutex<ProjectSession>, sessions: &Sessions, path: 
             MachineKind::Moore => sessions.moore.try_with(meta.id, |d| MachineDoc::Moore(moore_to_dto(&d.model)))?,
             MachineKind::Pda => sessions.pda.try_with(meta.id, |d| MachineDoc::Pda(pda_to_dto(&d.model)))?,
             MachineKind::Tm => sessions.tm.try_with(meta.id, |d| MachineDoc::Tm(tm_to_dto(&d.model)))?,
+            MachineKind::Grammar => sessions
+                .grammar
+                .try_with(meta.id, |d| MachineDoc::Grammar(GrammarDto { source: d.source.clone() }))?,
         };
         tabs.push(ProjectTab { name: meta.name.clone(), model });
     }
@@ -344,8 +362,9 @@ pub fn project_new(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
 ) -> ProjectManifest {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     new_project(&project.0, &sessions)
 }
 
@@ -357,8 +376,9 @@ pub fn project_manifest(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
 ) -> ProjectManifest {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     manifest(&project.0, &sessions)
 }
 
@@ -370,10 +390,11 @@ pub fn project_new_tab(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
     kind: MachineKind,
     name: String,
 ) -> Result<ProjectManifest, String> {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     new_tab(&project.0, &sessions, kind, name)
 }
 
@@ -385,9 +406,10 @@ pub fn project_close_tab(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
     tab_id: TabId,
 ) -> Result<ProjectManifest, String> {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     close_tab(&project.0, &sessions, tab_id)
 }
 
@@ -399,10 +421,11 @@ pub fn project_rename_tab(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
     tab_id: TabId,
     new_name: String,
 ) -> Result<ProjectManifest, String> {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     rename_tab(&project.0, &sessions, tab_id, new_name)
 }
 
@@ -414,10 +437,11 @@ pub fn project_reorder_tab(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
     tab_id: TabId,
     to_index: usize,
 ) -> Result<ProjectManifest, String> {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     reorder_tab(&project.0, &sessions, tab_id, to_index)
 }
 
@@ -429,9 +453,10 @@ pub fn project_open(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
     path: String,
 ) -> Result<ProjectManifest, String> {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     open_project(&project.0, &sessions, path)
 }
 
@@ -443,8 +468,9 @@ pub fn project_save(
     moore: tauri::State<'_, MooreSession>,
     pda: tauri::State<'_, PdaSession>,
     tm: tauri::State<'_, TmSession>,
+    grammar: tauri::State<'_, GrammarSession>,
     path: String,
 ) -> Result<ProjectManifest, String> {
-    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm };
+    let sessions = Sessions { fa: &fa, mealy: &mealy, moore: &moore, pda: &pda, tm: &tm, grammar: &grammar };
     save_project(&project.0, &sessions, path)
 }

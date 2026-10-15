@@ -6,6 +6,7 @@
 
 pub mod convert;
 pub mod doc;
+pub mod grammar;
 pub mod jff;
 pub mod mealy;
 pub mod moore;

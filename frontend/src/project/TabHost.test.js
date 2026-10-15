@@ -6,12 +6,14 @@ const mountMealyTab = vi.fn();
 const mountMooreTab = vi.fn();
 const mountPdaTab = vi.fn();
 const mountTmTab = vi.fn();
+const mountGrammarTab = vi.fn();
 
 vi.mock("./tabs/mountFaTab.js", () => ({ mountFaTab: (...args) => mountFaTab(...args) }));
 vi.mock("./tabs/mountMealyTab.js", () => ({ mountMealyTab: (...args) => mountMealyTab(...args) }));
 vi.mock("./tabs/mountMooreTab.js", () => ({ mountMooreTab: (...args) => mountMooreTab(...args) }));
 vi.mock("./tabs/mountPdaTab.js", () => ({ mountPdaTab: (...args) => mountPdaTab(...args) }));
 vi.mock("./tabs/mountTmTab.js", () => ({ mountTmTab: (...args) => mountTmTab(...args) }));
+vi.mock("./tabs/mountGrammarTab.js", () => ({ mountGrammarTab: (...args) => mountGrammarTab(...args) }));
 
 const { TabHost } = await import("./TabHost.js");
 
@@ -44,6 +46,7 @@ beforeEach(() => {
   mountMooreTab.mockReset();
   mountPdaTab.mockReset();
   mountTmTab.mockReset();
+  mountGrammarTab.mockReset();
 });
 
 describe("TabHost mounting (design D11: mounting reacts to the tab LIST, not the active pointer)", () => {
@@ -73,6 +76,7 @@ describe("TabHost mounting (design D11: mounting reacts to the tab LIST, not the
           { id: 2, kind: "Moore", name: "C", revision: 0 },
           { id: 3, kind: "Pda", name: "D", revision: 0 },
           { id: 4, kind: "Tm", name: "E", revision: 0 },
+          { id: 5, kind: "Grammar", name: "G", revision: 0 },
         ],
         revision: 0,
       }),
@@ -83,6 +87,7 @@ describe("TabHost mounting (design D11: mounting reacts to the tab LIST, not the
     mountMooreTab.mockReturnValue(fakeMount(2));
     mountPdaTab.mockReturnValue(fakeMount(3));
     mountTmTab.mockReturnValue(fakeMount(4));
+    mountGrammarTab.mockReturnValue(fakeMount(5));
     const hosts = { contentHost: document.createElement("div"), toolbarHost: document.createElement("div") };
 
     await projectStore.newProject();
@@ -93,6 +98,7 @@ describe("TabHost mounting (design D11: mounting reacts to the tab LIST, not the
     expect(mountMooreTab).toHaveBeenCalledTimes(1);
     expect(mountPdaTab).toHaveBeenCalledTimes(1);
     expect(mountTmTab).toHaveBeenCalledTimes(1);
+    expect(mountGrammarTab).toHaveBeenCalledTimes(1);
   });
 
   it("mounts a newly created tab exactly once, without remounting already-mounted siblings", async () => {

@@ -51,7 +51,7 @@ pub fn project_load_from_str(s: &str) -> Result<Vec<ProjectTab>, ProjectError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dto::{FaDto, TmDto};
+    use crate::dto::{FaDto, GrammarDto, TmDto};
 
     fn fa_tab(name: &str) -> ProjectTab {
         ProjectTab {
@@ -67,9 +67,16 @@ mod tests {
         }
     }
 
+    fn grammar_tab(name: &str) -> ProjectTab {
+        ProjectTab {
+            name: name.to_string(),
+            model: MachineDoc::Grammar(GrammarDto { source: "S -> aS | b\nA -> ε".to_string() }),
+        }
+    }
+
     #[test]
     fn round_trip_preserves_mixed_kind_tabs_and_order() {
-        let tabs = vec![fa_tab("first"), tm_tab("second")];
+        let tabs = vec![fa_tab("first"), tm_tab("second"), grammar_tab("third")];
         let json = project_save_to_string(&tabs).unwrap();
         let reloaded = project_load_from_str(&json).unwrap();
         assert_eq!(reloaded, tabs);

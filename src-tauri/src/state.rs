@@ -29,6 +29,7 @@ use automata_core::doc::Document;
 use automata_core::mealy_doc::MealyDocument;
 use automata_core::moore_doc::MooreDocument;
 use automata_core::pda_doc::PdaDocument;
+use automata_core::grammar_doc::GrammarDocument;
 use automata_core::tm_doc::TmDocument;
 
 use crate::tabs::TabId;
@@ -117,6 +118,7 @@ define_session!(MealySession, MealyDocument);
 define_session!(MooreSession, MooreDocument);
 define_session!(PdaSession, PdaDocument);
 define_session!(TmSession, TmDocument);
+define_session!(GrammarSession, GrammarDocument);
 
 #[cfg(test)]
 mod tests {

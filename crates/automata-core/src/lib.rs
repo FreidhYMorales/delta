@@ -8,6 +8,7 @@ pub mod doc;
 pub mod dto;
 pub mod engine;
 pub mod grammar;
+pub mod grammar_doc;
 pub mod ids;
 pub mod interop;
 pub mod mealy_doc;

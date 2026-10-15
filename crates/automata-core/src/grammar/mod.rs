@@ -10,6 +10,8 @@
 
 use std::fmt;
 
+pub mod chomsky;
+pub mod general;
 pub mod parser;
 pub use parser::{format, parse, ParseError};
 

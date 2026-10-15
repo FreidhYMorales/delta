@@ -82,10 +82,20 @@ const REGISTRIES = {
     menuGroupTitles: {},
     ownGroups: new Set(["tools", "state", "transition", "edit"]),
   },
+  // The grammar tab is text, not a machine: no tools, context menu or
+  // kind-specific menus — so no actions at all (saving/closing are the
+  // project registry's).
+  Grammar: {
+    actions: [],
+    toolIds: new Set(),
+    contextMenuIds: new Set(),
+    menuGroupTitles: {},
+    ownGroups: new Set(),
+  },
 };
 
 describe("reachability audit — table-driven over MACHINE_KINDS (extends registry.test.js's Fa-only audit)", () => {
-  it("the test fixture covers exactly the 5 MACHINE_KINDS entries — no kind added/removed silently", () => {
+  it("the test fixture covers exactly the MACHINE_KINDS entries — no kind added/removed silently", () => {
     expect(new Set(Object.keys(REGISTRIES))).toEqual(new Set(MACHINE_KINDS.map((k) => k.id)));
   });
 

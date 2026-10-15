@@ -6,7 +6,7 @@
 use std::sync::Mutex;
 
 use app_lib::commands::project::{self, Sessions};
-use app_lib::state::{MealySession, MooreSession, PdaSession, Session, TmSession};
+use app_lib::state::{GrammarSession, MealySession, MooreSession, PdaSession, Session, TmSession};
 use app_lib::tabs::{MachineKind, ProjectSession, TabId};
 use automata_core::doc::EditOp;
 
@@ -17,6 +17,7 @@ struct Fixture {
     moore: MooreSession,
     pda: PdaSession,
     tm: TmSession,
+    grammar: GrammarSession,
 }
 
 impl Fixture {
@@ -28,11 +29,12 @@ impl Fixture {
             moore: MooreSession::new(),
             pda: PdaSession::new(),
             tm: TmSession::new(),
+            grammar: GrammarSession::new(),
         }
     }
 
     fn sessions(&self) -> Sessions<'_> {
-        Sessions { fa: &self.fa, mealy: &self.mealy, moore: &self.moore, pda: &self.pda, tm: &self.tm }
+        Sessions { fa: &self.fa, mealy: &self.mealy, moore: &self.moore, pda: &self.pda, tm: &self.tm, grammar: &self.grammar }
     }
 }
 
@@ -227,4 +229,27 @@ fn open_on_a_malformed_file_fails_without_panicking() {
     assert!(err.is_err());
 
     let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_grammar_tab_keeps_its_source_through_save_and_open() {
+    let fx = Fixture::new();
+    let manifest = project::new_tab(&fx.project, &fx.sessions(), MachineKind::Grammar, "G".into()).unwrap();
+    let id = manifest.tabs[0].id;
+    assert_eq!(manifest.tabs[0].kind, MachineKind::Grammar);
+    app_lib::commands::grammar::set_source(&fx.grammar, id, "S -> aSb | ε".into()).unwrap();
+    assert_eq!(project::manifest(&fx.project, &fx.sessions()).tabs[0].revision, 1);
+
+    let dir = std::env::temp_dir().join(format!("grammar-tab-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("p.json").to_string_lossy().to_string();
+    project::save_project(&fx.project, &fx.sessions(), path.clone()).unwrap();
+
+    let reopened = Fixture::new();
+    let manifest = project::open_project(&reopened.project, &reopened.sessions(), path).unwrap();
+    assert_eq!(manifest.tabs[0].kind, MachineKind::Grammar);
+    let snap = app_lib::commands::grammar::snapshot(&reopened.grammar, manifest.tabs[0].id).unwrap();
+    assert_eq!(snap.source, "S -> aSb | ε");
+    assert_eq!(snap.analysis.classification.unwrap().chomsky_type, 2);
+    std::fs::remove_dir_all(dir).ok();
 }

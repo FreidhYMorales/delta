@@ -29,6 +29,7 @@ pub enum MachineKind {
     Moore,
     Pda,
     Tm,
+    Grammar,
 }
 
 /// Ordered per-tab metadata — no document content (that lives in the

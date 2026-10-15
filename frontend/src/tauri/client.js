@@ -436,3 +436,24 @@ export function projectOpen(path) {
 export function projectSave(path) {
   return call("project_save", { path });
 }
+
+/**
+ * The "Gramática" tab's document: its source text, revision and the
+ * analysis the core derives from it (parsed G = {Σ, N, S, P}, Chomsky
+ * classification, or the parse error).
+ * @param {number} tabId
+ * @returns {Promise<{revision:number, source:string, analysis:object}>}
+ */
+export function grammarSnapshot(tabId) {
+  return call("grammar_snapshot", { tabId });
+}
+
+/**
+ * Replaces the grammar tab's source text; resolves with the new snapshot.
+ * @param {string} source
+ * @param {number} tabId
+ * @returns {Promise<{revision:number, source:string, analysis:object}>}
+ */
+export function grammarSetSource(source, tabId) {
+  return call("grammar_set_source", { source, tabId });
+}

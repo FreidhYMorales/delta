@@ -23,6 +23,7 @@ import { mountMealyTab } from "./tabs/mountMealyTab.js";
 import { mountMooreTab } from "./tabs/mountMooreTab.js";
 import { mountPdaTab } from "./tabs/mountPdaTab.js";
 import { mountTmTab } from "./tabs/mountTmTab.js";
+import { mountGrammarTab } from "./tabs/mountGrammarTab.js";
 
 const FACTORY_BY_KIND = {
   Fa: mountFaTab,
@@ -30,6 +31,7 @@ const FACTORY_BY_KIND = {
   Moore: mountMooreTab,
   Pda: mountPdaTab,
   Tm: mountTmTab,
+  Grammar: mountGrammarTab,
 };
 
 export class TabHost {

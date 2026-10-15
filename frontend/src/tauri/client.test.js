@@ -100,3 +100,15 @@ describe("client.js direct-method regex conversion (ER → AFD tab)", () => {
     expect(invoke).toHaveBeenCalledWith("conv_regex_to_dfa_direct", { pattern: "(a|b)*abb" });
   });
 });
+
+describe("client.js grammar tab commands", () => {
+  it("grammarSnapshot(tabId) calls grammar_snapshot with {tabId}", async () => {
+    await client.grammarSnapshot(4);
+    expect(invoke).toHaveBeenCalledWith("grammar_snapshot", { tabId: 4 });
+  });
+
+  it("grammarSetSource(source, tabId) calls grammar_set_source with {source, tabId}", async () => {
+    await client.grammarSetSource("S -> a", 4);
+    expect(invoke).toHaveBeenCalledWith("grammar_set_source", { source: "S -> a", tabId: 4 });
+  });
+});
