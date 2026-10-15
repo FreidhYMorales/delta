@@ -339,3 +339,23 @@ describe("reachability audit (UI/UX audit pass — no action may end up 100% unr
     expect(actions.some((a) => a.group === "editor")).toBe(false);
   });
 });
+
+describe("Thompson pieces (thompson.*)", () => {
+  it("offers one action per piece of the nomenclature, in order, each inserting its own piece", async () => {
+    const pieces = actions.filter((a) => a.group === "thompson");
+    expect(pieces.map((a) => a.id)).toEqual([
+      "thompson.symbol",
+      "thompson.concat",
+      "thompson.union",
+      "thompson.star",
+      "thompson.plus",
+    ]);
+    const ctx = fakeCtx({ insertPiece: vi.fn().mockResolvedValue(true) });
+    for (const action of pieces) await action.run(ctx);
+    expect(ctx.insertPiece.mock.calls.map((c) => c[0])).toEqual(["symbol", "concat", "union", "star", "plus"]);
+  });
+
+  it("are reachable from the menu bar", () => {
+    expect(MENU_GROUP_TITLES).toHaveProperty("thompson");
+  });
+});

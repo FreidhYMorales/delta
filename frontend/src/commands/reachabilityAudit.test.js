@@ -35,7 +35,7 @@ const REGISTRIES = {
       "edit.deleteSelection",
     ]),
     menuGroupTitles: MENU_GROUP_TITLES,
-    ownGroups: new Set(["tools", "state", "edit", "view", "convert", "test", "interop"]),
+    ownGroups: new Set(["tools", "state", "edit", "view", "convert", "test", "interop", "thompson"]),
   },
   Mealy: {
     actions: mealyActions,

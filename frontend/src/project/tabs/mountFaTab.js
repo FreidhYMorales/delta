@@ -125,8 +125,8 @@ export function mountFaTab(tabId, hosts, client, collaborators = {}) {
       const state = docStore.getState(id);
       return promptModal("Rename state", state?.label ?? "");
     },
-    promptSymbol: async () => {
-      const value = await promptModal("Transition symbol (blank = epsilon)");
+    promptSymbol: async (message = "Transition symbol (blank = epsilon)") => {
+      const value = await promptModal(message);
       // `promptModal` already distinguishes "cancelled" (null) from "blank,
       // submitted" ("") — collapsing both into null here (the previous bug)
       // made DiagramView's `if (!symbol) return;` treat "I want an epsilon

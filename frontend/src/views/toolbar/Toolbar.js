@@ -16,6 +16,7 @@
 // a select like that to represent.
 
 import { TOOL_IDS, findAction } from "../../commands/registry.js";
+import { THOMPSON_PIECES } from "../../commands/thompsonPieces.js";
 
 /** Registry action id -> `ctx.activeTool` value, for highlighting the
  * active tool button (mirrors `ViewContext.setTool`'s argument). */
@@ -47,6 +48,11 @@ const TOOLBAR_LABELS = {
 };
 
 const VIEW_TOOLBAR_IDS = ["view.autoLayout", "view.fitToWindow"];
+
+/** Thompson pieces, labelled by their notation (r, rs, r|s, r*, r+) — the
+ * full `action.title` becomes the tooltip. */
+const THOMPSON_TOOLBAR_IDS = THOMPSON_PIECES.map((piece) => `thompson.${piece.kind}`);
+const THOMPSON_LABELS = Object.fromEntries(THOMPSON_PIECES.map((piece) => [`thompson.${piece.kind}`, piece.notation]));
 
 export class Toolbar {
   /**
@@ -89,7 +95,21 @@ export class Toolbar {
       viewGroup.appendChild(this._buildToolButton(action, { showKeybinding: false }));
     }
 
-    this.root.append(toolsGroup, separator, viewGroup);
+    const thompsonSeparator = document.createElement("div");
+    thompsonSeparator.className = "toolbar-sep";
+
+    const thompsonGroup = document.createElement("div");
+    thompsonGroup.className = "tool-group";
+    thompsonGroup.dataset.group = "thompson";
+    for (const id of THOMPSON_TOOLBAR_IDS) {
+      const action = findAction(id);
+      const button = this._buildToolButton(action, { showKeybinding: false });
+      button.textContent = THOMPSON_LABELS[id];
+      button.title = action.title;
+      thompsonGroup.appendChild(button);
+    }
+
+    this.root.append(toolsGroup, separator, viewGroup, thompsonSeparator, thompsonGroup);
     this.container.appendChild(this.root);
   }
 

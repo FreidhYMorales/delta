@@ -8,6 +8,7 @@
 
 import { wasRenamed } from "./renameState.js";
 import { showNotice } from "../ui/notice.js";
+import { insertThompsonPiece } from "./thompsonPieces.js";
 import { applyGreekSymbols } from "../store/greekSymbols.js";
 
 /**
@@ -22,7 +23,8 @@ export class ViewContext {
    *   layout?: {arrange: Function},
    *   promptPath?: (kind: 'open-jff'|'save-jff') => Promise<string|null>,
    *   promptLabel?: (stateId: number) => Promise<string|null>,
-   *   promptSymbol?: () => Promise<string|null>, // "" = epsilon requested, null = cancelled, non-empty = real symbol
+   *   promptSymbol?: (message?: string) => Promise<string|null>, // "" = epsilon requested, null = cancelled, non-empty = real symbol
+   *   insertPiece?: (kind: string) => Promise<boolean>,
    *   importJff?: (path: string) => Promise<void>,
    *   exportJff?: (path: string) => Promise<void>,
    *   simTrace?: (word: string[], budget?: object) => Promise<object>,
@@ -90,6 +92,19 @@ export class ViewContext {
       hooks.convertToDfa ?? (async () => { throw new Error("No hay conversión AFN→AFD disponible."); });
     this.minimizeDfa =
       hooks.minimizeDfa ?? (async () => { throw new Error("No hay minimización de AFD disponible."); });
+    // Thompson piece insertion (commands/thompsonPieces.js). Real by
+    // default, like `renameState`: it only needs `docStore` and the prompt
+    // hook; a refusal (e.g. nesting into a self-loop) becomes a notice.
+    this.insertPiece =
+      hooks.insertPiece ??
+      (async (kind) => {
+        try {
+          return await insertThompsonPiece(this, kind);
+        } catch (error) {
+          showNotice({ kind: "error", title: "No se pudo insertar la pieza", message: String(error?.message ?? error) });
+          return false;
+        }
+      });
     // Rename-collision notice (task 7.9, spec "State Identifier Conflicts
     // Are Never Silent"). Real by default (needs only `docStore` + a DOM
     // notice, both available without a Tauri webview) — overridable in

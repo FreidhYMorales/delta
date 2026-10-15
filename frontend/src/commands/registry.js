@@ -21,6 +21,8 @@
 // menu — task 7.7 — since no dialog plugin dependency exists yet; here it
 // is an injectable hook so the action itself is fully testable today).
 
+import { THOMPSON_PIECES } from "./thompsonPieces.js";
+
 function hasStateSelected(ctx) {
   return ctx.selection?.kind === "state";
 }
@@ -178,6 +180,18 @@ export const actions = [
     when: () => true,
     run: (ctx) => ctx.layout.arrange(),
   },
+
+  // --- Thompson pieces (commands/thompsonPieces.js) ------------------------
+  // Insert a prebuilt piece of the Thompson nomenclature; with a transition
+  // selected, the piece replaces it (nesting). Toolbar + "Thompson" menu.
+  ...THOMPSON_PIECES.map((piece) => ({
+    id: `thompson.${piece.kind}`,
+    title: piece.title,
+    group: "thompson",
+    keybinding: null,
+    when: () => true,
+    run: (ctx) => ctx.insertPiece(piece.kind),
+  })),
 
   // --- Convert (FA -> FA transforms, JFLAP's own "Convert" menu) -----------
   // Unlike the regex/grammar generate actions, these transform the CURRENT

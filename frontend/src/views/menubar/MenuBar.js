@@ -46,6 +46,7 @@ export const MENU_GROUP_TITLES = {
   edit: "Editar",
   view: "Ver",
   convert: "Convertir",
+  thompson: "Thompson",
   test: "Test",
 };
 

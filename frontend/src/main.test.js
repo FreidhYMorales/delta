@@ -81,7 +81,7 @@ describe("main.js app boot (PR11: project_new -> project_new_tab('Fa', ...) -> m
     expect(visibleToolbars.length).toBe(1);
 
     const menuTriggers = [...app.querySelectorAll(".menu-bar-item")].map((b) => b.textContent);
-    expect(menuTriggers).toEqual(["Archivo", "Editar", "Ver", "Convertir", "Test"]);
+    expect(menuTriggers).toEqual(["Archivo", "Editar", "Ver", "Convertir", "Thompson", "Test"]);
   });
 });
 

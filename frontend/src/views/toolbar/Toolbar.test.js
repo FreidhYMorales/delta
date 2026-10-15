@@ -60,4 +60,17 @@ describe("Toolbar (moved out of DiagramView for wireframe parity: it spans the f
       container.querySelector('[data-action="tool.select"]').classList.contains("active"),
     ).toBe(false);
   });
+
+  it("renders the Thompson pieces as their own group, labelled with their notation", () => {
+    const { container } = setup();
+    const buttons = [...container.querySelectorAll('[data-group="thompson"] [data-action]')];
+    expect(buttons.map((b) => b.dataset.action)).toEqual([
+      "thompson.symbol",
+      "thompson.concat",
+      "thompson.union",
+      "thompson.star",
+      "thompson.plus",
+    ]);
+    expect(buttons.map((b) => b.textContent.trim())).toEqual(["r", "rs", "r|s", "r*", "r+"]);
+  });
 });
