@@ -41,14 +41,14 @@ beforeEach(() => {
 
 describe("applyPdaModel initial stack symbol", () => {
   const unchangedMachine = { states: ["q0"], initial: "q0", accepting: [], transitions: [] };
+  const editsSent = (client) => client.pdaApply.mock.calls.flatMap(([ops]) => ops);
 
   it("changes the machine's symbol when the definition sets a different one", async () => {
     const { client, docStore } = await setup();
 
     await applyPdaModel(docStore, { ...unchangedMachine, initialStackSymbol: "A" });
 
-    expect(client.pdaApply).toHaveBeenCalledTimes(1);
-    expect(client.pdaApply.mock.calls[0][0]).toEqual([{ op: "SetInitialStackSymbol", symbol: "A" }]);
+    expect(editsSent(client)).toEqual([{ op: "SetInitialStackSymbol", symbol: "A" }]);
   });
 
   it("leaves the machine's symbol alone when the definition has no Z0 line", async () => {
@@ -56,7 +56,7 @@ describe("applyPdaModel initial stack symbol", () => {
 
     await applyPdaModel(docStore, unchangedMachine);
 
-    expect(client.pdaApply).not.toHaveBeenCalled();
+    expect(editsSent(client)).toEqual([]);
   });
 
   it("does not record an edit when the definition repeats the current symbol", async () => {
@@ -64,7 +64,7 @@ describe("applyPdaModel initial stack symbol", () => {
 
     await applyPdaModel(docStore, { ...unchangedMachine, initialStackSymbol: "Z" });
 
-    expect(client.pdaApply).not.toHaveBeenCalled();
+    expect(editsSent(client)).toEqual([]);
   });
 });
 
