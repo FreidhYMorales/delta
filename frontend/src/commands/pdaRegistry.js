@@ -51,7 +51,8 @@ export async function promptTransitionTriple(ctx, existing = {}) {
   if (popText == null) return null;
   const pushText = await ctx.promptPush(formatSymbolListForPrompt(existing.push ?? []));
   if (pushText == null) return null;
-  return { input: parseInputSymbol(inputText), pop: parseSymbolList(popText), push: parseSymbolList(pushText) };
+  const known = ctx.docStore.derived?.stack_alphabet ?? [];
+  return { input: parseInputSymbol(inputText), pop: parseSymbolList(popText, known), push: parseSymbolList(pushText, known) };
 }
 
 export const pdaActions = [
