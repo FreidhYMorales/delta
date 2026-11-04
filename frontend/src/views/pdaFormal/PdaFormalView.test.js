@@ -71,6 +71,20 @@ describe("PdaFormalView", () => {
     expect(allOps).toEqual(expect.arrayContaining([{ op: "SetInitial", id: 2 }]));
   });
 
+  it("reads stack strings with the machine's known symbols when applying", async () => {
+    const { container, client, docStore, view } = await setup();
+    docStore.derived = { ...docStore.derived, stack_alphabet: ["A", "Z0"] };
+    const textarea = container.querySelector("textarea");
+    textarea.value = ["Q = {q0, q1}", "q0 = q0", "F = {q1}", "δ(q0, a, Z0) = (q1, AAZ0)"].join("\n");
+    container.querySelector("button.apply").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await view._lastApplyPromise;
+
+    const allOps = client.pdaApply.mock.calls.flatMap((c) => c[0]);
+    expect(allOps).toEqual(
+      expect.arrayContaining([{ op: "AddTransition", from: 1, to: 2, input: "a", pop: ["Z0"], push: ["A", "A", "Z0"] }]),
+    );
+  });
+
   it("adding a second transition between an already-connected pair through formal text keeps both", async () => {
     const { container, client, view } = await setup();
     const textarea = container.querySelector("textarea");
