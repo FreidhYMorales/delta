@@ -34,6 +34,16 @@ fn the_steps_show_the_chosen_symbol_even_when_no_transition_uses_it() {
 }
 
 #[test]
+fn spaces_around_the_symbol_are_not_stored() {
+    let session = PdaSession::new();
+
+    set_symbol(&session, " A ");
+
+    let snapshot = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
+    assert_eq!(snapshot.derived.initial_stack_symbol, "A");
+}
+
+#[test]
 fn leaving_the_symbol_blank_restores_z() {
     let session = PdaSession::new();
     set_symbol(&session, "A");

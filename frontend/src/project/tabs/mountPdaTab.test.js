@@ -118,6 +118,13 @@ describe("mountPdaTab initial stack symbol field", () => {
     return new Promise((resolve) => setTimeout(resolve));
   }
 
+  it("shows Z when the machine has not reported a symbol", () => {
+    const hosts = fakeHosts();
+    mountPdaTab(0, hosts, fakeClient());
+
+    expect(hosts.contentHost.querySelector(".pda-sim-initial-stack").value).toBe("Z");
+  });
+
   it("shows the machine's current symbol on the Simular tab", async () => {
     const hosts = fakeHosts();
     const snapshot = { ...emptySnapshot(), derived: derivedWith("A") };
