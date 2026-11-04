@@ -247,7 +247,10 @@ pub fn pda_step_table(doc: &PdaDoc, input: &[&str], accept_mode: AcceptMode, bud
     let mut seen: HashSet<(PdaConfig, usize)> = nodes.iter().map(|n| (n.cfg.clone(), n.at)).collect();
     let mut accepted = None;
     let mut index = 0;
-    while index < nodes.len() && nodes.len() <= budget.max_configs {
+    // The most configurations `run_bounded` can visit within this budget, so
+    // this search reaches everything a simulation that finished could reach.
+    let limit = budget.max_steps.saturating_mul(budget.max_configs);
+    while index < nodes.len() && nodes.len() <= limit {
         if engine.is_accepting(&nodes[index].cfg, nodes[index].at, &symbols) {
             accepted = Some(index);
             break;
