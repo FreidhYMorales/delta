@@ -41,5 +41,9 @@ export async function applyPdaModel(docStore, model) {
   const statesAfterAddRemove = docStore.getStates();
   const transitionsAfterAddRemove = docStore.getTransitions();
   const ops = planSyncOps(model, resolvedIdOf, statesAfterAddRemove, transitionsAfterAddRemove);
+  const currentSymbol = docStore.derived?.initial_stack_symbol ?? "Z";
+  if (model.initialStackSymbol != null && (model.initialStackSymbol || "Z") !== currentSymbol) {
+    ops.push({ op: "SetInitialStackSymbol", symbol: model.initialStackSymbol });
+  }
   if (ops.length) await docStore.apply(ops);
 }
