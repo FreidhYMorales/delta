@@ -82,8 +82,8 @@ export function parseFormalText(text, knownSymbols = []) {
       initial = m[1] || null;
       continue;
     }
-    if ((m = /^Z0\s*=\s*(\S*)$/.exec(line))) {
-      initialStackSymbol = m[1];
+    if ((m = /^Z0\s*=\s*(.*)$/.exec(line))) {
+      initialStackSymbol = m[1].replace(/\s+/g, "");
       continue;
     }
     if ((m = /^F\s*=\s*\{(.*)\}$/.exec(line))) {
