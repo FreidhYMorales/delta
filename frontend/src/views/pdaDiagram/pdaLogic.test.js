@@ -20,6 +20,20 @@ describe("parseInputSymbol", () => {
   });
 });
 
+describe("empty markers", () => {
+  it("reads λ and ε as an empty input", () => {
+    expect(parseInputSymbol("λ")).toBeNull();
+    expect(parseInputSymbol(" ε ")).toBeNull();
+    expect(parseInputSymbol("a")).toBe("a");
+  });
+
+  it("reads λ and ε as an empty pop or push", () => {
+    expect(parseSymbolList("λ")).toEqual([]);
+    expect(parseSymbolList(" ε ")).toEqual([]);
+    expect(parseSymbolList("A")).toEqual(["A"]);
+  });
+});
+
 describe("parseSymbolList", () => {
   it("reads a stack string without separators one character per symbol", () => {
     expect(parseSymbolList("NZ")).toEqual(["N", "Z"]);
