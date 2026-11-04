@@ -54,7 +54,7 @@ export class PdaFormalView {
   }
 
   async _onApply() {
-    const parsed = parseFormalText(this.textarea.value);
+    const parsed = parseFormalText(this.textarea.value, this.docStore.derived.stack_alphabet);
     if (!parsed.ok) {
       this.errorBox.textContent = parsed.error;
       return;

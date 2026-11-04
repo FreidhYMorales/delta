@@ -58,9 +58,10 @@ export function formatFormalText({ states, transitions, derived }) {
 
 /**
  * @param {string} text
+ * @param {string[]} [knownSymbols] the machine's stack alphabet
  * @returns {{ok:true, model:{states:string[], initial:string|null, initialStackSymbol?:string, accepting:string[], transitions:{from:string,input:string|null,pop:string[],to:string,push:string[]}[]}}|{ok:false, error:string}}
  */
-export function parseFormalText(text) {
+export function parseFormalText(text, knownSymbols = []) {
   let states = null;
   let initial = null;
   let initialStackSymbol = null;
@@ -95,13 +96,7 @@ export function parseFormalText(text) {
       ))
     ) {
       const [, from, inputRaw, popRaw, to, pushRaw] = m;
-      transitions.push({
-        from,
-        input: parseInputSymbol(inputRaw === EPSILON ? "" : inputRaw),
-        pop: popRaw === EPSILON ? [] : parseSymbolList(popRaw),
-        to,
-        push: pushRaw === EPSILON ? [] : parseSymbolList(pushRaw),
-      });
+      transitions.push({ from, inputRaw, popRaw, to, pushRaw });
       continue;
     }
     return { ok: false, error: `Unrecognized line: "${line}"` };
@@ -124,7 +119,16 @@ export function parseFormalText(text) {
     if (!declared.has(t.to)) return { ok: false, error: `Undeclared state: "${t.to}"` };
   }
 
-  const model = { states, initial, accepting: acceptingList, transitions };
+  // Read after the loop: a `Z0` line counts wherever it is written.
+  const known = initialStackSymbol ? [...knownSymbols, initialStackSymbol] : knownSymbols;
+  const parsedTransitions = transitions.map(({ from, inputRaw, popRaw, to, pushRaw }) => ({
+    from,
+    input: parseInputSymbol(inputRaw === EPSILON ? "" : inputRaw),
+    pop: popRaw === EPSILON ? [] : parseSymbolList(popRaw, known),
+    to,
+    push: pushRaw === EPSILON ? [] : parseSymbolList(pushRaw, known),
+  }));
+  const model = { states, initial, accepting: acceptingList, transitions: parsedTransitions };
   if (initialStackSymbol != null) model.initialStackSymbol = initialStackSymbol;
   return { ok: true, model };
 }
