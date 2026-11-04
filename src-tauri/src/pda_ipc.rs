@@ -58,9 +58,9 @@ impl PdaEditOpDto {
             PdaEditOpDto::SetAccepting { id, accepting } => PdaEditOp::SetAccepting { id: StateId(id), accepting },
             PdaEditOpDto::SetInitial { id } => PdaEditOp::SetInitial { id: id.map(StateId) },
             PdaEditOpDto::SetInitialStackSymbol { symbol } => {
-                let trimmed = symbol.trim();
-                let symbol = if trimmed.is_empty() { "Z" } else { trimmed };
-                PdaEditOp::SetInitialStackSymbol { symbol: symbol.to_string() }
+                let compact: String = symbol.split_whitespace().collect();
+                let symbol = if compact.is_empty() { "Z".to_string() } else { compact };
+                PdaEditOp::SetInitialStackSymbol { symbol }
             }
             PdaEditOpDto::AddTransition { from, to, input, pop, push } => {
                 PdaEditOp::AddTransition { from: StateId(from), to: StateId(to), input, pop, push }
