@@ -3,6 +3,28 @@
 use automata_core::engine::pda::{run_pda, AcceptMode};
 use automata_core::engine::{Budget, Outcome};
 use automata_core::model::pda::PdaDoc;
+use automata_core::pda_doc::{PdaDocument, PdaEditOp};
+
+fn set_symbol(symbol: &str) -> PdaEditOp {
+    PdaEditOp::SetInitialStackSymbol { symbol: symbol.to_string() }
+}
+
+#[test]
+fn changing_the_symbol_can_be_undone_and_redone() {
+    let mut document = PdaDocument::new();
+
+    document.apply(vec![set_symbol("A")]);
+    document.apply(vec![set_symbol("Z0")]);
+    assert_eq!(document.model.initial_stack_symbol(), "Z0");
+
+    assert!(document.undo());
+    assert_eq!(document.model.initial_stack_symbol(), "A");
+    assert!(document.undo());
+    assert_eq!(document.model.initial_stack_symbol(), "Z");
+
+    assert!(document.redo());
+    assert_eq!(document.model.initial_stack_symbol(), "A");
+}
 
 /// Workbook exercise 2-2: its initial stack symbol is the two-character `Z0`.
 #[test]
