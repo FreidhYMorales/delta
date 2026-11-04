@@ -22,6 +22,7 @@
 // plain outcome label, no per-config diagram highlighting" scope PDA's own
 // `PdaSimView.js` already documents.
 
+import { tokenizeInput } from "../testing/testingLogic.js";
 import { effectiveTapeCount, formatTapeCells } from "./tmLogic.js";
 
 const OUTCOME_LABELS = {
@@ -122,7 +123,7 @@ export class TmSimView {
       const input = document.createElement("input");
       input.type = "text";
       input.className = "tm-sim-input string-input";
-      input.placeholder = "p.ej. a a b b";
+      input.placeholder = "p.ej. aabb";
       if (oldValues[i]) input.value = oldValues[i];
 
       this.tapeInputsContainer.append(label, input);
@@ -131,7 +132,13 @@ export class TmSimView {
   }
 
   async _onRun() {
-    const inputs = this.tapeInputs.map((input) => input.value.split(/\s+/).filter(Boolean));
+    const alphabet = this.docStore.derived?.alphabet ?? [];
+    const inputs = this.tapeInputs.map((input) =>
+      input.value
+        .split(/\s+/)
+        .filter(Boolean)
+        .flatMap((chunk) => tokenizeInput(chunk, alphabet)),
+    );
     const outcome = await this.runSim(inputs, this.acceptBySelect.value);
     this._renderOutcome(outcome);
   }
