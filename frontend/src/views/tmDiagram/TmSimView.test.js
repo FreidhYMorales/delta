@@ -70,6 +70,44 @@ describe("TmSimView tape input fields", () => {
   });
 });
 
+describe("TmSimView word splitting", () => {
+  async function symbolsSentFor(words, alphabet) {
+    const runSim = vi.fn().mockResolvedValue({ outcome: "Accepted", steps: [] });
+    const docStore = fakeDocStore(words.length);
+    docStore.derived.alphabet = alphabet;
+    const { container, view } = setup(docStore, fakeCtx(1), runSim);
+
+    const inputs = container.querySelectorAll(".tm-sim-input");
+    words.forEach((word, i) => {
+      inputs[i].value = word;
+    });
+    container.querySelector(".btn-primary").click();
+    await view._lastRunPromise;
+
+    return runSim.mock.calls[0][0];
+  }
+
+  it("splits a word without spaces using the machine's alphabet", async () => {
+    expect(await symbolsSentFor(["010"], ["0", "1"])).toEqual([["0", "1", "0"]]);
+  });
+
+  it("still accepts the same word written with spaces", async () => {
+    expect(await symbolsSentFor(["0 1 0"], ["0", "1"])).toEqual([["0", "1", "0"]]);
+  });
+
+  it("prefers the longest symbol of the alphabet", async () => {
+    expect(await symbolsSentFor(["aab"], ["a", "ab"])).toEqual([["a", "ab"]]);
+  });
+
+  it("keeps a space as a separator even when the joined text would be a longer symbol", async () => {
+    expect(await symbolsSentFor(["a b"], ["a", "b", "ab"])).toEqual([["a", "b"]]);
+  });
+
+  it("splits each tape's word on its own", async () => {
+    expect(await symbolsSentFor(["010", "ab"], ["0", "1", "a", "b"])).toEqual([["0", "1", "0"], ["a", "b"]]);
+  });
+});
+
 describe("TmSimView run", () => {
   it("builds inputs: string[][] — one array per tape field, split on whitespace", async () => {
     const runSim = vi.fn().mockResolvedValue({ outcome: "Accepted", steps: [] });
