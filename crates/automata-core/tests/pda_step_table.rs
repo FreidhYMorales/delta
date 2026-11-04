@@ -133,6 +133,26 @@ fn exercise_1_2_aaabbab_ends_blocked_and_is_not_accepted() {
 }
 
 #[test]
+fn exercise_1_2_aabbb_ends_on_an_empty_stack_without_a_blocked_row() {
+    let result = table(&exercise_1_2(), "aabbb", AcceptMode::FinalState);
+
+    assert!(!result.accepted);
+    assert_eq!(
+        rows(&result),
+        expected(&[
+            ("p", "aabbb", "Z", "q1", "AZ"),
+            ("q1", "aabbb", "AZ", "q2", "BAZ"),
+            ("q2", "abbb", "BAZ", "q2", "BBAZ"),
+            ("q2", "bbb", "BBAZ", "q3", "BAZ"),
+            ("q3", "bb", "BAZ", "q3", "AZ"),
+            ("q3", "b", "AZ", "q4", "AZ"),
+            ("q4", "b", "AZ", "r", "Z"),
+            ("r", "b", "Z", "r", "ε"),
+        ]),
+    );
+}
+
+#[test]
 fn exercise_2_2_abb_shows_the_workbook_rows_and_is_accepted() {
     let result = table(&exercise_2_2(), "abb", AcceptMode::FinalState);
 
