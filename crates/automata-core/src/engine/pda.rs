@@ -292,7 +292,8 @@ pub fn pda_step_table(doc: &PdaDoc, input: &[&str], accept_mode: AcceptMode, bud
             row(&nodes[pair[0]], Some((state_name(to.cfg.0), named_stack(doc, &to.cfg.1))))
         })
         .collect();
-    if accepted.is_none() {
+    // An empty stack has no top to read, so there is no blocked move to show.
+    if accepted.is_none() && !nodes[last].cfg.1.is_empty() {
         rows.push(row(&nodes[last], None));
     }
     PdaStepTable { accepted: accepted.is_some(), rows }
