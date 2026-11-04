@@ -144,6 +144,41 @@ describe("mountPdaTab initial stack symbol field", () => {
   });
 });
 
+describe("mountPdaTab word typed on the Simular tab", () => {
+  async function symbolsSentFor(word, inputAlphabet) {
+    const hosts = fakeHosts();
+    const pdaSim = vi.fn().mockResolvedValue({ outcome: "Accepted", steps: [] });
+    const snapshot = {
+      ...emptySnapshot(),
+      derived: { input_alphabet: inputAlphabet, stack_alphabet: [], deterministic: true, unreachable: [] },
+    };
+    mountPdaTab(0, hosts, fakeClient({ pdaSnapshot: vi.fn().mockResolvedValue(snapshot), pdaSim }));
+    await new Promise((resolve) => setTimeout(resolve));
+
+    hosts.contentHost.querySelector(".pda-sim-input").value = word;
+    hosts.contentHost.querySelector(".pda-sim-view .btn-primary").click();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    return pdaSim.mock.calls[0][0];
+  }
+
+  it("splits a word without spaces using the machine's input alphabet", async () => {
+    expect(await symbolsSentFor("aababb", ["a", "b"])).toEqual(["a", "a", "b", "a", "b", "b"]);
+  });
+
+  it("still accepts the same word written with spaces", async () => {
+    expect(await symbolsSentFor("a a b a b b", ["a", "b"])).toEqual(["a", "a", "b", "a", "b", "b"]);
+  });
+
+  it("prefers the longest symbol of the alphabet", async () => {
+    expect(await symbolsSentFor("aab", ["a", "ab"])).toEqual(["a", "ab"]);
+  });
+
+  it("keeps a space as a separator even when the joined text would be a longer symbol", async () => {
+    expect(await symbolsSentFor("a b", ["a", "b", "ab"])).toEqual(["a", "b"]);
+  });
+});
+
 describe("mountPdaTab prompt hooks' Greek-letter conversion", () => {
   it("promptInput converts a typed Greek letter name to its symbol", async () => {
     const hosts = fakeHosts();
