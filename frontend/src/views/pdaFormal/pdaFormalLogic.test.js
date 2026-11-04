@@ -202,6 +202,25 @@ describe("parseFormalText stack strings", () => {
 });
 
 describe("parseFormalText", () => {
+  it("removes a space inside the Z0 line's symbol", () => {
+    const result = parseFormalText("Q = {q0}\nq0 = q0\nZ0 = Z 0\nF = {}");
+    expect(result.ok).toBe(true);
+    expect(result.model.initialStackSymbol).toBe("Z0");
+  });
+
+  it("reads back the text it generates for a multi-character symbol", () => {
+    const text = formatFormalText({
+      states: [{ id: 1, label: "q0", initial: true, accepting: false }],
+      transitions: [],
+      derived: { input_alphabet: [], stack_alphabet: ["Z0"], initial_stack_symbol: "Z0" },
+    });
+
+    const result = parseFormalText(text);
+
+    expect(result.ok).toBe(true);
+    expect(result.model.initialStackSymbol).toBe("Z0");
+  });
+
   it("reads the Z0 line back as the initial stack symbol", () => {
     const result = parseFormalText("Q = {q0}\nq0 = q0\nZ0 = A\nF = {}");
     expect(result.ok).toBe(true);

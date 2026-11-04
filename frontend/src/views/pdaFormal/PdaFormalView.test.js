@@ -71,6 +71,17 @@ describe("PdaFormalView", () => {
     expect(allOps).toEqual(expect.arrayContaining([{ op: "SetInitial", id: 2 }]));
   });
 
+  it("sends the symbol without its space when applying a Z0 line written with one", async () => {
+    const { container, client, view } = await setup();
+    const textarea = container.querySelector("textarea");
+    textarea.value = ["Q = {q0, q1}", "q0 = q0", "Z0 = Z 0", "F = {q1}"].join("\n");
+    container.querySelector("button.apply").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await view._lastApplyPromise;
+
+    const allOps = client.pdaApply.mock.calls.flatMap((c) => c[0]);
+    expect(allOps).toEqual(expect.arrayContaining([{ op: "SetInitialStackSymbol", symbol: "Z0" }]));
+  });
+
   it("reads stack strings with the machine's known symbols when applying", async () => {
     const { container, client, docStore, view } = await setup();
     docStore.derived = { ...docStore.derived, stack_alphabet: ["A", "Z0"] };
