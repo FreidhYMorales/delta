@@ -137,6 +137,8 @@ pub struct PdaDto {
     /// same endpoints with different `(input, pop, push)` triples.
     pub transitions: Vec<PdaTransitionDto>,
     pub initial: Option<usize>,
+    #[serde(default)]
+    pub initial_stack_symbol: String,
 }
 
 /// Has `accepting`, unlike `MealyStateDto`/`MooreStateDto` — a PDA
@@ -510,13 +512,14 @@ pub fn pda_to_dto(doc: &PdaDoc) -> PdaDto {
 
     let initial = doc.initial_state().map(|id| index_of[&id]);
 
-    PdaDto { states, transitions, initial }
+    PdaDto { states, transitions, initial, initial_stack_symbol: doc.initial_stack_symbol().to_string() }
 }
 
 /// Reconstruct a `PdaDoc` from its DTO, allocating fresh `StateId`s in
 /// `states` array order.
 pub fn pda_from_dto(dto: &PdaDto) -> Result<PdaDoc, DtoError> {
     let mut doc = PdaDoc::new();
+    doc.set_initial_stack_symbol(&dto.initial_stack_symbol);
     let mut ids = Vec::with_capacity(dto.states.len());
     for s in &dto.states {
         let id = doc.add_state(&s.label, s.x, s.y).map_err(|_| DtoError::InvalidStateIndex(ids.len()))?;
