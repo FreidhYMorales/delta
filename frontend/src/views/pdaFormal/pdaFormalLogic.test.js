@@ -18,7 +18,17 @@ describe("formatFormalText", () => {
     expect(text).toContain("q0 = q0");
     expect(text).toContain("F = {q1}");
     expect(text).toContain("δ(q0, a, Z) = (q1, A Z)");
-    expect(text).toMatch(/#.*Z0.*"Z"/);
+    expect(text).toContain("\nZ0 = Z\n");
+    expect(text).not.toContain("#");
+  });
+
+  it("renders the machine's own initial stack symbol as a real Z0 line", () => {
+    const text = formatFormalText({
+      states: [],
+      transitions: [],
+      derived: { input_alphabet: [], stack_alphabet: ["Z0"], initial_stack_symbol: "Z0" },
+    });
+    expect(text).toContain("Z0 = Z0");
   });
 
   it("renders epsilon for empty input/pop/push fields", () => {
@@ -60,6 +70,12 @@ describe("formatFormalText", () => {
 });
 
 describe("parseFormalText", () => {
+  it("reads the Z0 line back as the initial stack symbol", () => {
+    const result = parseFormalText("Q = {q0}\nq0 = q0\nZ0 = A\nF = {}");
+    expect(result.ok).toBe(true);
+    expect(result.model.initialStackSymbol).toBe("A");
+  });
+
   it("parses a well-formed definition, including F and multi-symbol pop/push", () => {
     const text = [
       "Q = {q0, q1}",
