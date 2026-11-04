@@ -259,3 +259,44 @@ fn a_grammar_tab_keeps_its_source_through_save_and_open() {
     assert!(bnf.analysis.error.is_none());
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn a_pda_tab_keeps_its_initial_stack_symbol_through_save_and_open() {
+    use app_lib::commands::pda;
+    use app_lib::pda_ipc::PdaEditOpDto;
+
+    let fx = Fixture::new();
+    let id = project::new_tab(&fx.project, &fx.sessions(), MachineKind::Pda, "P".into()).unwrap().tabs[0].id;
+    pda::apply(&fx.pda, id, vec![PdaEditOpDto::SetInitialStackSymbol { symbol: "Z0".into() }]).unwrap();
+
+    let dir = std::env::temp_dir().join(format!("pda-tab-symbol-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("p.json").to_string_lossy().to_string();
+    project::save_project(&fx.project, &fx.sessions(), path.clone()).unwrap();
+
+    let reopened = Fixture::new();
+    let manifest = project::open_project(&reopened.project, &reopened.sessions(), path).unwrap();
+    let snapshot = pda::snapshot(&reopened.pda, manifest.tabs[0].id).unwrap();
+    assert_eq!(snapshot.derived.initial_stack_symbol, "Z0");
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn a_pda_tab_saved_without_the_symbol_opens_with_z() {
+    use app_lib::commands::pda;
+
+    let dir = std::env::temp_dir().join(format!("pda-tab-old-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("p.json");
+    std::fs::write(
+        &path,
+        r#"{"version":1,"tabs":[{"name":"P","model":{"kind":"Pda","states":[],"transitions":[],"initial":null}}]}"#,
+    )
+    .unwrap();
+
+    let fx = Fixture::new();
+    let manifest = project::open_project(&fx.project, &fx.sessions(), path.to_string_lossy().to_string()).unwrap();
+    let snapshot = pda::snapshot(&fx.pda, manifest.tabs[0].id).unwrap();
+    assert_eq!(snapshot.derived.initial_stack_symbol, "Z");
+    std::fs::remove_dir_all(dir).ok();
+}
