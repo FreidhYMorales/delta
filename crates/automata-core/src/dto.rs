@@ -137,8 +137,14 @@ pub struct PdaDto {
     /// same endpoints with different `(input, pop, push)` triples.
     pub transitions: Vec<PdaTransitionDto>,
     pub initial: Option<usize>,
-    #[serde(default)]
+    /// Absent from files saved before this field existed; those always
+    /// started from `Z`.
+    #[serde(default = "default_initial_stack_symbol")]
     pub initial_stack_symbol: String,
+}
+
+fn default_initial_stack_symbol() -> String {
+    "Z".to_string()
 }
 
 /// Has `accepting`, unlike `MealyStateDto`/`MooreStateDto` — a PDA
