@@ -18,6 +18,15 @@ describe("parseTapeOpText", () => {
     expect(parseTapeOpText(formatTapeOpForPrompt(tape))).toEqual(tape);
   });
 
+  it("reads an uppercase B as the blank glyph in the read and the write", () => {
+    expect(parseTapeOpText("B ; B , S")).toEqual({ read: BLANK, write: BLANK, direction: "S" });
+    expect(parseTapeOpText("B ; 1 , L")).toEqual({ read: BLANK, write: "1", direction: "L" });
+  });
+
+  it("keeps a lowercase b as an ordinary symbol", () => {
+    expect(parseTapeOpText("b ; b , R")).toEqual({ read: "b", write: "b", direction: "R" });
+  });
+
   it("defaults a blank read to the blank glyph", () => {
     expect(parseTapeOpText(" ; b , R")).toEqual({ read: BLANK, write: "b", direction: "R" });
   });
