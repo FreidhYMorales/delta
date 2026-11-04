@@ -4,6 +4,8 @@
 // `mealyLogic.js`'s doc comment for why `views/diagram/geometry.js`'s pure
 // functions are imported directly by the diagram view instead.
 
+import { tokenizeInput } from "../testing/testingLogic.js";
+
 /** This project's own established epsilon glyph (already used for FA
  * epsilon transitions in `views/diagram/DiagramView.js`) — used here
  * instead of real JFLAP's own "λ" glyph, for visual consistency across
@@ -25,11 +27,9 @@ export function parseInputSymbol(text) {
 }
 
 /**
- * Parse a pop/push string-list prompt — space- or comma-separated symbol
- * labels (e.g. "A Z" or "A, Z"). A separator is required (unlike real
- * JFLAP's raw single-character strings) because this project's stack
- * symbols are atomic `SymbolId` labels that can be more than one character
- * (see docs/decisions.md, the PDA backend entry).
+ * Parse a pop/push string (e.g. "NZ", "N Z" or "N, Z"). Spaces and commas
+ * separate; inside each chunk a character is one symbol, the way the course
+ * writes stack strings.
  * @param {string} text
  * @returns {string[]} empty array = epsilon (pop/push nothing).
  */
@@ -37,7 +37,8 @@ export function parseSymbolList(text) {
   return (text ?? "")
     .trim()
     .split(/[\s,]+/)
-    .filter(Boolean);
+    .filter(Boolean)
+    .flatMap((chunk) => tokenizeInput(chunk, []));
 }
 
 /** @param {string[]} symbols @returns {string} e.g. "A Z", for prefilling an edit prompt. */
