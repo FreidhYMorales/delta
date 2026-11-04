@@ -34,6 +34,17 @@ fn the_steps_show_the_chosen_symbol_even_when_no_transition_uses_it() {
 }
 
 #[test]
+fn a_space_inside_the_symbol_is_removed() {
+    let session = PdaSession::new();
+
+    set_symbol(&session, "Z 0");
+
+    let snapshot = pda::snapshot(&session, SEEDED_TAB_ID).unwrap();
+    assert_eq!(snapshot.derived.initial_stack_symbol, "Z0");
+    assert_eq!(snapshot.derived.stack_alphabet, vec!["Z0".to_string()]);
+}
+
+#[test]
 fn spaces_around_the_symbol_are_not_stored() {
     let session = PdaSession::new();
 
