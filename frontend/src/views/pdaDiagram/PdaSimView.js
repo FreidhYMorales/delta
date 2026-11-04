@@ -14,6 +14,7 @@
 // plain outcome label, no per-config diagram highlighting" scope Moore/Mealy
 // started with — a step-by-step visual trace can come later if needed.
 
+import { createCopyTableButton } from "../../ui/copyTable.js";
 import { tokenizeInput } from "../testing/testingLogic.js";
 
 const OUTCOME_LABELS = {
@@ -173,7 +174,13 @@ export class PdaSimView {
     verdict.className = `pda-sim-verdict ${verdictVariant(outcome.outcome)}`;
     verdict.textContent = `Resultado: ${OUTCOME_LABELS[outcome.outcome] ?? outcome.outcome}`;
     this.output.appendChild(verdict);
-    if (outcome.table?.length) this.output.appendChild(buildStepTable(outcome.table, outcome.outcome));
+    if (outcome.table?.length) {
+      const table = buildStepTable(outcome.table, outcome.outcome);
+      const buttons = document.createElement("div");
+      buttons.className = "table-buttons-row";
+      buttons.appendChild(createCopyTableButton(() => table));
+      this.output.append(buttons, table);
+    }
 
     const list = document.createElement("ol");
     list.className = "pda-sim-steps";
