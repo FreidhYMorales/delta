@@ -252,6 +252,28 @@ fn exercise_2_2_empty_word_shows_the_workbook_row() {
     assert_eq!(rows(&result), expected(&[("q0", "ε", "Z0", "f", "ε")]));
 }
 
+/// Two equally short accepting paths: the one whose transition was added first
+/// wins, every time. Rebuilt repeatedly because a machine's transitions live in
+/// a hash map, whose order changes between instances.
+#[test]
+fn equally_short_paths_always_give_the_same_table() {
+    for _ in 0..50 {
+        let mut doc = machine(
+            &["q0", "q1", "q2"],
+            "q0",
+            "q1",
+            "Z",
+            &[("q0", "", "Z", "q1", "Z"), ("q0", "", "Z", "q2", "Z")],
+        );
+        let q2 = doc.states().find(|s| doc.state_label(*s) == Some("q2")).unwrap();
+        doc.set_accepting(q2, true);
+
+        let result = table(&doc, "", AcceptMode::FinalState);
+
+        assert_eq!(rows(&result), expected(&[("q0", "ε", "Z", "q1", "Z")]));
+    }
+}
+
 #[test]
 fn exercise_2_2_abb_shows_the_workbook_rows_and_is_accepted() {
     let result = table(&exercise_2_2(), "abb", AcceptMode::FinalState);
