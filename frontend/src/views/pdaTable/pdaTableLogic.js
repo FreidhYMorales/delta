@@ -19,11 +19,12 @@ import { parseInputSymbol, parseSymbolList } from "../pdaDiagram/pdaLogic.js";
  * @param {{id:number, input:string|null, pop:string[], push:string[]}} transition
  * @param {"input"|"pop"|"push"} field
  * @param {string} raw
+ * @param {string[]} [knownSymbols] the machine's stack alphabet
  */
-export function computeFieldEditOp(transition, field, raw) {
+export function computeFieldEditOp(transition, field, raw, knownSymbols = []) {
   const next = { input: transition.input, pop: transition.pop, push: transition.push };
   if (field === "input") next.input = parseInputSymbol(raw);
-  else next[field] = parseSymbolList(raw);
+  else next[field] = parseSymbolList(raw, knownSymbols);
 
   const unchanged =
     next.input === transition.input && sameList(next.pop, transition.pop) && sameList(next.push, transition.push);
@@ -65,16 +66,17 @@ export function computeRetargetOps(transition, field, newStateId) {
  * "type a new label" convention in Mealy/Moore's grids). Returns `null` if
  * either endpoint is missing (e.g. the document has no states yet).
  * @param {{from:number|null, to:number|null, input:string, pop:string, push:string}} raw
+ * @param {string[]} [knownSymbols] the machine's stack alphabet
  */
-export function computeAddTransitionOp(raw) {
+export function computeAddTransitionOp(raw, knownSymbols = []) {
   if (raw.from == null || raw.to == null) return null;
   return {
     op: "AddTransition",
     from: raw.from,
     to: raw.to,
     input: parseInputSymbol(raw.input),
-    pop: parseSymbolList(raw.pop),
-    push: parseSymbolList(raw.push),
+    pop: parseSymbolList(raw.pop, knownSymbols),
+    push: parseSymbolList(raw.push, knownSymbols),
   };
 }
 

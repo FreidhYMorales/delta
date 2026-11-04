@@ -286,7 +286,7 @@ export class PdaTableView {
   }
 
   async _onAddTransition() {
-    const op = computeAddTransitionOp(this._newTransition);
+    const op = computeAddTransitionOp(this._newTransition, this.docStore.derived.stack_alphabet);
     if (!op) return;
     this._newTransition = { from: this._newTransition.from, to: this._newTransition.to, input: "", pop: "", push: "" };
     await this.docStore.apply([op]);
@@ -295,7 +295,7 @@ export class PdaTableView {
   async _onFieldEdit(transitionId, field, raw) {
     const transition = this.docStore.getTransition(transitionId);
     if (!transition) return;
-    const op = computeFieldEditOp(transition, field, raw);
+    const op = computeFieldEditOp(transition, field, raw, this.docStore.derived.stack_alphabet);
     if (op) await this.docStore.apply([op]);
   }
 
