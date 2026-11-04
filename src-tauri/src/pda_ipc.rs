@@ -42,6 +42,7 @@ pub enum PdaEditOpDto {
     RenameState { id: u32, label: String },
     SetAccepting { id: u32, accepting: bool },
     SetInitial { id: Option<u32> },
+    SetInitialStackSymbol { symbol: String },
     AddTransition { from: u32, to: u32, input: Option<String>, pop: Vec<String>, push: Vec<String> },
     RemoveTransition { id: u32 },
     EditTransition { id: u32, input: Option<String>, pop: Vec<String>, push: Vec<String> },
@@ -56,6 +57,11 @@ impl PdaEditOpDto {
             PdaEditOpDto::RenameState { id, label } => PdaEditOp::RenameState { id: StateId(id), label },
             PdaEditOpDto::SetAccepting { id, accepting } => PdaEditOp::SetAccepting { id: StateId(id), accepting },
             PdaEditOpDto::SetInitial { id } => PdaEditOp::SetInitial { id: id.map(StateId) },
+            PdaEditOpDto::SetInitialStackSymbol { symbol } => {
+                let trimmed = symbol.trim();
+                let symbol = if trimmed.is_empty() { "Z" } else { trimmed };
+                PdaEditOp::SetInitialStackSymbol { symbol: symbol.to_string() }
+            }
             PdaEditOpDto::AddTransition { from, to, input, pop, push } => {
                 PdaEditOp::AddTransition { from: StateId(from), to: StateId(to), input, pop, push }
             }
@@ -91,6 +97,7 @@ pub struct PdaTransitionView {
 pub struct PdaDerived {
     pub input_alphabet: Vec<String>,
     pub stack_alphabet: Vec<String>,
+    pub initial_stack_symbol: String,
     pub deterministic: bool,
     pub unreachable: Vec<u32>,
 }
@@ -182,6 +189,10 @@ fn sorted_input_alphabet(model: &PdaDoc) -> Vec<String> {
 fn sorted_stack_alphabet(model: &PdaDoc) -> Vec<String> {
     let mut alphabet: Vec<String> =
         model.stack_alphabet().iter().filter_map(|s| model.stack_symbol_label(*s).map(str::to_string)).collect();
+    let initial = model.initial_stack_symbol().to_string();
+    if !alphabet.contains(&initial) {
+        alphabet.push(initial);
+    }
     alphabet.sort();
     alphabet
 }
@@ -220,6 +231,7 @@ pub(crate) fn derived_of(model: &PdaDoc) -> PdaDerived {
     PdaDerived {
         input_alphabet: sorted_input_alphabet(model),
         stack_alphabet: sorted_stack_alphabet(model),
+        initial_stack_symbol: model.initial_stack_symbol().to_string(),
         deterministic: model.is_deterministic(),
         unreachable: unreachable_states(model),
     }
