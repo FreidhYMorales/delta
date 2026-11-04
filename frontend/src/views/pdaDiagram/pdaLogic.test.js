@@ -26,6 +26,11 @@ describe("parseSymbolList", () => {
     expect(parseSymbolList("BNN, Z")).toEqual(["B", "N", "N", "Z"]);
   });
 
+  it("prefers the longest symbol already known in the stack alphabet", () => {
+    expect(parseSymbolList("AAZ0", ["A", "Z0"])).toEqual(["A", "A", "Z0"]);
+    expect(parseSymbolList("NZ", ["NZ", "N", "Z"])).toEqual(["NZ"]);
+  });
+
   it("splits on whitespace", () => {
     expect(parseSymbolList("A Z")).toEqual(["A", "Z"]);
   });
