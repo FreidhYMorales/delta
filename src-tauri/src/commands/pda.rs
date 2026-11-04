@@ -118,7 +118,7 @@ fn config_view(model: &PdaDoc, cfg: &PdaConfig) -> PdaConfigView {
     let labels: Vec<String> = stack
         .iter()
         .rev()
-        .map(|s| model.stack_symbol_label(*s).map(str::to_string).unwrap_or_else(|| "Z".to_string()))
+        .map(|s| model.stack_symbol_label(*s).map(str::to_string).unwrap_or_else(|| model.initial_stack_symbol().to_string()))
         .collect();
     PdaConfigView { state: state.0, stack: labels }
 }
