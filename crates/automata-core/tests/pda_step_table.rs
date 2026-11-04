@@ -152,6 +152,106 @@ fn exercise_1_2_aabbb_ends_on_an_empty_stack_without_a_blocked_row() {
     );
 }
 
+fn exercise_1_1() -> PdaDoc {
+    machine(
+        &["mn", "m", "t", "n"],
+        "mn",
+        "n",
+        "Z",
+        &[
+            ("mn", "a", "Z", "mn", "N Z"),
+            ("mn", "a", "M", "mn", "M M"),
+            ("mn", "a", "N", "mn", "M N"),
+            ("mn", "a", "N", "mn", "N N"),
+            ("mn", "b", "N", "m", "B N"),
+            ("mn", "b", "M", "m", ""),
+            ("m", "b", "B", "m", "B B"),
+            ("m", "b", "N", "m", "B N"),
+            ("m", "b", "M", "m", ""),
+            ("m", "a", "B", "t", ""),
+            ("t", "a", "B", "t", ""),
+            ("t", "b", "N", "n", ""),
+            ("n", "b", "N", "n", ""),
+            ("n", "", "Z", "n", ""),
+        ],
+    )
+}
+
+fn exercise_2_1() -> PdaDoc {
+    machine(
+        &["q1", "q2", "q3", "q4"],
+        "q1",
+        "q4",
+        "A",
+        &[
+            ("q1", "a", "A", "q2", "B A"),
+            ("q1", "a", "A", "q4", "A"),
+            ("q1", "", "A", "q4", ""),
+            ("q2", "a", "B", "q2", "B B"),
+            ("q2", "b", "B", "q3", ""),
+            ("q3", "", "A", "q4", "A"),
+            ("q3", "b", "B", "q3", ""),
+        ],
+    )
+}
+
+#[test]
+fn exercise_1_1_shows_the_workbook_rows_by_empty_stack() {
+    let first = table(&exercise_1_1(), "aababb", AcceptMode::EmptyStack);
+    assert!(first.accepted);
+    assert_eq!(
+        rows(&first),
+        expected(&[
+            ("mn", "aababb", "Z", "mn", "NZ"),
+            ("mn", "ababb", "NZ", "mn", "NNZ"),
+            ("mn", "babb", "NNZ", "m", "BNNZ"),
+            ("m", "abb", "BNNZ", "t", "NNZ"),
+            ("t", "bb", "NNZ", "n", "NZ"),
+            ("n", "b", "NZ", "n", "Z"),
+            ("n", "ε", "Z", "n", "ε"),
+        ]),
+    );
+
+    let second = table(&exercise_1_1(), "aaabbabb", AcceptMode::EmptyStack);
+    assert!(second.accepted);
+    assert_eq!(
+        rows(&second),
+        expected(&[
+            ("mn", "aaabbabb", "Z", "mn", "NZ"),
+            ("mn", "aabbabb", "NZ", "mn", "NNZ"),
+            ("mn", "abbabb", "NNZ", "mn", "MNNZ"),
+            ("mn", "bbabb", "MNNZ", "m", "NNZ"),
+            ("m", "babb", "NNZ", "m", "BNNZ"),
+            ("m", "abb", "BNNZ", "t", "NNZ"),
+            ("t", "bb", "NNZ", "n", "NZ"),
+            ("n", "b", "NZ", "n", "Z"),
+            ("n", "ε", "Z", "n", "ε"),
+        ]),
+    );
+}
+
+#[test]
+fn exercise_2_1_shows_the_workbook_rows_by_final_state() {
+    let empty = table(&exercise_2_1(), "", AcceptMode::FinalState);
+    assert!(empty.accepted);
+    assert_eq!(rows(&empty), expected(&[("q1", "ε", "A", "q4", "ε")]));
+
+    let ab = table(&exercise_2_1(), "ab", AcceptMode::FinalState);
+    assert!(ab.accepted);
+    assert_eq!(
+        rows(&ab),
+        expected(&[("q1", "ab", "A", "q2", "BA"), ("q2", "b", "BA", "q3", "A"), ("q3", "ε", "A", "q4", "A")]),
+    );
+}
+
+#[test]
+fn exercise_2_2_empty_word_shows_the_workbook_row() {
+    let result = table(&exercise_2_2(), "", AcceptMode::FinalState);
+
+    assert!(result.accepted);
+    assert_eq!(rows(&result), expected(&[("q0", "ε", "Z0", "f", "ε")]));
+}
+
 #[test]
 fn exercise_2_2_abb_shows_the_workbook_rows_and_is_accepted() {
     let result = table(&exercise_2_2(), "abb", AcceptMode::FinalState);
