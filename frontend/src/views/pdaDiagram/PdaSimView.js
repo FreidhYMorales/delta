@@ -14,6 +14,8 @@
 // plain outcome label, no per-config diagram highlighting" scope Moore/Mealy
 // started with — a step-by-step visual trace can come later if needed.
 
+import { tokenizeInput } from "../testing/testingLogic.js";
+
 const OUTCOME_LABELS = {
   Accepted: "Aceptado",
   Rejected: "Rechazado",
@@ -74,12 +76,12 @@ export class PdaSimView {
 
     const label = document.createElement("label");
     label.className = "field-label";
-    label.textContent = "Entrada (símbolos separados por espacio)";
+    label.textContent = "Entrada";
 
     this.input = document.createElement("input");
     this.input.type = "text";
     this.input.className = "pda-sim-input string-input";
-    this.input.placeholder = "p.ej. a a b b";
+    this.input.placeholder = "p.ej. aabb";
 
     const acceptLabel = document.createElement("label");
     acceptLabel.className = "field-label";
@@ -116,7 +118,11 @@ export class PdaSimView {
   }
 
   async _onRun() {
-    const input = this.input.value.split(/\s+/).filter(Boolean);
+    const alphabet = this.docStore?.derived?.input_alphabet ?? [];
+    const input = this.input.value
+      .split(/\s+/)
+      .filter(Boolean)
+      .flatMap((chunk) => tokenizeInput(chunk, alphabet));
     const outcome = await this.runSim(input, this.acceptBySelect.value);
     this._renderOutcome(outcome);
   }
