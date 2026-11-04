@@ -28,17 +28,18 @@ export function parseInputSymbol(text) {
 
 /**
  * Parse a pop/push string (e.g. "NZ", "N Z" or "N, Z"). Spaces and commas
- * separate; inside each chunk a character is one symbol, the way the course
- * writes stack strings.
+ * separate; inside each chunk the longest known symbol wins, otherwise a
+ * character is one symbol, the way the course writes stack strings.
  * @param {string} text
+ * @param {string[]} [knownSymbols] the machine's stack alphabet
  * @returns {string[]} empty array = epsilon (pop/push nothing).
  */
-export function parseSymbolList(text) {
+export function parseSymbolList(text, knownSymbols = []) {
   return (text ?? "")
     .trim()
     .split(/[\s,]+/)
     .filter(Boolean)
-    .flatMap((chunk) => tokenizeInput(chunk, []));
+    .flatMap((chunk) => tokenizeInput(chunk, knownSymbols));
 }
 
 /** @param {string[]} symbols @returns {string} e.g. "A Z", for prefilling an edit prompt. */
