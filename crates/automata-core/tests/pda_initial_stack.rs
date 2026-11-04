@@ -21,6 +21,31 @@ fn a_saved_file_keeps_the_symbol_when_reopened() {
     assert_eq!(reopened.initial_stack_symbol(), "A");
 }
 
+/// The file shape saved before the initial stack symbol existed.
+#[test]
+fn a_file_without_the_symbol_opens_with_z_and_gives_the_same_verdict() {
+    let old_file = r#"{
+        "version": 1,
+        "document": {
+            "kind": "Pda",
+            "states": [
+                {"label": "q0", "x": 0.0, "y": 0.0, "accepting": false},
+                {"label": "q1", "x": 1.0, "y": 0.0, "accepting": true}
+            ],
+            "transitions": [
+                {"from": 0, "to": 1, "input": "a", "pop": ["Z"], "push": []}
+            ],
+            "initial": 0
+        }
+    }"#;
+
+    let doc = pda_load_from_str(old_file).unwrap();
+
+    assert_eq!(doc.initial_stack_symbol(), "Z");
+    let trace = run_pda(&doc, &["a"], AcceptMode::FinalState, Budget::default());
+    assert_eq!(trace.outcome, Outcome::Accepted);
+}
+
 #[test]
 fn changing_the_symbol_can_be_undone_and_redone() {
     let mut document = PdaDocument::new();
