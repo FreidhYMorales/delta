@@ -309,6 +309,37 @@ mod tests {
         assert_eq!(outcome(&doc, &["z"], AcceptMode::FinalState), Outcome::Stuck);
     }
 
+    /// Workbook exercise 2-1: its initial stack symbol is `A`, not `Z`.
+    #[test]
+    fn exercise_2_1_starts_from_its_own_initial_stack_symbol_and_accepts_ab() {
+        let mut doc = PdaDoc::new();
+        let q1 = doc.add_state("q1", 0.0, 0.0).unwrap();
+        let q2 = doc.add_state("q2", 1.0, 0.0).unwrap();
+        let q3 = doc.add_state("q3", 2.0, 0.0).unwrap();
+        let q4 = doc.add_state("q4", 3.0, 0.0).unwrap();
+        doc.set_initial(Some(q1));
+        doc.set_accepting(q4, true);
+        doc.set_initial_stack_symbol("A");
+
+        let a = doc.intern_input_symbol("a");
+        let b = doc.intern_input_symbol("b");
+        let sym_a = doc.intern_stack_symbol("A");
+        let sym_b = doc.intern_stack_symbol("B");
+        doc.add_transition(q1, q2, Some(a), vec![sym_a], vec![sym_b, sym_a]);
+        doc.add_transition(q1, q4, Some(a), vec![sym_a], vec![sym_a]);
+        doc.add_transition(q1, q4, None, vec![sym_a], vec![]);
+        doc.add_transition(q2, q2, Some(a), vec![sym_b], vec![sym_b, sym_b]);
+        doc.add_transition(q2, q3, Some(b), vec![sym_b], vec![]);
+        doc.add_transition(q3, q4, None, vec![sym_a], vec![sym_a]);
+        doc.add_transition(q3, q3, Some(b), vec![sym_b], vec![]);
+
+        let trace = run_pda(&doc, &["a", "b"], AcceptMode::FinalState, Budget::default());
+
+        assert_eq!(trace.outcome, Outcome::Accepted);
+        assert_eq!(trace.steps[0].configs, vec![(q1, vec![sym_a])]);
+        assert!(trace.steps.last().unwrap().configs.contains(&(q4, vec![sym_a])));
+    }
+
     /// Directly exercises the `pop`/`push` top-to-bottom-vs-stack-top
     /// reversal called out in `step`'s doc comment, independent of the
     /// a^n b^n fixture: pop two symbols in one shot (`pop = [B, A]`, top
