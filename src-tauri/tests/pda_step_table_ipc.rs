@@ -1,6 +1,7 @@
 //! The step table returned by the simulation command the app calls.
 
 use app_lib::commands::pda;
+use app_lib::commands::sim::BudgetDto;
 use app_lib::pda_ipc::PdaEditOpDto;
 use app_lib::state::{PdaSession, SEEDED_TAB_ID};
 
@@ -55,6 +56,23 @@ fn the_simulation_returns_the_step_table_with_names_next_to_the_trace() {
     assert_eq!(row.stack, vec!["Z".to_string()]);
     assert_eq!(row.next_state.as_deref(), Some("q1"));
     assert_eq!(row.next_stack, vec!["A".to_string(), "Z".to_string()]);
+}
+
+#[test]
+fn a_truncated_run_keeps_its_verdict_and_has_an_empty_table() {
+    let (session, q0, _) = session_with_two_states();
+    pda::apply(
+        &session,
+        SEEDED_TAB_ID,
+        vec![PdaEditOpDto::AddTransition { from: q0, to: q0, input: None, pop: vec![], push: vec!["A".into()] }],
+    )
+    .unwrap();
+
+    let budget = BudgetDto { max_steps: 20, max_configs: 100 };
+    let result = pda::sim(&session, SEEDED_TAB_ID, vec![], None, Some(budget)).unwrap();
+
+    assert_eq!(result.outcome, "TruncatedSteps");
+    assert_eq!(result.table, vec![]);
 }
 
 #[test]
