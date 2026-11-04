@@ -51,6 +51,9 @@ pub enum PdaEditOp {
     SetInitial {
         id: Option<StateId>,
     },
+    SetInitialStackSymbol {
+        symbol: String,
+    },
     /// Allocates a new transition; its inverse (computed at `apply` time,
     /// once the real id is known) is `RemoveTransition`.
     AddTransition {
@@ -157,6 +160,11 @@ impl PdaEditOp {
                 let prev = doc.initial_state();
                 doc.set_initial(id);
                 vec![PdaEditOp::SetInitial { id: prev }]
+            }
+            PdaEditOp::SetInitialStackSymbol { symbol } => {
+                let prev = doc.initial_stack_symbol().to_string();
+                doc.set_initial_stack_symbol(&symbol);
+                vec![PdaEditOp::SetInitialStackSymbol { symbol: prev }]
             }
             PdaEditOp::AddTransition { from, to, input, pop, push } => {
                 let input_id = input.as_deref().map(|l| doc.intern_input_symbol(l));
