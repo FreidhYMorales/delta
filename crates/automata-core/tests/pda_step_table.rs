@@ -252,6 +252,37 @@ fn exercise_2_2_empty_word_shows_the_workbook_row() {
     assert_eq!(rows(&result), expected(&[("q0", "ε", "Z0", "f", "ε")]));
 }
 
+/// The budget's `max_configs` limits the branches alive at once, so a long path
+/// with no branching fits in it even when its total length does not.
+#[test]
+fn a_path_longer_than_max_configs_is_still_accepted() {
+    let doc = machine(
+        &["q0", "q1", "q2", "q3", "q4"],
+        "q0",
+        "q4",
+        "Z",
+        &[
+            ("q0", "", "Z", "q1", "Z"),
+            ("q1", "", "Z", "q2", "Z"),
+            ("q2", "", "Z", "q3", "Z"),
+            ("q3", "", "Z", "q4", "Z"),
+        ],
+    );
+
+    let result = pda_step_table(&doc, &[], AcceptMode::FinalState, Budget { max_steps: 10, max_configs: 2 });
+
+    assert!(result.accepted);
+    assert_eq!(
+        rows(&result),
+        expected(&[
+            ("q0", "ε", "Z", "q1", "Z"),
+            ("q1", "ε", "Z", "q2", "Z"),
+            ("q2", "ε", "Z", "q3", "Z"),
+            ("q3", "ε", "Z", "q4", "Z"),
+        ]),
+    );
+}
+
 /// Two equally short accepting paths: the one whose transition was added first
 /// wins, every time. Rebuilt repeatedly because a machine's transitions live in
 /// a hash map, whose order changes between instances.
