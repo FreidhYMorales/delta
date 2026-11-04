@@ -12,6 +12,69 @@ function setup(runSim) {
   return { container, view };
 }
 
+describe("PdaSimView step table", () => {
+  const blockedWord = {
+    outcome: "Stuck",
+    steps: [],
+    table: [
+      { state: "q2", remaining: ["b", "a", "b"], stack: ["B", "B", "A", "Z"], next_state: "q3", next_stack: ["B", "A", "Z"] },
+      { state: "q3", remaining: ["a", "b"], stack: ["B", "A", "Z"], next_state: null, next_stack: ["B", "A", "Z"] },
+    ],
+  };
+  const acceptedWord = {
+    outcome: "Accepted",
+    steps: [],
+    table: [{ state: "q0", remaining: [], stack: ["Z0"], next_state: "f", next_stack: [] }],
+  };
+
+  async function run(result) {
+    const { container, view } = setup(vi.fn().mockResolvedValue(result));
+    container.querySelector(".btn-primary").click();
+    await view._lastRunPromise;
+    return container;
+  }
+
+  function textOfRow(row) {
+    return [...row.cells].map((cell) => cell.textContent);
+  }
+
+  it("shows the workbook's columns", async () => {
+    const container = await run(blockedWord);
+
+    expect(textOfRow(container.querySelector(".pda-step-table thead tr"))).toEqual([
+      "Paso",
+      "Estado Actual",
+      "Cadena Restante",
+      "Cima de Pila",
+      "Siguiente Estado",
+      "Nueva Pila",
+    ]);
+  });
+
+  it("numbers the rows and joins the symbols, ending a blocked word in BLOQUEO", async () => {
+    const container = await run(blockedWord);
+
+    const rows = [...container.querySelectorAll(".pda-step-table tbody tr")].map(textOfRow);
+    expect(rows.slice(0, 2)).toEqual([
+      ["1", "q2", "bab", "BBAZ", "q3", "BAZ"],
+      ["2", "q3", "ab", "BAZ", "BLOQUEO", "BAZ"],
+    ]);
+  });
+
+  it("shows empty input and an empty stack as ε", async () => {
+    const container = await run(acceptedWord);
+
+    expect(textOfRow(container.querySelector(".pda-step-table tbody tr"))).toEqual(["1", "q0", "ε", "Z0", "f", "ε"]);
+  });
+
+  it("shows no table when the run has no rows", async () => {
+    const container = await run({ outcome: "TruncatedSteps", steps: [], table: [] });
+
+    expect(container.querySelector(".pda-step-table")).toBeNull();
+    expect(container.querySelector(".pda-sim-verdict").textContent).toBe("Resultado: Truncado (demasiados pasos)");
+  });
+});
+
 describe("PdaSimView", () => {
   it("splits the typed input on whitespace and calls runSim with the symbols and the selected accept mode", async () => {
     const runSim = vi.fn().mockResolvedValue({ outcome: "Accepted", steps: [] });
