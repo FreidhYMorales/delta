@@ -13,8 +13,9 @@
 //! `automata.pda.{PDAConfiguration,PDAStepByStateSimulator,
 //! PDAStepWithClosureSimulator,CharacterStack}` with `cfr` (see
 //! `model::pda`'s doc comment for the fuller writeup):
-//!  - The stack always starts with exactly one fixed symbol pushed (JFLAP
-//!    hardcodes the literal `"Z"`), before any input is read.
+//!  - The stack always starts with exactly one symbol pushed, before any
+//!    input is read: JFLAP hardcodes the literal `"Z"`, this project defaults
+//!    to it but reads `PdaDoc::initial_stack_symbol`.
 //!  - Accept mode (final state vs. empty stack) is chosen per simulation
 //!    run, never stored on the document — [`AcceptMode`] is a parameter
 //!    here, not a `PdaDoc` field.
@@ -76,11 +77,11 @@ pub struct PdaEngine {
     by_state: HashMap<StateId, Vec<CompiledTransition>>,
     initial: Option<StateId>,
     accepting: std::collections::HashSet<StateId>,
-    /// The symbol pushed once, alone, before simulation begins — real
-    /// JFLAP's hardcoded `"Z"`. Looked up from `doc`'s own stack alphabet
-    /// (so transitions that explicitly reference `"Z"` in a `pop`/`push`
+    /// The symbol pushed once, alone, before simulation begins — the
+    /// document's `initial_stack_symbol`. Looked up from `doc`'s own stack
+    /// alphabet (so transitions that explicitly reference it in a `pop`/`push`
     /// resolve to the *same* id as this marker); if the document never
-    /// interned `"Z"` at all, no transition could ever reference it
+    /// interned it at all, no transition could ever reference it
     /// anyway, so its exact identity doesn't matter and a synthetic id is
     /// used instead — chosen far outside the dense arena range so it can
     /// never collide with a real interned symbol.
@@ -103,7 +104,7 @@ impl PdaEngine {
         }
 
         let accepting = doc.states().filter(|&s| doc.is_accepting(s)).collect();
-        let bottom_marker = doc.stack_symbol_label_to_id("Z").unwrap_or(SYNTHETIC_BOTTOM_MARKER);
+        let bottom_marker = doc.stack_symbol_label_to_id(doc.initial_stack_symbol()).unwrap_or(SYNTHETIC_BOTTOM_MARKER);
 
         PdaEngine { by_state, initial: doc.initial_state(), accepting, bottom_marker, accept_mode }
     }

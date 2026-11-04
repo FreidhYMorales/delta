@@ -31,9 +31,9 @@
 //!    instead of a raw string. See `engine::pda` for how this order gets
 //!    translated against the runtime stack representation.
 //!  - The stack always starts with exactly one fixed bottom-marker symbol
-//!    pushed before simulation begins (JFLAP hardcodes `"Z"`) — not
-//!    user-configurable, not stored on the document at all. Handled entirely
-//!    in `engine::pda`, not here.
+//!    pushed before simulation begins. JFLAP hardcodes `"Z"`; here it is
+//!    `"Z"` by default but stored on the document, because course exercises
+//!    define their own (`A`, `Z0`). Pushed by `engine::pda`.
 //!  - Accept mode (final state vs. empty stack) is a **simulation-time**
 //!    choice, never stored on the document — same reasoning, handled in
 //!    `engine::pda`.
@@ -86,6 +86,9 @@ pub struct PdaDoc {
     stack_symbols: Arena<SymbolId>,
     transitions: HashMap<TransitionId, PdaTransition>,
     next_transition_id: u32,
+    /// A label, not an interned id: setting it must not add a symbol to the
+    /// stack arena until a transition actually uses it.
+    initial_stack_symbol: String,
 }
 
 impl Default for PdaDoc {
@@ -104,7 +107,16 @@ impl PdaDoc {
             stack_symbols: Arena::new(),
             transitions: HashMap::new(),
             next_transition_id: 0,
+            initial_stack_symbol: "Z".to_string(),
         }
+    }
+
+    pub fn initial_stack_symbol(&self) -> &str {
+        &self.initial_stack_symbol
+    }
+
+    pub fn set_initial_stack_symbol(&mut self, label: &str) {
+        self.initial_stack_symbol = label.to_string();
     }
 
     // -- states -------------------------------------------------------------
