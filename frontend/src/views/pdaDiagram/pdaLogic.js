@@ -23,7 +23,12 @@ export const EPSILON = "ε";
  */
 export function parseInputSymbol(text) {
   const trimmed = (text ?? "").trim();
-  return trimmed ? trimmed : null;
+  return trimmed && !isEmptyMarker(trimmed) ? trimmed : null;
+}
+
+/** The course writes the empty string as `λ`, this app as `ε`. */
+function isEmptyMarker(text) {
+  return text === EPSILON || text === "λ";
 }
 
 /**
@@ -35,8 +40,9 @@ export function parseInputSymbol(text) {
  * @returns {string[]} empty array = epsilon (pop/push nothing).
  */
 export function parseSymbolList(text, knownSymbols = []) {
-  return (text ?? "")
-    .trim()
+  const trimmed = (text ?? "").trim();
+  if (isEmptyMarker(trimmed)) return [];
+  return trimmed
     .split(/[\s,]+/)
     .filter(Boolean)
     .flatMap((chunk) => tokenizeInput(chunk, knownSymbols));
