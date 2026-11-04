@@ -88,6 +88,50 @@ fn exercise_2_2() -> PdaDoc {
     )
 }
 
+fn exercise_1_2() -> PdaDoc {
+    machine(
+        &["p", "q1", "q2", "q3", "q4", "r"],
+        "p",
+        "r",
+        "Z",
+        &[
+            ("p", "", "Z", "q1", "A Z"),
+            ("q1", "a", "A", "q2", "B A"),
+            ("q1", "a", "A", "q4", "A"),
+            ("q1", "", "A", "q4", ""),
+            ("q2", "a", "B", "q2", "B B"),
+            ("q2", "b", "B", "q3", ""),
+            ("q3", "b", "B", "q3", ""),
+            ("q3", "", "A", "q4", "A"),
+            ("q4", "", "A", "r", ""),
+            ("q4", "", "B", "r", ""),
+            ("q4", "", "Z", "r", ""),
+            ("r", "", "A", "r", ""),
+            ("r", "", "B", "r", ""),
+            ("r", "", "Z", "r", ""),
+        ],
+    )
+}
+
+#[test]
+fn exercise_1_2_aaabbab_ends_blocked_and_is_not_accepted() {
+    let result = table(&exercise_1_2(), "aaabbab", AcceptMode::FinalState);
+
+    assert!(!result.accepted);
+    assert_eq!(
+        rows(&result),
+        expected(&[
+            ("p", "aaabbab", "Z", "q1", "AZ"),
+            ("q1", "aaabbab", "AZ", "q2", "BAZ"),
+            ("q2", "aabbab", "BAZ", "q2", "BBAZ"),
+            ("q2", "abbab", "BBAZ", "q2", "BBBAZ"),
+            ("q2", "bbab", "BBBAZ", "q3", "BBAZ"),
+            ("q3", "bab", "BBAZ", "q3", "BAZ"),
+            ("q3", "ab", "BAZ", "BLOQUEO", "BAZ"),
+        ]),
+    );
+}
+
 #[test]
 fn exercise_2_2_abb_shows_the_workbook_rows_and_is_accepted() {
     let result = table(&exercise_2_2(), "abb", AcceptMode::FinalState);
