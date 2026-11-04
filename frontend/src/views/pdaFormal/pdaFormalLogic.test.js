@@ -76,6 +76,12 @@ describe("parseFormalText", () => {
     expect(result.model.initialStackSymbol).toBe("A");
   });
 
+  it("reads a blank Z0 line as a blank symbol, not as a missing line", () => {
+    const result = parseFormalText("Q = {q0}\nq0 = q0\nZ0 =\nF = {}");
+    expect(result.ok).toBe(true);
+    expect(result.model.initialStackSymbol).toBe("");
+  });
+
   it("parses a well-formed definition, including F and multi-symbol pop/push", () => {
     const text = [
       "Q = {q0, q1}",

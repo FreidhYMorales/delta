@@ -59,6 +59,14 @@ describe("applyPdaModel initial stack symbol", () => {
     expect(editsSent(client)).toEqual([]);
   });
 
+  it("treats a blank Z0 line as Z, so a machine already on Z records no edit", async () => {
+    const { client, docStore } = await setup();
+
+    await applyPdaModel(docStore, { ...unchangedMachine, initialStackSymbol: "" });
+
+    expect(editsSent(client)).toEqual([]);
+  });
+
   it("does not record an edit when the definition repeats the current symbol", async () => {
     const { client, docStore } = await setup();
 
