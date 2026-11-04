@@ -171,7 +171,12 @@ pub fn sim(
         let b: Budget = budget.map(Into::into).unwrap_or_default();
         let words: Vec<&str> = input.iter().map(String::as_str).collect();
         let trace = run_pda(&doc.model, &words, mode, b);
-        let table = pda_step_table(&doc.model, &words, mode, b).rows.into_iter().map(step_row_dto).collect();
+        let truncated = matches!(trace.outcome, Outcome::TruncatedSteps | Outcome::TruncatedConfigs);
+        let table = if truncated {
+            Vec::new()
+        } else {
+            pda_step_table(&doc.model, &words, mode, b).rows.into_iter().map(step_row_dto).collect()
+        };
         PdaTraceDto {
             outcome: outcome_str(trace.outcome).to_string(),
             steps: trace.steps.into_iter().map(|step| step.configs.iter().map(|cfg| config_view(&doc.model, cfg)).collect()).collect(),
