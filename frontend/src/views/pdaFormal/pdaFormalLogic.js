@@ -1,11 +1,7 @@
 // Pure logic for the PDA formal-definition view — real JFLAP's PDA 7-tuple
-// is M = (Q, Sigma, Gamma, delta, q0, Z0, F). Two things `PdaDoc` genuinely
-// does NOT store (see docs/decisions.md, the PDA backend entry):
-//  - `Z0` (the initial stack symbol) is a hardcoded simulation-time
-//    constant ("Z"), never stored on the document — rendered as an
-//    informational comment line only, never parsed back.
-//  - `F` (accepting states) genuinely IS stored (`PdaStateMeta.accepting`)
-//    — unlike `Z0`, this one's real and round-trips like `q0` does.
+// is M = (Q, Sigma, Gamma, delta, q0, Z0, F). `Z0` (the initial stack symbol)
+// and `F` (accepting states) are both stored on `PdaDoc` and round-trip like
+// `q0` does. A definition without a `Z0` line leaves the symbol as it is.
 //
 // `delta` here is a *relation*, not a function (nondeterministic branching
 // is normal for a PDA) — one line per transition: `delta(from, input, pop)
@@ -33,7 +29,7 @@ function formatSymbolListSpaced(symbols) {
 }
 
 /**
- * @param {{states:{id:number,label:string,initial:boolean,accepting:boolean}[], transitions:{from:number,to:number,input:string|null,pop:string[],push:string[]}[], derived:{input_alphabet:string[],stack_alphabet:string[]}}} doc
+ * @param {{states:{id:number,label:string,initial:boolean,accepting:boolean}[], transitions:{from:number,to:number,input:string|null,pop:string[],push:string[]}[], derived:{input_alphabet:string[],stack_alphabet:string[],initial_stack_symbol?:string}}} doc
  */
 export function formatFormalText({ states, transitions, derived }) {
   const labelOf = new Map(states.map((s) => [s.id, s.label]));
@@ -45,8 +41,8 @@ export function formatFormalText({ states, transitions, derived }) {
   lines.push(`Σ = {${derived.input_alphabet.join(", ")}}`);
   lines.push(`Γ = {${derived.stack_alphabet.join(", ")}}`);
   lines.push(`q0 = ${initial ? initial.label : ""}`);
+  lines.push(`Z0 = ${derived.initial_stack_symbol ?? "Z"}`);
   lines.push(`F = {${accepting.map((s) => s.label).join(", ")}}`);
-  lines.push(`# Z0 = "Z" (símbolo inicial de pila, fijo — no se guarda en el documento)`);
 
   for (const t of transitions) {
     const fromLabel = labelOf.get(t.from);
@@ -62,11 +58,12 @@ export function formatFormalText({ states, transitions, derived }) {
 
 /**
  * @param {string} text
- * @returns {{ok:true, model:{states:string[], initial:string|null, accepting:string[], transitions:{from:string,input:string|null,pop:string[],to:string,push:string[]}[]}}|{ok:false, error:string}}
+ * @returns {{ok:true, model:{states:string[], initial:string|null, initialStackSymbol?:string, accepting:string[], transitions:{from:string,input:string|null,pop:string[],to:string,push:string[]}[]}}|{ok:false, error:string}}
  */
 export function parseFormalText(text) {
   let states = null;
   let initial = null;
+  let initialStackSymbol = null;
   let accepting = null;
   const transitions = [];
 
@@ -82,6 +79,10 @@ export function parseFormalText(text) {
     if (/^(Sigma|Σ|Gamma|Γ)\s*=/.test(line)) continue; // informational only, not validated
     if ((m = /^q0\s*=\s*(\S*)$/.exec(line))) {
       initial = m[1] || null;
+      continue;
+    }
+    if ((m = /^Z0\s*=\s*(\S*)$/.exec(line))) {
+      initialStackSymbol = m[1];
       continue;
     }
     if ((m = /^F\s*=\s*\{(.*)\}$/.exec(line))) {
@@ -123,7 +124,9 @@ export function parseFormalText(text) {
     if (!declared.has(t.to)) return { ok: false, error: `Undeclared state: "${t.to}"` };
   }
 
-  return { ok: true, model: { states, initial, accepting: acceptingList, transitions } };
+  const model = { states, initial, accepting: acceptingList, transitions };
+  if (initialStackSymbol != null) model.initialStackSymbol = initialStackSymbol;
+  return { ok: true, model };
 }
 
 function splitList(raw) {
