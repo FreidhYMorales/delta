@@ -10,7 +10,7 @@
 
 ## Backlog
 
-01. [~] As a student, I want to set a PDA's initial stack symbol and type a word without spaces so that a course exercise gets the correct verdict.
+01. [x] 817215c As a student, I want to set a PDA's initial stack symbol and type a word without spaces so that a course exercise gets the correct verdict.
 02. [ ] As a student, I want to write stack strings like NZ and use λ for ε in PDA transitions so that I can enter them as the course writes them. Requires: #01
 03. [ ] As a student, I want to type a Turing word without spaces and write B as the blank so that a course machine gets the correct verdict.
 04. [ ] As a student, I want to paste a PDA definition in course notation, including sets, f(...) and A/B/Z, so that I don't retype each transition. Requires: #02

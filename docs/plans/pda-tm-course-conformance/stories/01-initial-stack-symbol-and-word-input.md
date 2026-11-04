@@ -12,9 +12,9 @@ Assumptions:
 
 ## Acceptance criteria
 
-- [ ] Given a PDA whose transitions use `A` or `Z0` as the bottom of the stack, when I set that symbol as the initial stack symbol and simulate `ab` (exercise 2-1) or `abb` (exercise 2-2), then the result is Aceptado and the steps show that symbol at the bottom of the stack.
-- [ ] Given a PDA from the course workbook, when I type a word without spaces such as `aababb`, then it gives the same result as `a a b a b b`, and all 8 workbook words match the workbook's verdict.
-- [ ] Given a PDA with a custom initial stack symbol, when I save and reopen it as a file or a project, then the symbol is still set; and given a PDA saved before this change, when I open it, then it uses `Z` and gives the same results as before.
+- [x] Given a PDA whose transitions use `A` or `Z0` as the bottom of the stack, when I set that symbol as the initial stack symbol and simulate `ab` (exercise 2-1) or `abb` (exercise 2-2), then the result is Aceptado and the steps show that symbol at the bottom of the stack.
+- [x] Given a PDA from the course workbook, when I type a word without spaces such as `aababb`, then it gives the same result as `a a b a b b`, and all 8 workbook words match the workbook's verdict.
+- [x] Given a PDA with a custom initial stack symbol, when I save and reopen it as a file or a project, then the symbol is still set; and given a PDA saved before this change, when I open it, then it uses `Z` and gives the same results as before.
 
 ## Plan
 
@@ -50,5 +50,8 @@ Risk: item 3 (PDA file and project format gains a field)
 - L6 verifier round 1: FAIL. All three criteria passed, and it compared the workbook machines and verdicts line by line with `Hoja de trabajo 10 -2.xlsx` in the user's Downloads folder. Failures: mock call counts in applyPdaModel.test.js and an unpinned `|| "Z"` in applyPdaModel.js.
 - L7 correction: the user approved rewriting the committed assertions ("si"). Test-only commits 8b7cfe6 and 8921867, checked by temporary mutations. Test command output: all cargo suites ok, frontend 1259 passed.
 - L8 verifier round 2: FAIL. All three criteria passed; banned-pattern scan clean. Failures: `?? "Z"` in PdaSimView.js and returning the trimmed symbol in pda_ipc.rs are pinned by no test. It could not find the workbook because the path was not in its prompt, so it did not confirm machines 1-2, 2-1, 2-2 or the 8 verdicts.
-- L9 status: stopped at NEEDS DECISION after two FAIL rounds; story open.
+- L9 status: stopped at NEEDS DECISION after two FAIL rounds.
+- L10 decision: the user chose to add the two missing tests and close without a third verifier round ("si"). Closed by the user's decision, with no verifier PASS.
+- L11 final tests: eb70676, test-only, checked by temporary mutations (field fallback not Z fails with '' vs 'Z'; untrimmed symbol fails with " A " vs "A"). Test command output: 28 cargo suites ok with no failures; frontend 102 files, 1260 tests passed.
+- L12 left open, by the user's decision to review after merge: a symbol with an inner space such as `Z 0` makes the formal definition reject its own line; a file with an empty `initial_stack_symbol` is not normalised to Z; older builds silently use Z on a new file; docs/decisions.md:435-436 and the PdaDerived typedef are stale.
 - Risk: item 3 (PDA file and project format gains a field)
