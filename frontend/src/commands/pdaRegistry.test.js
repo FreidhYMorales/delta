@@ -196,6 +196,17 @@ describe("promptTransitionTriple", () => {
     expect(ctx.promptPush).not.toHaveBeenCalled();
   });
 
+  it("reads pop and push with the machine's known stack symbols", async () => {
+    const ctx = fakeCtx({
+      promptInput: vi.fn().mockResolvedValue("a"),
+      promptPop: vi.fn().mockResolvedValue("Z0"),
+      promptPush: vi.fn().mockResolvedValue("AAZ0"),
+    });
+    ctx.docStore.derived = { stack_alphabet: ["A", "Z0"] };
+
+    expect(await promptTransitionTriple(ctx)).toEqual({ input: "a", pop: ["Z0"], push: ["A", "A", "Z0"] });
+  });
+
   it("returns the parsed triple, treating blank fields as epsilon", async () => {
     const ctx = fakeCtx({
       promptInput: vi.fn().mockResolvedValue(""),
