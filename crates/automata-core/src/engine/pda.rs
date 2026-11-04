@@ -38,7 +38,7 @@
 //! unchanged — its `step` already returns nothing past `input.len()`, so
 //! nothing about FA's behavior or tests changed).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use smallvec::{smallvec, SmallVec};
 
@@ -192,6 +192,92 @@ pub fn run_pda(doc: &PdaDoc, input: &[&str], accept_mode: AcceptMode, budget: Bu
         .collect();
     let engine = PdaEngine::compile(doc, accept_mode);
     run_bounded(&engine, &symbols, budget)
+}
+
+/// One move of a path through the machine, with names instead of ids. Stacks
+/// are top-to-bottom. `next` is `None` on a final row where the machine is
+/// blocked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PdaStepRow {
+    pub state: String,
+    pub remaining: Vec<String>,
+    pub stack: Vec<String>,
+    pub next: Option<(String, Vec<String>)>,
+}
+
+/// The single path a student writes in a worksheet, unlike [`Trace`], which
+/// holds every live branch per round and not where each one came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PdaStepTable {
+    pub accepted: bool,
+    pub rows: Vec<PdaStepRow>,
+}
+
+struct PathNode {
+    cfg: PdaConfig,
+    at: usize,
+    parent: Option<usize>,
+}
+
+fn named_stack(doc: &PdaDoc, stack: &Stack) -> Vec<String> {
+    stack
+        .iter()
+        .rev()
+        .map(|s| doc.stack_symbol_label(*s).unwrap_or(doc.initial_stack_symbol()).to_string())
+        .collect()
+}
+
+/// Breadth-first, so the first accepting configuration found is on a shortest
+/// accepting path.
+pub fn pda_step_table(doc: &PdaDoc, input: &[&str], accept_mode: AcceptMode, budget: Budget) -> PdaStepTable {
+    let symbols: Vec<SymbolId> = input
+        .iter()
+        .enumerate()
+        .map(|(i, s)| doc.input_symbol_label_to_id(s).unwrap_or(SymbolId(u32::MAX - 1 - i as u32)))
+        .collect();
+    let engine = PdaEngine::compile(doc, accept_mode);
+
+    let mut nodes: Vec<PathNode> = engine.start().into_iter().map(|cfg| PathNode { cfg, at: 0, parent: None }).collect();
+    let mut seen: HashSet<(PdaConfig, usize)> = nodes.iter().map(|n| (n.cfg.clone(), n.at)).collect();
+    let mut accepted = None;
+    let mut index = 0;
+    while index < nodes.len() && nodes.len() <= budget.max_configs {
+        if engine.is_accepting(&nodes[index].cfg, nodes[index].at, &symbols) {
+            accepted = Some(index);
+            break;
+        }
+        let successors = engine.step(&nodes[index].cfg, &symbols, nodes[index].at);
+        for (cfg, at) in successors {
+            if seen.insert((cfg.clone(), at)) {
+                nodes.push(PathNode { cfg, at, parent: Some(index) });
+            }
+        }
+        index += 1;
+    }
+
+    let Some(last) = accepted else {
+        return PdaStepTable { accepted: false, rows: Vec::new() };
+    };
+    let mut path = vec![last];
+    while let Some(parent) = nodes[*path.last().unwrap()].parent {
+        path.push(parent);
+    }
+    path.reverse();
+
+    let state_name = |id: StateId| doc.state_label(id).unwrap_or_default().to_string();
+    let rows = path
+        .windows(2)
+        .map(|pair| {
+            let (from, to) = (&nodes[pair[0]], &nodes[pair[1]]);
+            PdaStepRow {
+                state: state_name(from.cfg.0),
+                remaining: input[from.at..].iter().map(|s| s.to_string()).collect(),
+                stack: named_stack(doc, &from.cfg.1),
+                next: Some((state_name(to.cfg.0), named_stack(doc, &to.cfg.1))),
+            }
+        })
+        .collect();
+    PdaStepTable { accepted: true, rows }
 }
 
 #[cfg(test)]
