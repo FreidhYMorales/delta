@@ -135,6 +135,35 @@ describe("TmTableView", () => {
   });
 });
 
+describe("TmTableView blank", () => {
+  it("reads B as the blank when editing a tape cell", async () => {
+    const { container, client, view } = await setup();
+    const row = container.querySelectorAll("tbody")[1].querySelectorAll("tr")[0];
+    editValue(transitionRowControls(row).tapeCells[0], "B ; B , S");
+    await view._lastEditPromise;
+
+    const [[op]] = client.tmApply.mock.calls[0];
+    expect(op.tapes[0]).toEqual({ read: "□", write: "□", direction: "S" });
+  });
+
+  it("reads B as the blank when adding a transition", async () => {
+    const { container, client, view } = await setup();
+    const addRow = container.querySelectorAll("tbody")[1].querySelector(".table-add-row");
+    const { tapeCells } = transitionRowControls(addRow);
+    editValue(tapeCells[0], "B ; 1 , L");
+    editValue(tapeCells[1], "0 ; B , R");
+
+    addRow.querySelector(".btn-secondary").click();
+    await view._lastEditPromise;
+
+    const [[op]] = client.tmApply.mock.calls[0];
+    expect(op.tapes).toEqual([
+      { read: "□", write: "1", direction: "L" },
+      { read: "0", write: "□", direction: "R" },
+    ]);
+  });
+});
+
 describe("TmTableView transition editing", () => {
   it("editing a tape cell issues EditTransition, replacing only that tape index", async () => {
     const { container, client, view } = await setup();

@@ -54,6 +54,12 @@ describe("formatFormalText", () => {
 });
 
 describe("parseFormalText", () => {
+  it("reads B as the blank in a transition line", () => {
+    const result = parseFormalText("Q = {q0, q1}\nq0 = q0\nF = {q1}\nδ(q0, B ; B , S) = q1");
+    expect(result.ok).toBe(true);
+    expect(result.model.transitions[0].tapes).toEqual([{ read: "□", write: "□", direction: "S" }]);
+  });
+
   it("round-trips a well-formed 1-tape definition", () => {
     const text = ["Q = {q0, q1}", "q0 = q0", "F = {q1}", "delta(q0, a ; b , R) = q1"].join("\n");
     const result = parseFormalText(text);

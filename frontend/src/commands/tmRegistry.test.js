@@ -194,6 +194,11 @@ describe("transition.edit", () => {
 });
 
 describe("promptTransitionTapes", () => {
+  it("reads B as the blank in the diagram prompt", async () => {
+    const ctx = fakeCtx({ promptTape: vi.fn().mockResolvedValue("B ; B , S") });
+    expect(await promptTransitionTapes(ctx)).toEqual({ tapes: [{ read: "□", write: "□", direction: "S" }] });
+  });
+
   it("returns null and stops immediately when the first tape's prompt is cancelled", async () => {
     const ctx = fakeCtx({ promptTape: vi.fn().mockResolvedValue(null) });
     expect(await promptTransitionTapes(ctx)).toBeNull();
