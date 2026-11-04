@@ -109,6 +109,41 @@ describe("mountPdaTab (design D11)", () => {
   });
 });
 
+describe("mountPdaTab initial stack symbol field", () => {
+  function derivedWith(symbol) {
+    return { input_alphabet: [], stack_alphabet: [symbol], initial_stack_symbol: symbol, deterministic: true, unreachable: [] };
+  }
+
+  function flush() {
+    return new Promise((resolve) => setTimeout(resolve));
+  }
+
+  it("shows the machine's current symbol on the Simular tab", async () => {
+    const hosts = fakeHosts();
+    const snapshot = { ...emptySnapshot(), derived: derivedWith("A") };
+    mountPdaTab(0, hosts, fakeClient({ pdaSnapshot: vi.fn().mockResolvedValue(snapshot) }));
+    await flush();
+
+    expect(hosts.contentHost.querySelector(".pda-sim-initial-stack").value).toBe("A");
+  });
+
+  it("applies an edit to the machine and shows what the machine now holds", async () => {
+    const hosts = fakeHosts();
+    const pdaApply = vi.fn().mockResolvedValue({ revision: 1, patches: [], derived: derivedWith("Z") });
+    const snapshot = { ...emptySnapshot(), derived: derivedWith("A") };
+    mountPdaTab(3, hosts, fakeClient({ pdaSnapshot: vi.fn().mockResolvedValue(snapshot), pdaApply }));
+    await flush();
+
+    const field = hosts.contentHost.querySelector(".pda-sim-initial-stack");
+    field.value = "";
+    field.dispatchEvent(new Event("change"));
+    await flush();
+
+    expect(pdaApply).toHaveBeenCalledWith([{ op: "SetInitialStackSymbol", symbol: "" }], 3);
+    expect(field.value).toBe("Z");
+  });
+});
+
 describe("mountPdaTab prompt hooks' Greek-letter conversion", () => {
   it("promptInput converts a typed Greek letter name to its symbol", async () => {
     const hosts = fakeHosts();
