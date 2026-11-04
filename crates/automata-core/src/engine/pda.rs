@@ -216,6 +216,7 @@ pub struct PdaStepTable {
 struct PathNode {
     cfg: PdaConfig,
     at: usize,
+    depth: usize,
     parent: Option<usize>,
 }
 
@@ -237,7 +238,8 @@ pub fn pda_step_table(doc: &PdaDoc, input: &[&str], accept_mode: AcceptMode, bud
         .collect();
     let engine = PdaEngine::compile(doc, accept_mode);
 
-    let mut nodes: Vec<PathNode> = engine.start().into_iter().map(|cfg| PathNode { cfg, at: 0, parent: None }).collect();
+    let mut nodes: Vec<PathNode> =
+        engine.start().into_iter().map(|cfg| PathNode { cfg, at: 0, depth: 0, parent: None }).collect();
     let mut seen: HashSet<(PdaConfig, usize)> = nodes.iter().map(|n| (n.cfg.clone(), n.at)).collect();
     let mut accepted = None;
     let mut index = 0;
@@ -247,15 +249,27 @@ pub fn pda_step_table(doc: &PdaDoc, input: &[&str], accept_mode: AcceptMode, bud
             break;
         }
         let successors = engine.step(&nodes[index].cfg, &symbols, nodes[index].at);
+        let depth = nodes[index].depth + 1;
         for (cfg, at) in successors {
             if seen.insert((cfg.clone(), at)) {
-                nodes.push(PathNode { cfg, at, parent: Some(index) });
+                nodes.push(PathNode { cfg, at, depth, parent: Some(index) });
             }
         }
         index += 1;
     }
 
-    let Some(last) = accepted else {
+    // Not accepted: the path that consumed the most input, then the longest.
+    let furthest = || {
+        let mut best: Option<(usize, usize, usize)> = None;
+        for (i, node) in nodes.iter().enumerate() {
+            let candidate = (node.at, node.depth, i);
+            if best.is_none_or(|(at, depth, _)| (node.at, node.depth) > (at, depth)) {
+                best = Some(candidate);
+            }
+        }
+        best.map(|(_, _, i)| i)
+    };
+    let Some(last) = accepted.or_else(furthest) else {
         return PdaStepTable { accepted: false, rows: Vec::new() };
     };
     let mut path = vec![last];
@@ -265,19 +279,23 @@ pub fn pda_step_table(doc: &PdaDoc, input: &[&str], accept_mode: AcceptMode, bud
     path.reverse();
 
     let state_name = |id: StateId| doc.state_label(id).unwrap_or_default().to_string();
-    let rows = path
+    let row = |from: &PathNode, next| PdaStepRow {
+        state: state_name(from.cfg.0),
+        remaining: input[from.at..].iter().map(|s| s.to_string()).collect(),
+        stack: named_stack(doc, &from.cfg.1),
+        next,
+    };
+    let mut rows: Vec<PdaStepRow> = path
         .windows(2)
         .map(|pair| {
-            let (from, to) = (&nodes[pair[0]], &nodes[pair[1]]);
-            PdaStepRow {
-                state: state_name(from.cfg.0),
-                remaining: input[from.at..].iter().map(|s| s.to_string()).collect(),
-                stack: named_stack(doc, &from.cfg.1),
-                next: Some((state_name(to.cfg.0), named_stack(doc, &to.cfg.1))),
-            }
+            let to = &nodes[pair[1]];
+            row(&nodes[pair[0]], Some((state_name(to.cfg.0), named_stack(doc, &to.cfg.1))))
         })
         .collect();
-    PdaStepTable { accepted: true, rows }
+    if accepted.is_none() {
+        rows.push(row(&nodes[last], None));
+    }
+    PdaStepTable { accepted: accepted.is_some(), rows }
 }
 
 #[cfg(test)]
