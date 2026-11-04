@@ -21,6 +21,11 @@ describe("parseInputSymbol", () => {
 });
 
 describe("parseSymbolList", () => {
+  it("reads a stack string without separators one character per symbol", () => {
+    expect(parseSymbolList("NZ")).toEqual(["N", "Z"]);
+    expect(parseSymbolList("BNN, Z")).toEqual(["B", "N", "N", "Z"]);
+  });
+
   it("splits on whitespace", () => {
     expect(parseSymbolList("A Z")).toEqual(["A", "Z"]);
   });
