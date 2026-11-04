@@ -69,6 +69,27 @@ describe("formatFormalText", () => {
   });
 });
 
+describe("parseFormalText stack strings", () => {
+  const header = "Q = {q0, q1}\nq0 = q0\nF = {q1}\n";
+
+  it("reads NZ as N over Z", () => {
+    const result = parseFormalText(`${header}δ(q0, a, Z) = (q1, NZ)`);
+    expect(result.model.transitions[0].push).toEqual(["N", "Z"]);
+  });
+
+  it("uses the machine's known stack symbols", () => {
+    const result = parseFormalText(`${header}δ(q0, a, Z0) = (q1, AAZ0)`, ["A", "Z0"]);
+    expect(result.model.transitions[0].pop).toEqual(["Z0"]);
+    expect(result.model.transitions[0].push).toEqual(["A", "A", "Z0"]);
+  });
+
+  it("uses the definition's own Z0 line, wherever it is written", () => {
+    const result = parseFormalText(`${header}δ(q0, a, Z0) = (q1, AAZ0)\nZ0 = Z0`);
+    expect(result.model.transitions[0].pop).toEqual(["Z0"]);
+    expect(result.model.transitions[0].push).toEqual(["A", "A", "Z0"]);
+  });
+});
+
 describe("parseFormalText", () => {
   it("reads the Z0 line back as the initial stack symbol", () => {
     const result = parseFormalText("Q = {q0}\nq0 = q0\nZ0 = A\nF = {}");
