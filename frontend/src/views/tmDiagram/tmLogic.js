@@ -37,12 +37,18 @@ export function parseTapeOpText(text) {
   const writePart = commaIndex === -1 ? rest : rest.slice(0, commaIndex);
   const directionPart = commaIndex === -1 ? "" : rest.slice(commaIndex + 1);
 
-  const read = readPart.trim() || BLANK;
-  const write = writePart.trim() || BLANK;
+  const read = tapeSymbol(readPart);
+  const write = tapeSymbol(writePart);
   const dir = directionPart.trim().toUpperCase();
   const direction = dir === "L" || dir === "R" || dir === "S" ? dir : "S";
 
   return { read, write, direction };
+}
+
+/** The course writes the blank as `B`, this app as `□`; empty also means blank. */
+function tapeSymbol(text) {
+  const symbol = text.trim();
+  return !symbol || symbol === "B" ? BLANK : symbol;
 }
 
 /**
