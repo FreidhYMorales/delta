@@ -67,6 +67,29 @@ describe("PdaSimView step table", () => {
     expect(textOfRow(container.querySelector(".pda-step-table tbody tr"))).toEqual(["1", "q0", "ε", "Z0", "f", "ε"]);
   });
 
+  it("ends with the workbook's result row for an accepted word", async () => {
+    const container = await run(acceptedWord);
+
+    expect(textOfRow(container.querySelector(".pda-step-table tfoot tr"))).toEqual([
+      "Resultado Final:",
+      "CADENA ACEPTADA",
+    ]);
+  });
+
+  it("ends with the workbook's result row for a blocked or rejected word", async () => {
+    const stuck = await run(blockedWord);
+    expect(textOfRow(stuck.querySelector(".pda-step-table tfoot tr"))).toEqual([
+      "Resultado Final:",
+      "CADENA NO ACEPTADA",
+    ]);
+
+    const rejected = await run({ ...blockedWord, outcome: "Rejected" });
+    expect(textOfRow(rejected.querySelector(".pda-step-table tfoot tr"))).toEqual([
+      "Resultado Final:",
+      "CADENA NO ACEPTADA",
+    ]);
+  });
+
   it("shows no table when the run has no rows", async () => {
     const container = await run({ outcome: "TruncatedSteps", steps: [], table: [] });
 
