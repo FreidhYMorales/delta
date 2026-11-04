@@ -90,6 +90,24 @@ describe("PdaSimView step table", () => {
     ]);
   });
 
+  it("copies the header, rows and result as tab-separated text", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const container = await run(blockedWord);
+
+    container.querySelector('button[aria-label="Copiar tabla"]').click();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(writeText.mock.calls[0][0]).toBe(
+      [
+        "Paso\tEstado Actual\tCadena Restante\tCima de Pila\tSiguiente Estado\tNueva Pila",
+        "1\tq2\tbab\tBBAZ\tq3\tBAZ",
+        "2\tq3\tab\tBAZ\tBLOQUEO\tBAZ",
+        "Resultado Final:\tCADENA NO ACEPTADA",
+      ].join("\n"),
+    );
+  });
+
   it("shows no table when the run has no rows", async () => {
     const container = await run({ outcome: "TruncatedSteps", steps: [], table: [] });
 
