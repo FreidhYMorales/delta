@@ -33,16 +33,44 @@ export class PdaSimView {
    * @param {HTMLElement} container
    * @param {(input: string[], acceptBy: "final"|"empty") => Promise<object>} runSim
    *   `ctx.pdaSim`-shaped: resolves a PdaTraceDto ({outcome, steps: Array<Array<{state,stack}>>}).
+   * @param {import('../../store/PdaDocStore.js').PdaDocStore} [docStore]
+   *   source and target of the initial stack symbol field; the field is left
+   *   out without it.
    */
-  constructor(container, runSim) {
+  constructor(container, runSim, docStore = null) {
     this.container = container;
     this.runSim = runSim;
+    this.docStore = docStore;
     this._build();
+    if (docStore) {
+      docStore.subscribe(() => this._renderInitialStack());
+      this._renderInitialStack();
+    }
+  }
+
+  _renderInitialStack() {
+    this.initialStackInput.value = this.docStore.derived?.initial_stack_symbol ?? "Z";
+  }
+
+  _buildInitialStackField() {
+    const label = document.createElement("label");
+    label.className = "field-label";
+    label.textContent = "Símbolo inicial de pila";
+
+    this.initialStackInput = document.createElement("input");
+    this.initialStackInput.type = "text";
+    this.initialStackInput.className = "pda-sim-initial-stack string-input";
+    this.initialStackInput.addEventListener("change", () => {
+      this.docStore.apply([{ op: "SetInitialStackSymbol", symbol: this.initialStackInput.value }]);
+    });
+
+    this.root.append(label, this.initialStackInput);
   }
 
   _build() {
     this.root = document.createElement("div");
     this.root.className = "pda-sim-view testing-single";
+    if (this.docStore) this._buildInitialStackField();
 
     const label = document.createElement("label");
     label.className = "field-label";

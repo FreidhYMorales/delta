@@ -120,7 +120,7 @@ export function mountPdaTab(tabId, hosts, client, collaborators = {}) {
   ]);
   new PdaTableView(upperTabs.panels.get("tabla"), docStore, ctx);
   new PdaFormalView(upperTabs.panels.get("formal"), docStore);
-  new PdaSimView(upperTabs.panels.get("simular"), (input, acceptBy) => boundClient.pdaSim(input, acceptBy));
+  new PdaSimView(upperTabs.panels.get("simular"), (input, acceptBy) => boundClient.pdaSim(input, acceptBy), docStore);
 
   docStore.load();
 
