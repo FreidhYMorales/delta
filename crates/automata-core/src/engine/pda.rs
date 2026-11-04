@@ -94,7 +94,11 @@ const SYNTHETIC_BOTTOM_MARKER: SymbolId = SymbolId(u32::MAX);
 impl PdaEngine {
     pub fn compile(doc: &PdaDoc, accept_mode: AcceptMode) -> Self {
         let mut by_state: HashMap<StateId, Vec<CompiledTransition>> = HashMap::new();
-        for (_, t) in doc.transitions() {
+        // In creation order: the document keeps transitions in a hash map, and
+        // a run must not depend on that map's iteration order.
+        let mut transitions: Vec<_> = doc.transitions().collect();
+        transitions.sort_by_key(|(id, _)| *id);
+        for (_, t) in transitions {
             by_state.entry(t.from).or_default().push(CompiledTransition {
                 input: t.input,
                 pop: t.pop.clone(),
