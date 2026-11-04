@@ -46,7 +46,7 @@ function appendRow(section, tag, cells) {
   }
 }
 
-function buildStepTable(rows) {
+function buildStepTable(rows, outcome) {
   const table = document.createElement("table");
   table.className = "pda-step-table testing-batch-table";
   appendRow(table.createTHead(), "th", STEP_TABLE_COLUMNS);
@@ -61,6 +61,10 @@ function buildStepTable(rows) {
       joined(row.next_stack),
     ]);
   });
+  appendRow(table.createTFoot(), "td", [
+    "Resultado Final:",
+    outcome === "Accepted" ? "CADENA ACEPTADA" : "CADENA NO ACEPTADA",
+  ]);
   return table;
 }
 
@@ -169,7 +173,7 @@ export class PdaSimView {
     verdict.className = `pda-sim-verdict ${verdictVariant(outcome.outcome)}`;
     verdict.textContent = `Resultado: ${OUTCOME_LABELS[outcome.outcome] ?? outcome.outcome}`;
     this.output.appendChild(verdict);
-    if (outcome.table?.length) this.output.appendChild(buildStepTable(outcome.table));
+    if (outcome.table?.length) this.output.appendChild(buildStepTable(outcome.table, outcome.outcome));
 
     const list = document.createElement("ol");
     list.className = "pda-sim-steps";
