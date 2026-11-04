@@ -1,5 +1,6 @@
 //! A PDA's initial stack symbol, checked against the course workbook.
 
+use automata_core::dto::{pda_load_from_str, pda_save_to_string};
 use automata_core::engine::pda::{run_pda, AcceptMode};
 use automata_core::engine::{Budget, Outcome};
 use automata_core::model::pda::PdaDoc;
@@ -7,6 +8,17 @@ use automata_core::pda_doc::{PdaDocument, PdaEditOp};
 
 fn set_symbol(symbol: &str) -> PdaEditOp {
     PdaEditOp::SetInitialStackSymbol { symbol: symbol.to_string() }
+}
+
+#[test]
+fn a_saved_file_keeps_the_symbol_when_reopened() {
+    let mut doc = PdaDoc::new();
+    doc.set_initial_stack_symbol("A");
+
+    let saved = pda_save_to_string(&doc).unwrap();
+    let reopened = pda_load_from_str(&saved).unwrap();
+
+    assert_eq!(reopened.initial_stack_symbol(), "A");
 }
 
 #[test]
