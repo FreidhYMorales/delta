@@ -142,6 +142,20 @@ describe("PdaTableView stack strings", () => {
     ]);
   });
 
+  it("treats λ as empty in a new transition's input, pop and push", async () => {
+    const { container, client, view } = await setup();
+    const addRow = container.querySelectorAll("tbody")[1].querySelector(".table-add-row");
+    const { inputCell, popCell, pushCell } = transitionRowControls(addRow);
+    editValue(inputCell, "λ");
+    editValue(popCell, "λ");
+    editValue(pushCell, "λ");
+
+    addRow.querySelector(".btn-secondary").click();
+    await view._lastEditPromise;
+
+    expect(client.pdaApply).toHaveBeenCalledWith([{ op: "AddTransition", from: 1, to: 1, input: null, pop: [], push: [] }]);
+  });
+
   it("reads a new transition's pop and push with the machine's known stack symbols", async () => {
     const { container, client, view } = await setup(snapshotWithZ0());
     const addRow = container.querySelectorAll("tbody")[1].querySelector(".table-add-row");

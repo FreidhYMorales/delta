@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountPdaTab } from "./mountPdaTab.js";
+import { promptTransitionTriple } from "../../commands/pdaRegistry.js";
 
 function emptySnapshot(revision = 0) {
   return {
@@ -183,6 +184,25 @@ describe("mountPdaTab word typed on the Simular tab", () => {
 
   it("keeps a space as a separator even when the joined text would be a longer symbol", async () => {
     expect(await symbolsSentFor("a b", ["a", "b", "ab"])).toEqual(["a", "b"]);
+  });
+});
+
+describe("mountPdaTab diagram prompts", () => {
+  async function tripleTyped(mount, typed) {
+    const result = promptTransitionTriple(mount.ctx);
+    for (const value of typed) {
+      await new Promise((resolve) => setTimeout(resolve));
+      document.querySelector(".prompt-modal-input").value = value;
+      document.querySelector(".prompt-modal-ok").click();
+    }
+    return result;
+  }
+
+  it("treats λ and the name lambda as empty in the input, pop and push", async () => {
+    const mount = mountPdaTab(0, fakeHosts(), fakeClient());
+    await Promise.resolve();
+
+    expect(await tripleTyped(mount, ["λ", "lambda", "λ"])).toEqual({ input: null, pop: [], push: [] });
   });
 });
 
