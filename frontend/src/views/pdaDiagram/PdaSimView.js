@@ -30,6 +30,40 @@ function verdictVariant(outcome) {
   return "rejected";
 }
 
+const STEP_TABLE_COLUMNS = ["Paso", "Estado Actual", "Cadena Restante", "Cima de Pila", "Siguiente Estado", "Nueva Pila"];
+
+/** The workbook writes symbols together, and nothing left as ε. */
+function joined(symbols) {
+  return symbols.join("") || "ε";
+}
+
+function appendRow(section, tag, cells) {
+  const row = section.insertRow();
+  for (const text of cells) {
+    const cell = document.createElement(tag);
+    cell.textContent = text;
+    row.appendChild(cell);
+  }
+}
+
+function buildStepTable(rows) {
+  const table = document.createElement("table");
+  table.className = "pda-step-table testing-batch-table";
+  appendRow(table.createTHead(), "th", STEP_TABLE_COLUMNS);
+  const body = table.createTBody();
+  rows.forEach((row, i) => {
+    appendRow(body, "td", [
+      String(i + 1),
+      row.state,
+      joined(row.remaining),
+      joined(row.stack),
+      row.next_state ?? "BLOQUEO",
+      joined(row.next_stack),
+    ]);
+  });
+  return table;
+}
+
 export class PdaSimView {
   /**
    * @param {HTMLElement} container
@@ -135,6 +169,7 @@ export class PdaSimView {
     verdict.className = `pda-sim-verdict ${verdictVariant(outcome.outcome)}`;
     verdict.textContent = `Resultado: ${OUTCOME_LABELS[outcome.outcome] ?? outcome.outcome}`;
     this.output.appendChild(verdict);
+    if (outcome.table?.length) this.output.appendChild(buildStepTable(outcome.table));
 
     const list = document.createElement("ol");
     list.className = "pda-sim-steps";
