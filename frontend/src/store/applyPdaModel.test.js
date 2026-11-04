@@ -39,6 +39,35 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+describe("applyPdaModel initial stack symbol", () => {
+  const unchangedMachine = { states: ["q0"], initial: "q0", accepting: [], transitions: [] };
+
+  it("changes the machine's symbol when the definition sets a different one", async () => {
+    const { client, docStore } = await setup();
+
+    await applyPdaModel(docStore, { ...unchangedMachine, initialStackSymbol: "A" });
+
+    expect(client.pdaApply).toHaveBeenCalledTimes(1);
+    expect(client.pdaApply.mock.calls[0][0]).toEqual([{ op: "SetInitialStackSymbol", symbol: "A" }]);
+  });
+
+  it("leaves the machine's symbol alone when the definition has no Z0 line", async () => {
+    const { client, docStore } = await setup();
+
+    await applyPdaModel(docStore, unchangedMachine);
+
+    expect(client.pdaApply).not.toHaveBeenCalled();
+  });
+
+  it("does not record an edit when the definition repeats the current symbol", async () => {
+    const { client, docStore } = await setup();
+
+    await applyPdaModel(docStore, { ...unchangedMachine, initialStackSymbol: "Z" });
+
+    expect(client.pdaApply).not.toHaveBeenCalled();
+  });
+});
+
 describe("applyPdaModel", () => {
   it("creates a new state from Q, then adds a transition referencing it", async () => {
     const { client, docStore } = await setup();
