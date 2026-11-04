@@ -124,6 +124,41 @@ describe("PdaTableView transition editing", () => {
   });
 });
 
+describe("PdaTableView stack strings", () => {
+  function snapshotWithZ0() {
+    const snap = snapshot();
+    snap.derived = { ...snap.derived, stack_alphabet: ["A", "Z0"] };
+    return snap;
+  }
+
+  it("reads an edited push with the machine's known stack symbols", async () => {
+    const { container, client, view } = await setup(snapshotWithZ0());
+    const row = container.querySelectorAll("tbody")[1].querySelectorAll("tr")[0];
+    editValue(transitionRowControls(row).pushCell, "AAZ0");
+    await view._lastEditPromise;
+
+    expect(client.pdaApply).toHaveBeenCalledWith([
+      { op: "EditTransition", id: 1, input: "a", pop: ["Z"], push: ["A", "A", "Z0"] },
+    ]);
+  });
+
+  it("reads a new transition's pop and push with the machine's known stack symbols", async () => {
+    const { container, client, view } = await setup(snapshotWithZ0());
+    const addRow = container.querySelectorAll("tbody")[1].querySelector(".table-add-row");
+    const { inputCell, popCell, pushCell } = transitionRowControls(addRow);
+    editValue(inputCell, "a");
+    editValue(popCell, "Z0");
+    editValue(pushCell, "AAZ0");
+
+    addRow.querySelector(".btn-secondary").click();
+    await view._lastEditPromise;
+
+    expect(client.pdaApply).toHaveBeenCalledWith([
+      { op: "AddTransition", from: 1, to: 1, input: "a", pop: ["Z0"], push: ["A", "A", "Z0"] },
+    ]);
+  });
+});
+
 describe("PdaTableView add-transition row", () => {
   it("adding a second transition between an already-connected pair issues AddTransition, keeps the first", async () => {
     const { container, client, view } = await setup();
