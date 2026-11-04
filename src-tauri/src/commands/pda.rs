@@ -13,7 +13,7 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 
 use automata_core::dto;
-use automata_core::engine::pda::{run_pda, AcceptMode, PdaConfig};
+use automata_core::engine::pda::{pda_step_table, run_pda, AcceptMode, PdaConfig, PdaStepRow};
 use automata_core::engine::{Budget, Outcome};
 use automata_core::model::pda::PdaDoc;
 use automata_core::pda_doc::{PdaDocument, PdaEditOp, PdaHistory};
@@ -127,6 +127,26 @@ fn config_view(model: &PdaDoc, cfg: &PdaConfig) -> PdaConfigView {
 pub struct PdaTraceDto {
     pub outcome: String,
     pub steps: Vec<Vec<PdaConfigView>>,
+    pub table: Vec<PdaStepRowDto>,
+}
+
+/// One row of the step table. `next_state` is `None` when the machine is
+/// blocked, and then `next_stack` is the unchanged stack.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PdaStepRowDto {
+    pub state: String,
+    pub remaining: Vec<String>,
+    pub stack: Vec<String>,
+    pub next_state: Option<String>,
+    pub next_stack: Vec<String>,
+}
+
+fn step_row_dto(row: PdaStepRow) -> PdaStepRowDto {
+    let (next_state, next_stack) = match row.next {
+        Some((state, stack)) => (Some(state), stack),
+        None => (None, row.stack.clone()),
+    };
+    PdaStepRowDto { state: row.state, remaining: row.remaining, stack: row.stack, next_state, next_stack }
 }
 
 fn outcome_str(outcome: Outcome) -> &'static str {
@@ -151,9 +171,11 @@ pub fn sim(
         let b: Budget = budget.map(Into::into).unwrap_or_default();
         let words: Vec<&str> = input.iter().map(String::as_str).collect();
         let trace = run_pda(&doc.model, &words, mode, b);
+        let table = pda_step_table(&doc.model, &words, mode, b).rows.into_iter().map(step_row_dto).collect();
         PdaTraceDto {
             outcome: outcome_str(trace.outcome).to_string(),
             steps: trace.steps.into_iter().map(|step| step.configs.iter().map(|cfg| config_view(&doc.model, cfg)).collect()).collect(),
+            table,
         }
     })
 }
