@@ -69,8 +69,119 @@ describe("formatFormalText", () => {
   });
 });
 
+// Written as in the course workbook "Hoja de trabajo 10", with its sets split
+// into one line each and `f(...)` written as `δ(...)` (both are story 04). The
+// expected rows repeat `crates/automata-core/tests/pda_course_workbook.rs`,
+// whose machines the engine already accepts the workbook's words on.
+describe("parseFormalText course exercises", () => {
+  function rows(text) {
+    const result = parseFormalText(text);
+    expect(result.ok).toBe(true);
+    return result.model.transitions.map((t) => [t.from, t.input ?? "", t.pop.join(" "), t.to, t.push.join(" ")]);
+  }
+
+  it("reads exercise 1-1", () => {
+    const text = `Q = {mn, m, t, n}
+q0 = mn
+Z0 = Z
+F = {n}
+δ(mn, a, Z) = (mn, NZ)
+δ(mn, a, M) = (mn, MM)
+δ(mn, a, N) = (mn, MN)
+δ(mn, a, N) = (mn, NN)
+δ(mn, b, N) = (m, BN)
+δ(mn, b, M) = (m, ε)
+δ(m, b, B) = (m, BB)
+δ(m, b, N) = (m, BN)
+δ(m, b, M) = (m, ε)
+δ(m, a, B) = (t, ε)
+δ(t, a, B) = (t, ε)
+δ(t, b, N) = (n, ε)
+δ(n, b, N) = (n, ε)
+δ(n, ε, Z) = (n, ε)`;
+
+    expect(rows(text)).toEqual([
+      ["mn", "a", "Z", "mn", "N Z"],
+      ["mn", "a", "M", "mn", "M M"],
+      ["mn", "a", "N", "mn", "M N"],
+      ["mn", "a", "N", "mn", "N N"],
+      ["mn", "b", "N", "m", "B N"],
+      ["mn", "b", "M", "m", ""],
+      ["m", "b", "B", "m", "B B"],
+      ["m", "b", "N", "m", "B N"],
+      ["m", "b", "M", "m", ""],
+      ["m", "a", "B", "t", ""],
+      ["t", "a", "B", "t", ""],
+      ["t", "b", "N", "n", ""],
+      ["n", "b", "N", "n", ""],
+      ["n", "", "Z", "n", ""],
+    ]);
+  });
+
+  it("reads exercise 2-1, which writes λ", () => {
+    const text = `Q = {q1, q2, q3, q4}
+q0 = q1
+Z0 = A
+F = {q4}
+δ(q1, a, A) = (q2, BA)
+δ(q1, a, A) = (q4, A)
+δ(q1, ε, A) = (q4, ε)
+δ(q2, a, B) = (q2, BB)
+δ(q2, b, B) = (q3, ε)
+δ(q3, λ, A) = (q4, A)
+δ(q3, b, B) = (q3, ε)`;
+
+    expect(rows(text)).toEqual([
+      ["q1", "a", "A", "q2", "B A"],
+      ["q1", "a", "A", "q4", "A"],
+      ["q1", "", "A", "q4", ""],
+      ["q2", "a", "B", "q2", "B B"],
+      ["q2", "b", "B", "q3", ""],
+      ["q3", "", "A", "q4", "A"],
+      ["q3", "b", "B", "q3", ""],
+    ]);
+  });
+
+  it("reads exercise 2-2, whose initial stack symbol is Z0", () => {
+    const text = `Q = {q0, q1, q2, q3, f}
+q0 = q0
+Z0 = Z0
+F = {f}
+δ(q0, a, Z0) = (q1, AAZ0)
+δ(q0, b, Z0) = (q2, BZ0)
+δ(q0, ε, Z0) = (f, ε)
+δ(q1, a, A) = (q1, AAA)
+δ(q1, b, A) = (q1, ε)
+δ(q1, ε, Z0) = (q0, Z0)
+δ(q2, a, B) = (q3, ε)
+δ(q2, b, B) = (q2, BB)
+δ(q2, ε, Z0) = (q0, Z0)
+δ(q3, ε, B) = (q2, ε)
+δ(q3, ε, Z0) = (q1, AZ0)`;
+
+    expect(rows(text)).toEqual([
+      ["q0", "a", "Z0", "q1", "A A Z0"],
+      ["q0", "b", "Z0", "q2", "B Z0"],
+      ["q0", "", "Z0", "f", ""],
+      ["q1", "a", "A", "q1", "A A A"],
+      ["q1", "b", "A", "q1", ""],
+      ["q1", "", "Z0", "q0", "Z0"],
+      ["q2", "a", "B", "q3", ""],
+      ["q2", "b", "B", "q2", "B B"],
+      ["q2", "", "Z0", "q0", "Z0"],
+      ["q3", "", "B", "q2", ""],
+      ["q3", "", "Z0", "q1", "A Z0"],
+    ]);
+  });
+});
+
 describe("parseFormalText stack strings", () => {
   const header = "Q = {q0, q1}\nq0 = q0\nF = {q1}\n";
+
+  it("reads λ as empty in the input, pop and push", () => {
+    const result = parseFormalText(`${header}δ(q0, λ, λ) = (q1, λ)`);
+    expect(result.model.transitions[0]).toEqual({ from: "q0", input: null, pop: [], to: "q1", push: [] });
+  });
 
   it("reads NZ as N over Z", () => {
     const result = parseFormalText(`${header}δ(q0, a, Z) = (q1, NZ)`);
