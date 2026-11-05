@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDirectTables, layoutSyntaxTree } from "./regexDirectLogic.js";
+import { buildDirectTables, layoutSyntaxTree, treeToText } from "./regexDirectLogic.js";
 import { aOptionalB } from "./regexDirectFixtures.js";
 
 describe("buildDirectTables", () => {
@@ -90,6 +90,40 @@ describe("buildDirectTables", () => {
     };
     const rows = buildDirectTables(result).nodes.rows.map((r) => r[0]);
     expect(rows).toEqual(["a (1)", "b (2)", "a|b", "(a|b)*", "c (3)", "(a|b)*c", "# (4)", "((a|b)*c)#"]);
+  });
+});
+
+describe("treeToText", () => {
+  it("renders the tree as indented text with each node's sets, nullable and leaf position", () => {
+    const { nodes, root } = aOptionalB();
+    expect(treeToText({ nodes, root })).toBe(
+      [
+        "·  prim{1,2}  últ{3}  anulable: no",
+        "├─ ·  prim{1,2}  últ{2}  anulable: no",
+        "│  ├─ ?  prim{1}  últ{1}  anulable: sí",
+        "│  │  └─ a (1)  prim{1}  últ{1}  anulable: no",
+        "│  └─ b (2)  prim{2}  últ{2}  anulable: no",
+        "└─ # (3)  prim{3}  últ{3}  anulable: no",
+      ].join("\n"),
+    );
+  });
+
+  it("walks a deep chain without blowing the call stack", () => {
+    const nodes = [{ kind: "symbol", label: "a", position: 1, children: [], nullable: false, firstpos: [1], lastpos: [1] }];
+    const depth = 300;
+    for (let i = 0; i < depth; i++) {
+      nodes.push({
+        kind: "star",
+        label: "*",
+        position: null,
+        children: [nodes.length - 1],
+        nullable: false,
+        firstpos: [1],
+        lastpos: [1],
+      });
+    }
+    const text = treeToText({ nodes, root: nodes.length - 1 });
+    expect(text.split("\n")).toHaveLength(depth + 1);
   });
 });
 

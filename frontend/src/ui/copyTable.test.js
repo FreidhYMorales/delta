@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createCopyTableButton, tableToTsv } from "./copyTable.js";
+import { createCopyButton, createCopyTableButton, tableToTsv } from "./copyTable.js";
 
 /** Builds a table shaped like the real table views: a narrow selection
  * column (checkbox, `table-col-narrow`), a name column driven by an
@@ -69,6 +69,29 @@ describe("tableToTsv", () => {
     // The default `table-col-narrow` header cell is no longer skipped once
     // a custom class is given, so its (empty) text still occupies a column.
     expect(text.split("\n")[0]).toBe("\ta");
+  });
+});
+
+describe("createCopyButton", () => {
+  let writeText;
+
+  beforeEach(() => {
+    writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("copies whatever getText returns, read lazily at click time", async () => {
+    const getText = vi.fn().mockReturnValue("primera línea\nsegunda línea");
+    const button = createCopyButton(getText, { label: "Copiar árbol" });
+    expect(button.title).toBe("Copiar árbol");
+    await button.dispatchEvent(new Event("click"));
+    expect(writeText).toHaveBeenCalledWith("primera línea\nsegunda línea");
+    expect(button.title).toBe("¡Copiado!");
   });
 });
 

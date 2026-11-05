@@ -46,10 +46,18 @@ describe("RegexDirectView", () => {
       "Paso 6: estados D",
       "Paso 7: transiciones D",
     ]);
-    // Every table step has its copy button; the tree step has none.
+    // Every table step has its copy button; the tree's sits first in its
+    // header, so it stays in the upper-left corner of a tree too wide to
+    // screenshot.
     const tableSteps = [...container.querySelectorAll(".conversion-step")].filter((s) => s.querySelector("table"));
     expect(tableSteps).toHaveLength(5);
     for (const step of tableSteps) expect(step.querySelector("button[title='Copiar tabla']")).toBeTruthy();
+
+    const treeHeader = container.querySelector(".conversion-step .conversion-step-header");
+    const treeButton = treeHeader.querySelector("button[title='Copiar árbol']");
+    expect(treeButton).toBeTruthy();
+    expect(treeHeader.firstElementChild.classList.contains("conversion-step-title")).toBe(true);
+    expect(treeHeader.firstElementChild.firstElementChild).toBe(treeButton);
 
     const tables = container.querySelectorAll(".conversion-step table");
     expect(cellTexts(tables[3])).toEqual([
@@ -68,6 +76,18 @@ describe("RegexDirectView", () => {
     const texts = [...svg.querySelectorAll("text")].map((t) => t.textContent);
     expect(texts).toEqual(expect.arrayContaining(["a", "b", "#", "?", "·", "1", "2", "3", "{1,2}", "{3}"]));
     expect(svg.querySelectorAll(".tree-edge")).toHaveLength(5);
+  });
+
+  it("copies the syntax tree as text, so a big tree needn't be screenshotted", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const { container, view } = setup();
+    await compute(container, view);
+    await container.querySelector("button[title='Copiar árbol']").dispatchEvent(new Event("click"));
+    const lines = writeText.mock.calls[0][0].split("\n");
+    expect(lines).toHaveLength(6);
+    expect(lines[0]).toBe("·  prim{1,2}  últ{3}  anulable: no");
+    expect(lines.at(-1)).toBe("└─ # (3)  prim{3}  últ{3}  anulable: no");
   });
 
   it("Enter in the input computes too", async () => {
