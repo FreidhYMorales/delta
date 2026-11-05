@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createCopyButton, createCopyTableButton, tableToTsv } from "./copyTable.js";
+import { createCopyButton, createCopyImageButton, createCopyTableButton, tableToTsv } from "./copyTable.js";
 
 /** Builds a table shaped like the real table views: a narrow selection
  * column (checkbox, `table-col-narrow`), a name column driven by an
@@ -69,6 +69,64 @@ describe("tableToTsv", () => {
     // The default `table-col-narrow` header cell is no longer skipped once
     // a custom class is given, so its (empty) text still occupies a column.
     expect(text.split("\n")[0]).toBe("\ta");
+  });
+});
+
+async function flush() {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
+describe("createCopyImageButton", () => {
+  let blob;
+
+  beforeEach(() => {
+    blob = new Blob(["png"], { type: "image/png" });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("rasterizes the SVG and puts the PNG on the clipboard", async () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const rasterize = vi.fn().mockResolvedValue(blob);
+    const copyImage = vi.fn().mockResolvedValue(undefined);
+    const button = createCopyImageButton(() => svg, { rasterize, copyImage, label: "Copiar árbol como imagen" });
+    button.click();
+    await flush();
+    expect(rasterize).toHaveBeenCalledWith(svg);
+    expect(copyImage).toHaveBeenCalledWith(blob);
+    expect(button.title).toBe("¡Copiado!");
+  });
+
+  it("downloads the PNG when the clipboard cannot take images", async () => {
+    const rasterize = vi.fn().mockResolvedValue(blob);
+    const copyImage = vi.fn().mockRejectedValue(new Error("sin soporte"));
+    const download = vi.fn();
+    const button = createCopyImageButton(() => null, { rasterize, copyImage, download, filename: "arbol.png" });
+    button.click();
+    await flush();
+    expect(download).toHaveBeenCalledWith(blob, "arbol.png");
+    expect(button.title).toBe("Imagen descargada");
+  });
+
+  it("reports a failure to rasterize without trying to copy", async () => {
+    const rasterize = vi.fn().mockRejectedValue(new Error("sin canvas"));
+    const copyImage = vi.fn();
+    const button = createCopyImageButton(() => null, { rasterize, copyImage });
+    button.click();
+    await flush();
+    expect(copyImage).not.toHaveBeenCalled();
+    expect(button.title).toBe("No se pudo generar la imagen");
+  });
+
+  it("is icon-only, with the label carried by title/aria-label instead of text", () => {
+    const button = createCopyImageButton(() => null);
+    expect(button.textContent.trim()).toBe("");
+    expect(button.querySelector("svg")).toBeTruthy();
+    expect(button.title).toBe("Copiar imagen");
+    expect(button.getAttribute("aria-label")).toBe("Copiar imagen");
   });
 });
 
