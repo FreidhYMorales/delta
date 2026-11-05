@@ -1099,6 +1099,15 @@ body {
   font-weight: var(--font-weight-medium);
 }
 
+/* Action + title grouped at the left of the header (the tree's copy button
+   must stay in the upper-left corner of a tree wider than the viewport). */
+.conversion-step-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
 .conversion-view td,
 .conversion-view tbody th {
   white-space: nowrap;

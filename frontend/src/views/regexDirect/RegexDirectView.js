@@ -7,8 +7,8 @@
 // the other panel tabs it does not read the current automaton — it works
 // from the regex typed here — and the resulting DFA opens in a new tab.
 
-import { createCopyTableButton } from "../../ui/copyTable.js";
-import { buildDirectTables, layoutSyntaxTree } from "./regexDirectLogic.js";
+import { createCopyButton, createCopyTableButton } from "../../ui/copyTable.js";
+import { buildDirectTables, layoutSyntaxTree, treeToText } from "./regexDirectLogic.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const NODE_RADIUS = 15;
@@ -110,7 +110,14 @@ export class RegexDirectView {
       "PrimeraPos a la izquierda de cada nodo, ÚltimaPos a la derecha, número de posición debajo de cada hoja; borde punteado = anulable.";
     const tree = document.createElement("div");
     tree.append(drawTree(result), legend);
-    const sections = [section("Paso 1: árbol sintáctico aumentado con #", tree)];
+    const sections = [
+      section(
+        "Paso 1: árbol sintáctico aumentado con #",
+        tree,
+        createCopyButton(() => treeToText(result), { label: "Copiar árbol" }),
+        { actionFirst: true },
+      ),
+    ];
     for (const step of TABLE_STEPS) {
       const table = document.createElement("table");
       fillTable(table, tables[step.key]);
@@ -122,14 +129,23 @@ export class RegexDirectView {
   }
 }
 
-function section(title, body, action) {
+function section(title, body, action, { actionFirst = false } = {}) {
   const el = document.createElement("section");
   el.className = "conversion-step";
   const header = document.createElement("div");
   header.className = "conversion-step-header";
   const h3 = document.createElement("h3");
   h3.textContent = title;
-  header.append(h3, ...(action ? [action] : []));
+  if (actionFirst) {
+    // Grouped on the left, so the action stays reachable in the upper-left
+    // corner of a tree too wide to fit on screen.
+    const group = document.createElement("div");
+    group.className = "conversion-step-title";
+    group.append(action, h3);
+    header.append(group);
+  } else {
+    header.append(h3, ...(action ? [action] : []));
+  }
   el.append(header, body);
   return el;
 }

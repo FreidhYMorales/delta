@@ -86,15 +86,15 @@ function checkIcon() {
 }
 
 /**
- * An icon-only "copy table" button wired to `navigator.clipboard.writeText`.
- * Takes a getter rather than the table element itself because every table
- * view builds its actions bar (where this button lives) before the table
- * element it needs to read from exists yet. `label` drives the accessible
- * name (`title`/`aria-label`) since the button shows only the icon.
- * @param {() => HTMLTableElement} getTable
- * @param {{skipClass?: string, label?: string}} [opts]
+ * An icon-only "copy" button wired to `navigator.clipboard.writeText`, for
+ * anything whose text isn't a table (the ER → AFD syntax tree). Takes a
+ * getter rather than the text itself because the button is built before the
+ * content it reads from exists (or before it changes). `label` drives the
+ * accessible name (`title`/`aria-label`) since the button shows only the icon.
+ * @param {() => string} getText
+ * @param {{label?: string}} [opts]
  */
-export function createCopyTableButton(getTable, { skipClass, label = "Copiar tabla" } = {}) {
+export function createCopyButton(getText, { label = "Copiar" } = {}) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "btn-secondary btn-icon";
@@ -103,7 +103,7 @@ export function createCopyTableButton(getTable, { skipClass, label = "Copiar tab
   button.appendChild(copyIcon());
 
   button.addEventListener("click", async () => {
-    const text = tableToTsv(getTable(), { skipClass });
+    const text = getText();
     try {
       await navigator.clipboard.writeText(text);
       flash(button, checkIcon(), "¡Copiado!", label);
@@ -112,6 +112,16 @@ export function createCopyTableButton(getTable, { skipClass, label = "Copiar tab
     }
   });
   return button;
+}
+
+/**
+ * An icon-only "copy table" button: `createCopyButton` reading the table's
+ * TSV at click time. See `tableToTsv` for what is copied.
+ * @param {() => HTMLTableElement} getTable
+ * @param {{skipClass?: string, label?: string}} [opts]
+ */
+export function createCopyTableButton(getTable, { skipClass, label = "Copiar tabla" } = {}) {
+  return createCopyButton(() => tableToTsv(getTable(), { skipClass }), { label });
 }
 
 function flash(button, icon, temporaryLabel, originalLabel) {

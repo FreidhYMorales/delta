@@ -120,3 +120,37 @@ export function layoutSyntaxTree(nodes, root, { leafSpacing = 80, levelSpacing =
   }
   return at;
 }
+
+/**
+ * The augmented syntax tree as indented text, for pasting into notes — the
+ * same information the SVG shows, but readable at any size. One line per
+ * node: label (position for leaves), PrimeraPos, ÚltimaPos and anulable,
+ * with box-drawing branches showing the parent/child relations.
+ * Iterative (no recursion) for the same reason as `layoutSyntaxTree`: a
+ * long concatenation is a deep tree.
+ * @param {{nodes:object[], root:number}} tree
+ */
+export function treeToText({ nodes, root }) {
+  const lines = [];
+  const stack = [{ i: root, prefix: "", connector: "", childPrefix: "" }];
+  while (stack.length) {
+    const { i, prefix, connector, childPrefix } = stack.pop();
+    const node = nodes[i];
+    lines.push(`${prefix}${connector}${nodeText(node)}`);
+    for (let k = node.children.length - 1; k >= 0; k--) {
+      const last = k === node.children.length - 1;
+      stack.push({
+        i: node.children[k],
+        prefix: childPrefix,
+        connector: last ? "└─ " : "├─ ",
+        childPrefix: childPrefix + (last ? "   " : "│  "),
+      });
+    }
+  }
+  return lines.join("\n");
+}
+
+function nodeText(node) {
+  const label = node.position != null ? `${node.label} (${node.position})` : node.label;
+  return `${label}  prim${setText(node.firstpos)}  últ${setText(node.lastpos)}  anulable: ${node.nullable ? "sí" : "no"}`;
+}
