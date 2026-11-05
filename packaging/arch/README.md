@@ -20,3 +20,7 @@ La app se compila sin el bundle de Tauri: se construye el frontend con
 `npm run build` y después el binario con `cargo build --release`, que
 embebe `frontend/dist` en tiempo de compilación. No hace falta el CLI de
 Tauri para este paquete.
+
+`options=('!lto')` es necesario: el `-flto` que makepkg agrega a
+`CFLAGS`/`LDFLAGS` rompe el link de `ring` (los símbolos
+`ring_core_0_17_14__*` quedan sin resolver).

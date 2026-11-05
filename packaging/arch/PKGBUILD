@@ -6,6 +6,7 @@ pkgdesc="Editor y simulador de automatas: finitos, Mealy, Moore, pila y maquinas
 arch=('x86_64')
 url="https://github.com/FreidhYMorales/delta"
 license=('MIT')
+options=('!lto')
 depends=('webkit2gtk-4.1' 'gtk3' 'librsvg' 'libayatana-appindicator')
 makedepends=('rust' 'nodejs' 'npm' 'pkgconf')
 source=("git+${url}.git#tag=v${pkgver}")
