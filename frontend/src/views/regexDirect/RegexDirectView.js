@@ -7,7 +7,7 @@
 // the other panel tabs it does not read the current automaton — it works
 // from the regex typed here — and the resulting DFA opens in a new tab.
 
-import { createCopyButton, createCopyTableButton } from "../../ui/copyTable.js";
+import { createCopyButton, createCopyImageButton, createCopyTableButton } from "../../ui/copyTable.js";
 import { buildDirectTables, layoutSyntaxTree, treeToText } from "./regexDirectLogic.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -110,13 +110,13 @@ export class RegexDirectView {
       "PrimeraPos a la izquierda de cada nodo, ÚltimaPos a la derecha, número de posición debajo de cada hoja; borde punteado = anulable.";
     const tree = document.createElement("div");
     tree.append(drawTree(result), legend);
+    const imageButton = createCopyImageButton(() => tree.querySelector("svg.syntax-tree"), {
+      label: "Copiar árbol como imagen",
+      filename: "arbol-sintactico.png",
+    });
+    const textButton = createCopyButton(() => treeToText(result), { label: "Copiar árbol como texto" });
     const sections = [
-      section(
-        "Paso 1: árbol sintáctico aumentado con #",
-        tree,
-        createCopyButton(() => treeToText(result), { label: "Copiar árbol" }),
-        { actionFirst: true },
-      ),
+      section("Paso 1: árbol sintáctico aumentado con #", tree, [imageButton, textButton], { actionFirst: true }),
     ];
     for (const step of TABLE_STEPS) {
       const table = document.createElement("table");
@@ -136,15 +136,16 @@ function section(title, body, action, { actionFirst = false } = {}) {
   header.className = "conversion-step-header";
   const h3 = document.createElement("h3");
   h3.textContent = title;
+  const actions = action ? (Array.isArray(action) ? action : [action]) : [];
   if (actionFirst) {
-    // Grouped on the left, so the action stays reachable in the upper-left
+    // Grouped on the left, so the actions stay reachable in the upper-left
     // corner of a tree too wide to fit on screen.
     const group = document.createElement("div");
     group.className = "conversion-step-title";
-    group.append(action, h3);
+    group.append(...actions, h3);
     header.append(group);
   } else {
-    header.append(h3, ...(action ? [action] : []));
+    header.append(h3, ...actions);
   }
   el.append(header, body);
   return el;
