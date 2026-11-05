@@ -3,10 +3,24 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Versionado [semver](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.3.0] — 2026-11-04
 
 ### Agregado
 
+- Pestaña "Gramática" para gramáticas generales G = {Σ, N, S, P}, con
+  clasificación de Chomsky, notación BNF/EBNF, derivaciones paso a paso y
+  árbol de derivación, y búsqueda de cadenas por lote. La pestaña
+  "Gramática regular" del editor de autómata finito se mantiene.
+- Conversión "ER → AFD" por el método directo (árbol aumentado, anulables,
+  primeros/últimos, siguientes y tabla de estados), paso a paso y con
+  creación del AFD en una pestaña nueva.
+- Conversión "AFN-ε → AFD" paso a paso, y piezas de Thompson prearmadas
+  para insertar en el diagrama.
+- PDA: símbolo inicial de pila editable (Z0), cadenas de pila sin
+  separadores, λ/ε como vacío, palabras sin espacios y tabla de pasos
+  copiable con su fila de resultado.
+- Máquinas de Turing: palabras sin espacios usando el alfabeto y B como
+  blanco.
 - "Organizar" ahora alinea las ramas paralelas entre sí (un par que se
   bifurca y vuelve a juntarse, un ciclo con vuelta atrás) en vez de
   apilarlas en el orden en que se crearon — se ven más parejas, más
@@ -16,6 +30,14 @@ Versionado [semver](https://semver.org/lang/es/).
   línea recta con quiebres que puede pasar por encima de otros estados y
   transiciones — en autómatas grandes esto evitaba distinguir cuál línea
   era cuál cuando varias se superponían.
+
+### Cambiado
+
+- Las expresiones regulares usan la notación de la cátedra: `|` es unión,
+  `+` es cerradura positiva (una o más), `?` es opcional, `*` es la
+  estrella de Kleene y la yuxtaposición concatena. Antes `+` significaba
+  unión, así que una regex guardada como `a+b` ahora se lee "una o más
+  `a`, luego `b`".
 
 ### Corregido
 
@@ -140,6 +162,7 @@ Definición formal, Verificación de cadenas), undo/redo transaccional,
 persistencia en JSON, e interoperabilidad de importación/exportación con
 el formato `.jff` de JFLAP.
 
+[0.3.0]: https://github.com/FreidhYMorales/delta/releases/tag/v0.3.0
 [0.2.3]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.3
 [0.2.2]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.2
 [0.2.1]: https://github.com/FreidhYMorales/delta/releases/tag/v0.2.1
