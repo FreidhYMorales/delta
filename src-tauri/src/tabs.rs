@@ -51,7 +51,10 @@ pub struct ProjectSession {
 
 impl ProjectSession {
     pub fn new() -> Self {
-        ProjectSession { next_tab_id: TabId(0), tabs: Vec::new() }
+        ProjectSession {
+            next_tab_id: TabId(0),
+            tabs: Vec::new(),
+        }
     }
 
     /// Allocates a fresh, unique `TabId` and appends a new tab of `kind`
@@ -59,7 +62,11 @@ impl ProjectSession {
     pub fn new_tab(&mut self, kind: MachineKind, name: impl Into<String>) -> TabId {
         let id = self.next_tab_id;
         self.next_tab_id = TabId(id.0 + 1);
-        self.tabs.push(TabMeta { id, kind, name: name.into() });
+        self.tabs.push(TabMeta {
+            id,
+            kind,
+            name: name.into(),
+        });
         id
     }
 
